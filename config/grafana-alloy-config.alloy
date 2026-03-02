@@ -1,0 +1,98 @@
+// Grafana Alloy Configuration for Apex - Sentient Interface
+// This config enables GitHub repository metrics collection for Grafana Cloud
+// 
+// Setup Instructions:
+// 1. Create a GitHub Personal Access Token at https://github.com/settings/tokens
+//    - Required scope: public_repo (read-only)
+// 2. Store the token: echo "ghp_YOUR_TOKEN" | sudo tee /etc/alloy/github_token.txt
+// 3. Copy this config to /etc/alloy/config.alloy
+// 4. Restart Alloy: sudo systemctl restart alloy.service
+
+///////////////////////////////////////////////////////////
+// GitHub Exporter - Apex Repository Metrics
+///////////////////////////////////////////////////////////
+
+prometheus.exporter.github "apex" {
+  // Target repository: johanneslungelo021-cmd/Apex
+  repositories = ["johanneslungelo021-cmd/Apex"]
+  
+  // Path to GitHub API token file (for higher rate limits)
+  // Without token: 60 requests/hour | With token: 5000 requests/hour
+  api_token_file = "/etc/alloy/github_token.txt"
+}
+
+///////////////////////////////////////////////////////////
+// Relabel Rules - Add custom labels
+///////////////////////////////////////////////////////////
+
+discovery.relabel "apex" {
+  targets = prometheus.exporter.github.apex.targets
+
+  // Instance label for identification
+  rule {
+    target_label = "instance"
+    replacement  = "apex-vaal"
+  }
+
+  // Job label for Grafana integration
+  rule {
+    target_label = "job"
+    replacement  = "integrations/github"
+  }
+}
+
+///////////////////////////////////////////////////////////
+// Prometheus Scrape Configuration
+///////////////////////////////////////////////////////////
+
+prometheus.scrape "apex" {
+  targets    = discovery.relabel.apex.output
+  forward_to = [prometheus.relabel.apex.receiver]
+  job_name   = "integrations/github"
+  
+  // Scrape interval (adjust based on needs)
+  scrape_interval = "5m"
+  scrape_timeout  = "30s"
+}
+
+///////////////////////////////////////////////////////////
+// Metric Filtering - Keep only relevant metrics
+///////////////////////////////////////////////////////////
+
+prometheus.relabel "apex" {
+  forward_to = [prometheus.remote_write.metrics_service.receiver]
+
+  // Filter to keep only useful metrics
+  rule {
+    source_labels = ["__name__"]
+    regex         = "up|github_rate_limit|github_rate_remaining|github_repo_forks|github_repo_open_issues|github_repo_pull_request_count|github_repo_size_kb|github_repo_stars|github_repo_watchers"
+    action        = "keep"
+  }
+}
+
+///////////////////////////////////////////////////////////
+// Available Metrics (from GitHub exporter)
+///////////////////////////////////////////////////////////
+// 
+// github_repo_stars           - Number of stars
+// github_repo_forks           - Number of forks  
+// github_repo_open_issues     - Open issues count
+// github_repo_watchers        - Number of watchers
+// github_repo_size_kb         - Repository size in KB
+// github_repo_pull_request_count - Open PRs count
+// github_rate_limit           - API rate limit
+// github_rate_remaining       - Remaining API calls
+//
+///////////////////////////////////////////////////////////
+// Grafana Dashboard Setup
+///////////////////////////////////////////////////////////
+//
+// After pushing metrics to Grafana Cloud:
+// 1. Go to: https://dimakatsomoleli.grafana.net
+// 2. Navigate to Dashboards → New Dashboard
+// 3. Add panels with queries like:
+//    - Stars: github_repo_stars{repo="johanneslungelo021-cmd/Apex"}
+//    - Forks: github_repo_forks{repo="johanneslungelo021-cmd/Apex"}
+//    - Issues: github_repo_open_issues{repo="johanneslungelo021-cmd/Apex"}
+//
+///////////////////////////////////////////////////////////
