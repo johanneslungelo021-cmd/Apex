@@ -1,8 +1,32 @@
 'use client';
 
-import { useState } from 'react';
-import { Heart, Search, User, BarChart3, MessageSquare } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { useState, useEffect } from 'react';
+import { Heart, Search, User, BarChart3, MessageSquare, Github, Star, GitFork, Eye, AlertCircle, BookOpen, TrendingUp, Users, DollarSign } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+interface GitHubMetrics {
+  stars: number;
+  forks: number;
+  openIssues: number;
+  watchers: number;
+  size: number;
+  lastUpdated: string;
+  fullName: string;
+  description: string;
+  language: string;
+}
+
+interface PlatformMetrics {
+  users: number;
+  impact: number;
+  courses: number;
+}
+
+interface CombinedMetrics {
+  github: GitHubMetrics;
+  platform: PlatformMetrics;
+  timestamp: number;
+}
 
 export default function Phase1Landing() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -10,13 +34,42 @@ export default function Phase1Landing() {
   const [registerEmail, setRegisterEmail] = useState('');
   const [aiMessage, setAiMessage] = useState('');
   const [chatHistory, setChatHistory] = useState<{role: string; content: string}[]>([]);
-  const [metrics, setMetrics] = useState({ users: 12480, impact: 874200, courses: 342 });
+  const [githubMetrics, setGithubMetrics] = useState<GitHubMetrics | null>(null);
+  const [platformMetrics, setPlatformMetrics] = useState<PlatformMetrics>({ users: 12480, impact: 874200, courses: 342 });
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'github' | 'platform'>('github');
 
   const blogs = [
     { title: "Building Digital Income in 2026", excerpt: "Practical steps for South African creators" },
     { title: "Local Success Stories", excerpt: "How one community member earned R9,200/month" },
     { title: "AI Tools for Everyday Use", excerpt: "Free and fast tools you can start today" },
+    { title: "GitHub Integration Guide", excerpt: "Connect your repos for real-time metrics" },
+    { title: "Sentient Interface Design", excerpt: "Building responsive, living UIs with Liquid Glass" },
   ].filter(b => b.title.toLowerCase().includes(searchTerm.toLowerCase()) || b.excerpt.toLowerCase().includes(searchTerm.toLowerCase()));
+
+  // Fetch metrics on mount
+  useEffect(() => {
+    refreshMetrics();
+  }, []);
+
+  const refreshMetrics = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/metrics');
+      const data: CombinedMetrics = await res.json();
+      
+      if (data.github) {
+        setGithubMetrics(data.github);
+      }
+      if (data.platform) {
+        setPlatformMetrics(data.platform);
+      }
+    } catch (error) {
+      console.error('Metrics error:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const sendToAIAssistant = async () => {
     if (!aiMessage.trim()) return;
@@ -36,7 +89,7 @@ export default function Phase1Landing() {
       
       setChatHistory([...newHistory, {role: 'assistant', content: data.reply}]);
       
-      // Haptic + audio feedback
+      // Haptic feedback
       if (navigator.vibrate) navigator.vibrate(80);
     } catch (error) {
       console.error('AI Assistant error:', error);
@@ -44,15 +97,14 @@ export default function Phase1Landing() {
     }
   };
 
-  // Live metrics from LocalAI (real & animated)
-  const refreshMetrics = async () => {
-    try {
-      const res = await fetch('/api/metrics');
-      const data = await res.json();
-      setMetrics(data);
-    } catch (error) {
-      console.error('Metrics error:', error);
+  const formatNumber = (num: number): string => {
+    if (num >= 1000000) {
+      return (num / 1000000).toFixed(1) + 'M';
     }
+    if (num >= 1000) {
+      return (num / 1000).toFixed(1) + 'K';
+    }
+    return num.toString();
   };
 
   return (
@@ -64,7 +116,16 @@ export default function Phase1Landing() {
           <Heart className="w-12 h-12 text-red-500 heart-pulse" />
           <h1 className="text-7xl font-bold tracking-tighter">Sentient Interface</h1>
         </div>
-        <p className="text-2xl text-zinc-400">Phase 1 Complete • Everything Works</p>
+        <p className="text-2xl text-zinc-400">Phase 1 Complete • Everything Works • GitHub Connected</p>
+        <div className="flex items-center gap-4 mt-6">
+          {githubMetrics && (
+            <div className="flex items-center gap-2 text-sm text-zinc-500">
+              <Github className="w-4 h-4" />
+              <span>{githubMetrics.fullName}</span>
+              <span className="text-emerald-400">● Live</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Navigation + Search */}
@@ -73,6 +134,7 @@ export default function Phase1Landing() {
           <span className="font-semibold">Apex</span>
           <div className="flex gap-6 text-sm">
             <a href="#insights" className="hover:text-white/70">Insights</a>
+            <a href="#github" className="hover:text-white/70">GitHub</a>
             <a href="#blogs" className="hover:text-white/70">Blogs</a>
           </div>
         </div>
@@ -93,20 +155,161 @@ export default function Phase1Landing() {
         </div>
       </nav>
 
-      {/* Market Insights + Real Metrics */}
-      <section id="insights" className="max-w-5xl mx-auto px-8 py-20">
+      {/* GitHub Metrics Section */}
+      <section id="github" className="max-w-5xl mx-auto px-8 py-20">
+        <h2 className="text-4xl font-semibold mb-4 flex items-center gap-3">
+          <Github className="w-9 h-9" /> GitHub Repository Metrics
+        </h2>
+        <p className="text-zinc-400 mb-12">Real-time metrics from the Apex repository</p>
+
+        <div className="flex gap-4 mb-8">
+          <button
+            onClick={() => setActiveTab('github')}
+            className={`px-6 py-2 rounded-2xl text-sm transition ${activeTab === 'github' ? 'glass' : 'text-zinc-400 hover:text-white'}`}
+          >
+            GitHub Stats
+          </button>
+          <button
+            onClick={() => setActiveTab('platform')}
+            className={`px-6 py-2 rounded-2xl text-sm transition ${activeTab === 'platform' ? 'glass' : 'text-zinc-400 hover:text-white'}`}
+          >
+            Platform Metrics
+          </button>
+        </div>
+
+        <AnimatePresence mode="wait">
+          {activeTab === 'github' ? (
+            <motion.div
+              key="github"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="grid grid-cols-2 md:grid-cols-4 gap-6"
+            >
+              <motion.div className="glass p-8 rounded-3xl" whileHover={{ scale: 1.02 }}>
+                <div className="flex items-center gap-2 text-zinc-400 mb-2">
+                  <Star className="w-5 h-5 text-yellow-500" />
+                  <span>Stars</span>
+                </div>
+                <div className="text-5xl font-mono font-bold">
+                  {isLoading ? '...' : formatNumber(githubMetrics?.stars || 0)}
+                </div>
+              </motion.div>
+
+              <motion.div className="glass p-8 rounded-3xl" whileHover={{ scale: 1.02 }}>
+                <div className="flex items-center gap-2 text-zinc-400 mb-2">
+                  <GitFork className="w-5 h-5 text-blue-500" />
+                  <span>Forks</span>
+                </div>
+                <div className="text-5xl font-mono font-bold">
+                  {isLoading ? '...' : formatNumber(githubMetrics?.forks || 0)}
+                </div>
+              </motion.div>
+
+              <motion.div className="glass p-8 rounded-3xl" whileHover={{ scale: 1.02 }}>
+                <div className="flex items-center gap-2 text-zinc-400 mb-2">
+                  <AlertCircle className="w-5 h-5 text-orange-500" />
+                  <span>Open Issues</span>
+                </div>
+                <div className="text-5xl font-mono font-bold">
+                  {isLoading ? '...' : formatNumber(githubMetrics?.openIssues || 0)}
+                </div>
+              </motion.div>
+
+              <motion.div className="glass p-8 rounded-3xl" whileHover={{ scale: 1.02 }}>
+                <div className="flex items-center gap-2 text-zinc-400 mb-2">
+                  <Eye className="w-5 h-5 text-purple-500" />
+                  <span>Watchers</span>
+                </div>
+                <div className="text-5xl font-mono font-bold">
+                  {isLoading ? '...' : formatNumber(githubMetrics?.watchers || 0)}
+                </div>
+              </motion.div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="platform"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="grid grid-cols-3 gap-6"
+            >
+              <motion.div className="glass p-8 rounded-3xl" whileHover={{ scale: 1.02 }}>
+                <div className="flex items-center gap-2 text-zinc-400 mb-2">
+                  <Users className="w-5 h-5 text-emerald-500" />
+                  <span>Active Users</span>
+                </div>
+                <div className="text-5xl font-mono font-bold">
+                  {isLoading ? '...' : formatNumber(platformMetrics.users)}
+                </div>
+              </motion.div>
+
+              <motion.div className="glass p-8 rounded-3xl" whileHover={{ scale: 1.02 }}>
+                <div className="flex items-center gap-2 text-zinc-400 mb-2">
+                  <DollarSign className="w-5 h-5 text-green-500" />
+                  <span>Impact (R)</span>
+                </div>
+                <div className="text-5xl font-mono font-bold">
+                  {isLoading ? '...' : formatNumber(platformMetrics.impact)}
+                </div>
+              </motion.div>
+
+              <motion.div className="glass p-8 rounded-3xl" whileHover={{ scale: 1.02 }}>
+                <div className="flex items-center gap-2 text-zinc-400 mb-2">
+                  <BookOpen className="w-5 h-5 text-cyan-500" />
+                  <span>Courses</span>
+                </div>
+                <div className="text-5xl font-mono font-bold">
+                  {isLoading ? '...' : formatNumber(platformMetrics.courses)}
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div className="mt-8 flex items-center gap-4">
+          <button onClick={refreshMetrics} className="text-sm text-zinc-400 hover:text-white flex items-center gap-2">
+            <TrendingUp className="w-4 h-4" />
+            Refresh metrics
+          </button>
+          {githubMetrics && (
+            <span className="text-xs text-zinc-500">
+              Last updated: {new Date(githubMetrics.lastUpdated).toLocaleString()}
+            </span>
+          )}
+        </div>
+      </section>
+
+      {/* Market Insights Section */}
+      <section id="insights" className="max-w-5xl mx-auto px-8 py-20 border-t border-white/10">
         <h2 className="text-4xl font-semibold mb-12 flex items-center gap-3">
           <BarChart3 className="w-9 h-9" /> Market Insights
         </h2>
         <div className="grid grid-cols-3 gap-6">
-          {Object.entries(metrics).map(([key, value]) => (
-            <motion.div key={key} className="glass p-8 rounded-3xl" whileHover={{ scale: 1.02 }}>
-              <div className="text-5xl font-mono font-bold">{value.toLocaleString()}</div>
-              <div className="text-zinc-400 mt-2 capitalize">{key}</div>
-            </motion.div>
-          ))}
+          {githubMetrics ? (
+            <>
+              <motion.div className="glass p-8 rounded-3xl" whileHover={{ scale: 1.02 }}>
+                <div className="text-5xl font-mono font-bold">{formatNumber(githubMetrics.stars)}</div>
+                <div className="text-zinc-400 mt-2">GitHub Stars</div>
+              </motion.div>
+              <motion.div className="glass p-8 rounded-3xl" whileHover={{ scale: 1.02 }}>
+                <div className="text-5xl font-mono font-bold">{formatNumber(platformMetrics.users)}</div>
+                <div className="text-zinc-400 mt-2">Platform Users</div>
+              </motion.div>
+              <motion.div className="glass p-8 rounded-3xl" whileHover={{ scale: 1.02 }}>
+                <div className="text-5xl font-mono font-bold">{formatNumber(platformMetrics.impact)}</div>
+                <div className="text-zinc-400 mt-2">Total Impact (R)</div>
+              </motion.div>
+            </>
+          ) : (
+            Object.entries(platformMetrics).map(([key, value]) => (
+              <motion.div key={key} className="glass p-8 rounded-3xl" whileHover={{ scale: 1.02 }}>
+                <div className="text-5xl font-mono font-bold">{formatNumber(value)}</div>
+                <div className="text-zinc-400 mt-2 capitalize">{key}</div>
+              </motion.div>
+            ))
+          )}
         </div>
-        <button onClick={refreshMetrics} className="mt-6 text-sm text-zinc-400 hover:text-white">Refresh real metrics</button>
       </section>
 
       {/* Blogs Section */}
@@ -133,6 +336,11 @@ export default function Phase1Landing() {
             <span className="font-medium">AI Assistant</span>
           </div>
           <div className="h-96 p-6 overflow-y-auto text-sm space-y-4" id="chat">
+            {chatHistory.length === 0 && (
+              <div className="text-zinc-500 text-center py-8">
+                Start a conversation with the AI assistant...
+              </div>
+            )}
             {chatHistory.map((msg, i) => (
               <div key={i} className={msg.role === 'user' ? 'text-right' : 'text-left'}>
                 <div className={`inline-block px-4 py-2 rounded-2xl max-w-[80%] ${msg.role === 'user' ? 'bg-white/10' : 'bg-white/5'}`}>
