@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { chatSessionCounter } from '../../../lib/metrics';
 
 export async function POST(req: Request) {
   try {
@@ -22,6 +23,10 @@ export async function POST(req: Request) {
     }
 
     const data = await res.json();
+    
+    // Emit chat session metric to Grafana
+    chatSessionCounter.add(1);
+    
     return NextResponse.json({ reply: data.choices[0].message.content });
   } catch (error) {
     console.error('Assistant API error:', error);

@@ -94,6 +94,9 @@ export default function SentientInterface() {
 
   // Fetch metrics on mount
   useEffect(() => {
+    // Track page view
+    fetch('/api/analytics', { method: 'POST' }).catch(() => {});
+    
     refreshMetrics();
     
     // Set up periodic refresh

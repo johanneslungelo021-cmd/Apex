@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { registrationCounter } from '../../../lib/metrics';
 
 export async function POST(req: Request) {
   try {
@@ -17,6 +18,9 @@ export async function POST(req: Request) {
     } catch {
       console.log('LocalAI not available for registration confirmation');
     }
+    
+    // Emit registration metric to Grafana
+    registrationCounter.add(1, { email_domain: email?.split('@')[1] || 'unknown' });
     
     return NextResponse.json({ success: true, email });
   } catch (error) {
