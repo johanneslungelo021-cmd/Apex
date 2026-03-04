@@ -30,6 +30,9 @@ let cachedCombinedMetrics: {
 
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+// Configurable timeout (env) with default
+const GITHUB_TIMEOUT_MS = parseInt(process.env.GITHUB_TIMEOUT_MS || '8000');
+
 async function fetchGitHubMetrics(): Promise<GitHubMetrics> {
   const GITHUB_REPO = 'johanneslungelo021-cmd/Apex';
   const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}`;
@@ -45,13 +48,24 @@ async function fetchGitHubMetrics(): Promise<GitHubMetrics> {
     headers['Authorization'] = `token ${githubToken}`;
   }
 
-  try {
-    const response = await fetch(GITHUB_API_URL, { 
-      headers,
-      next: { revalidate: 300 } // Cache for 5 minutes
-    });
-    
-    if (response.ok) {
+  // Retry logic with timeout
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), GITHUB_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(GITHUB_API_URL, {
+        headers,
+        next: { revalidate: 300 }, // Cache for 5 minutes
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`GitHub HTTP ${response.status}`);
+      }
+
       const data = await response.json();
       return {
         stars: data.stargazers_count || 0,
@@ -64,12 +78,32 @@ async function fetchGitHubMetrics(): Promise<GitHubMetrics> {
         description: data.description || 'Apex - Sentient Interface',
         language: data.language || 'TypeScript',
       };
+    } catch (error: unknown) {
+      clearTimeout(timeoutId);
+      
+      const err = error as Error;
+      if (attempt === 2 || err.name !== 'AbortError') {
+        console.warn(`[METRICS] GitHub fetch failed after ${attempt} attempts:`, err.message);
+        // Return defaults if fetch fails
+        return {
+          stars: 0,
+          forks: 0,
+          openIssues: 0,
+          watchers: 0,
+          size: 0,
+          lastUpdated: new Date().toISOString(),
+          fullName: GITHUB_REPO,
+          description: 'Apex - Sentient Interface',
+          language: 'TypeScript',
+        };
+      }
+      
+      // Brief backoff before retry
+      await new Promise(resolve => setTimeout(resolve, 300));
     }
-  } catch (error) {
-    console.error('GitHub fetch error:', error);
   }
 
-  // Return defaults if fetch fails
+  // Fallback (should not reach here)
   return {
     stars: 0,
     forks: 0,
