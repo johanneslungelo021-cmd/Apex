@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,7 +15,14 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Apex - Sentient Interface",
-  description: "Phase 1 Complete - Full functional landing page with AI-powered features",
+  description: "Phase 1 Complete - Full functional landing page with AI-powered features, real-time GitHub metrics, and OpenTelemetry integration.",
+  keywords: ["Apex", "Sentient Interface", "AI", "Next.js", "Grafana", "OpenTelemetry"],
+  authors: [{ name: "Apex Team" }],
+  openGraph: {
+    title: "Apex - Sentient Interface",
+    description: "Phase 1 Complete - Full functional landing page with AI-powered features",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
@@ -28,6 +36,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         {children}
+        <SpeedInsights />
       </body>
     </html>
   );
