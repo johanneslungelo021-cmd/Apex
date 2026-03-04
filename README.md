@@ -45,7 +45,7 @@ Open http://localhost:3000
 
 3. Copy these values:
    - **Instance ID** (also called "User" in basic auth)
-   - **OTLP Endpoint** (e.g., `https://otlp-gateway-prod-us-central1.grafana.net/otlp`)
+   - **OTLP Endpoint** (e.g., `https://otlp-gateway-prod-ap-southeast-1.grafana.net/otlp`)
 
 4. Create an **Access Policy Token**:
    - Go to **Configuration → Access Policies**
@@ -59,7 +59,7 @@ Create a `.env.local` file:
 
 ```env
 # Grafana Cloud OpenTelemetry
-GRAFANA_OTLP_ENDPOINT=https://otlp-gateway-prod-us-central1.grafana.net/otlp
+GRAFANA_OTLP_ENDPOINT=https://otlp-gateway-prod-ap-southeast-1.grafana.net/otlp
 GRAFANA_INSTANCE_ID=your_instance_id_here
 GRAFANA_API_KEY=your_api_key_here
 
