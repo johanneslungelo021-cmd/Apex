@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
 
-// Combined metrics endpoint that integrates GitHub metrics with platform metrics
-
 interface GitHubMetrics {
   stars: number;
   forks: number;
@@ -41,13 +39,18 @@ async function fetchGitHubMetrics(): Promise<GitHubMetrics> {
     'User-Agent': 'Apex-Sentient-Interface',
   };
 
+  // Use GITHUB_TOKEN if available (higher rate limits)
   const githubToken = process.env.GITHUB_TOKEN;
   if (githubToken) {
     headers['Authorization'] = `token ${githubToken}`;
   }
 
   try {
-    const response = await fetch(GITHUB_API_URL, { headers });
+    const response = await fetch(GITHUB_API_URL, { 
+      headers,
+      next: { revalidate: 300 } // Cache for 5 minutes
+    });
+    
     if (response.ok) {
       const data = await response.json();
       return {
@@ -81,39 +84,23 @@ async function fetchGitHubMetrics(): Promise<GitHubMetrics> {
 }
 
 async function fetchPlatformMetrics(): Promise<PlatformMetrics> {
-  try {
-    const res = await fetch('http://localhost:8080/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b',
-        messages: [
-          {
-            role: 'user',
-            content:
-              'Return ONLY a valid JSON object with 3 realistic metrics for a digital platform. Format: {"users": number, "impact": number, "courses": number}. Users should be 10000-50000, impact should be 500000-2000000, courses should be 200-500. Return ONLY the JSON, no other text.',
-          },
-        ],
-      }),
-    });
+  // In production, these would come from your database
+  // For demo, we generate realistic-looking metrics
+  
+  const baseMetrics = {
+    users: 12480,
+    impact: 874200,
+    courses: 342,
+  };
 
-    if (res.ok) {
-      const data = await res.json();
-      try {
-        return JSON.parse(data.choices[0].message.content);
-      } catch {
-        // Parse failed, use defaults
-      }
-    }
-  } catch (error) {
-    console.error('LocalAI fetch error:', error);
-  }
+  // Add some variation based on time
+  const hour = new Date().getHours();
+  const variation = Math.sin(hour / 24 * Math.PI) * 0.1 + 1;
 
-  // Return defaults with some variation
   return {
-    users: 12480 + Math.floor(Math.random() * 1000),
-    impact: 874200 + Math.floor(Math.random() * 50000),
-    courses: 342 + Math.floor(Math.random() * 20),
+    users: Math.floor(baseMetrics.users * variation),
+    impact: Math.floor(baseMetrics.impact * variation),
+    courses: baseMetrics.courses + Math.floor(Math.random() * 10),
   };
 }
 
@@ -141,12 +128,6 @@ export async function GET() {
   cachedCombinedMetrics = { data: combinedMetrics, timestamp: now };
 
   return NextResponse.json(combinedMetrics);
-}
-
-// Legacy endpoint compatibility - returns platform metrics only
-export async function POST() {
-  const metrics = await fetchPlatformMetrics();
-  return NextResponse.json(metrics);
 }
 
 // Force dynamic rendering

@@ -1,0 +1,11 @@
+{
+  "buildCommand": "bun run build",
+  "installCommand": "bun install",
+  "framework": "nextjs",
+  "regions": ["sin1"],
+  "env": {
+    "OTEL_SERVICE_NAME": "apex-sentient-interface",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "@grafana_otlp_endpoint",
+    "OTEL_EXPORTER_OTLP_HEADERS": "@grafana_headers"
+  }
+}
