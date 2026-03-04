@@ -16,26 +16,31 @@ A modern Next.js landing page with real-time GitHub metrics, AI-powered assistan
 
 ## 🚀 Deployment (Vercel)
 
-### Repository Secrets Required
+### Vercel Environment Variables (Required for Production)
 
-Add these secrets in your GitHub repository settings (Settings → Secrets and variables → Actions):
+Add these environment variables in **Vercel Dashboard → Project → Settings → Environment Variables**:
 
-| Secret | Description | Required |
-|--------|-------------|----------|
-| `GRAFANA_OTLP_ENDPOINT` | Grafana Cloud OTLP URL | ✅ Yes |
-| `GRAFANA_INSTANCE_ID` | Your Grafana instance ID | ✅ Yes |
-| `GRAFANA_API_KEY` | Grafana Access Policy Token | ✅ Yes |
-| `AI_GATEWAY_API_KEY` | Vercel AI Gateway key | Optional* |
-| `GROQ_API_KEY` | Groq API key | Optional* |
-| `GITHUB_TOKEN` | GitHub PAT for higher rate limits | Optional |
+| Variable | Description | Required | Location |
+|----------|-------------|----------|----------|
+| `GRAFANA_OTLP_ENDPOINT` | Grafana Cloud OTLP URL | ✅ Yes | Vercel |
+| `GRAFANA_INSTANCE_ID` | Your Grafana instance ID | ✅ Yes | Vercel |
+| `GRAFANA_API_KEY` | Grafana Access Policy Token | ✅ Yes | Vercel |
+| `AI_GATEWAY_API_KEY` | Vercel AI Gateway key | Optional* | Vercel |
+| `GROQ_API_KEY` | Groq API key | Optional* | Vercel |
+| `GITHUB_TOKEN` | GitHub PAT for higher rate limits | Optional | Vercel |
 
 *At least one AI service (AI Gateway or Groq) is required for the chat assistant.
 
+### GitHub Actions Secrets (Only for CI/CD)
+
+If you use GitHub Actions workflows that need these values, add them separately in **GitHub Repository → Settings → Secrets and variables → Actions**. These are **not** used by Vercel auto-deploy.
+
 ### Deploy to Vercel
 
-1. Push to `digital-apex` branch
-2. Vercel will auto-deploy
-3. Check `/api/health` to verify all services are configured
+1. Add environment variables in Vercel Dashboard (see table above)
+2. Push to `digital-apex` branch
+3. Vercel will auto-deploy
+4. Check `/api/health` to verify all services are configured
 
 ### Health Check Endpoint
 
@@ -74,12 +79,12 @@ Returns:
 3. Required scopes: `metrics:write`, `traces:write`, `logs:write`
 4. Copy the token
 
-### Step 3: Add to Repository Secrets
+### Step 3: Add to Vercel Environment Variables
 
-Add these as GitHub repository secrets:
-- `GRAFANA_OTLP_ENDPOINT`
-- `GRAFANA_INSTANCE_ID`
-- `GRAFANA_API_KEY`
+In **Vercel Dashboard → Project → Settings → Environment Variables**, add:
+- `GRAFANA_OTLP_ENDPOINT` → Your OTLP endpoint URL
+- `GRAFANA_INSTANCE_ID` → Your instance ID
+- `GRAFANA_API_KEY` → Your access token
 
 ---
 
@@ -147,14 +152,16 @@ Apex/
 
 ## 🔧 Environment Variables
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `GRAFANA_OTLP_ENDPOINT` | Grafana Cloud OTLP URL | ✅ Yes |
-| `GRAFANA_INSTANCE_ID` | Your Grafana instance ID | ✅ Yes |
-| `GRAFANA_API_KEY` | Access Policy Token | ✅ Yes |
-| `AI_GATEWAY_API_KEY` | Vercel AI Gateway key | Optional |
-| `GROQ_API_KEY` | Groq API key | Optional |
-| `GITHUB_TOKEN` | GitHub PAT | Optional |
+| Variable | Description | Required | Set In |
+|----------|-------------|----------|--------|
+| `GRAFANA_OTLP_ENDPOINT` | Grafana Cloud OTLP URL | ✅ Yes | Vercel |
+| `GRAFANA_INSTANCE_ID` | Your Grafana instance ID | ✅ Yes | Vercel |
+| `GRAFANA_API_KEY` | Access Policy Token | ✅ Yes | Vercel |
+| `AI_GATEWAY_API_KEY` | Vercel AI Gateway key | Optional | Vercel |
+| `GROQ_API_KEY` | Groq API key | Optional | Vercel |
+| `GITHUB_TOKEN` | GitHub PAT | Optional | Vercel |
+
+> **Note:** Vercel auto-deploy reads from Vercel Environment Variables, not GitHub Secrets. Only use GitHub Secrets for GitHub Actions CI/CD workflows.
 
 ---
 
@@ -177,7 +184,7 @@ Apex/
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/health` | GET | Health check (verify secrets) |
+| `/api/health` | GET | Health check (verify env vars) |
 | `/api/analytics` | POST | Track page view |
 | `/api/assistant` | POST | Chat with AI |
 | `/api/register` | POST | User registration |
