@@ -1,34 +1,96 @@
+/**
+ * Sentient Interface - Main Landing Page
+ *
+ * A full-functional landing page implementing Phase 1 of the Apex platform.
+ * Features include:
+ *
+ * - Liquid Glass UI effects with responsive glassmorphism
+ * - Haptic feedback and spatial audio for sentient interactions
+ * - Real-time GitHub repository metrics via API
+ * - Platform usage metrics with deterministic variation
+ * - AI-powered chat assistant with Groq/AI Gateway backend
+ * - User registration with PII-safe logging
+ * - OpenTelemetry metrics for Grafana Cloud
+ *
+ * @module app/page
+ *
+ * @see /api/metrics - GitHub and platform metrics endpoint
+ * @see /api/assistant - AI chat completion endpoint
+ * @see /api/register - User registration endpoint
+ * @see /lib/metrics - OpenTelemetry counters
+ */
+
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { Heart, Search, User, BarChart3, MessageSquare, Github, Star, GitFork, Eye, AlertCircle, BookOpen, TrendingUp, Users, DollarSign } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+/**
+ * GitHub repository metrics from the GitHub API.
+ * Displayed in the GitHub Stats section of the interface.
+ */
 interface GitHubMetrics {
+  /** Number of repository stars */
   stars: number;
+  /** Number of repository forks */
   forks: number;
+  /** Number of open issues */
   openIssues: number;
+  /** Number of repository watchers */
   watchers: number;
+  /** Repository size in kilobytes */
   size: number;
+  /** ISO timestamp of last update */
   lastUpdated: string;
+  /** Full repository name (owner/repo) */
   fullName: string;
+  /** Repository description */
   description: string;
+  /** Primary programming language */
   language: string;
 }
 
+/**
+ * Platform usage metrics for the Apex application.
+ * Simulated metrics with deterministic hourly variation.
+ */
 interface PlatformMetrics {
+  /** Number of active users */
   users: number;
+  /** Total impact value (in rands) */
   impact: number;
+  /** Number of completed courses */
   courses: number;
 }
 
+/**
+ * Combined metrics response from the /api/metrics endpoint.
+ * Contains both GitHub and platform metrics with a timestamp.
+ */
 interface CombinedMetrics {
+  /** GitHub repository metrics */
   github: GitHubMetrics;
+  /** Platform usage metrics */
   platform: PlatformMetrics;
+  /** Unix timestamp of metrics collection */
   timestamp: number;
 }
 
+/**
+ * Sentient Interface main component.
+ *
+ * A full-featured landing page with sentient UI effects, real-time metrics,
+ * AI assistant, and user registration capabilities.
+ *
+ * @returns The complete landing page JSX
+ *
+ * @example
+ * // Rendered automatically by Next.js at the root route
+ * <SentientInterface />
+ */
 export default function SentientInterface() {
+  /** Search term for filtering blog posts */
   const [searchTerm, setSearchTerm] = useState('');
   const [showRegister, setShowRegister] = useState(false);
   const [registerEmail, setRegisterEmail] = useState('');
@@ -48,7 +110,23 @@ export default function SentientInterface() {
     { title: "Sentient Interface Design", excerpt: "Building responsive, living UIs with Liquid Glass" },
   ].filter(b => b.title.toLowerCase().includes(searchTerm.toLowerCase()) || b.excerpt.toLowerCase().includes(searchTerm.toLowerCase()));
 
-  // Sentient Feedback: Haptic + Spatial Audio
+  /**
+   * Triggers sentient feedback effects for user interactions.
+   *
+   * Combines three feedback modalities:
+   * 1. Haptic vibration on mobile devices
+   * 2. Spatial audio pulse with randomized panning
+   * 3. Visual heartbeat pulse animation
+   *
+   * @param intensity - Effect intensity multiplier (0-2, default: 1)
+   *
+   * @example
+   * // Light feedback on hover
+   * triggerSentient(0.5);
+   *
+   * // Strong feedback on registration
+   * triggerSentient(1.5);
+   */
   const triggerSentient = useCallback((intensity: number = 1) => {
     // Haptic feedback (mobile devices)
     if (navigator.vibrate) {
@@ -92,7 +170,10 @@ export default function SentientInterface() {
     setTimeout(() => setHeartbeatIntensity(1), 300);
   }, []);
 
-  // Fetch metrics on mount
+  /**
+   * Effect hook for initial setup and metrics refresh interval.
+   * Tracks page view on mount and refreshes metrics every 5 minutes.
+   */
   useEffect(() => {
     // Track page view
     fetch('/api/analytics', { method: 'POST' }).catch(() => {});
@@ -104,6 +185,11 @@ export default function SentientInterface() {
     return () => clearInterval(interval);
   }, []);
 
+  /**
+   * Fetches fresh metrics from the /api/metrics endpoint.
+   * Updates both GitHub and platform metrics state.
+   * Sets loading state during the fetch operation.
+   */
   const refreshMetrics = async () => {
     setIsLoading(true);
     try {
@@ -123,6 +209,11 @@ export default function SentientInterface() {
     }
   };
 
+  /**
+   * Sends the current message to the AI assistant.
+   * Updates chat history with user message and AI response.
+   * Triggers sentient feedback on send and receive.
+   */
   const sendToAIAssistant = async () => {
     if (!aiMessage.trim()) return;
     
@@ -150,6 +241,11 @@ export default function SentientInterface() {
     }
   };
 
+  /**
+   * Handles user registration form submission.
+   * Sends email to /api/register endpoint and closes modal on success.
+   * Triggers strong sentient feedback for the registration action.
+   */
   const handleRegister = async () => {
     triggerSentient(1.5);
     
@@ -171,6 +267,18 @@ export default function SentientInterface() {
     }
   };
 
+  /**
+   * Formats a number for display with K/M suffixes.
+   * Used for displaying metrics in a compact, readable format.
+   *
+   * @param num - The number to format
+   * @returns Formatted string (e.g., "1.2M", "45.6K", "123")
+   *
+   * @example
+   * formatNumber(1234567) // "1.2M"
+   * formatNumber(45678) // "45.7K"
+   * formatNumber(123) // "123"
+   */
   const formatNumber = (num: number): string => {
     if (num >= 1000000) {
       return (num / 1000000).toFixed(1) + 'M';
