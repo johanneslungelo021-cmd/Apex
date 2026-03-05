@@ -6,116 +6,116 @@ A modern Next.js landing page with real-time GitHub metrics, AI-powered assistan
 
 - **Sentient Interface** - Liquid Glass effects, haptics, spatial audio, emotional pulse
 - **Real-time Search** - Filter blogs and insights instantly
-- **Working Registration** - Form with AI confirmation
+- **Working Registration** - Form with backend processing
 - **GitHub Integration** - Live repository metrics (stars, forks, issues, watchers)
-- **AI Assistant** - Functional chat widget with LocalAI backend
+- **AI Assistant** - Functional chat widget with AI Gateway/Groq backend
 - **Market Insights** - Dynamic animated metrics
 - **OpenTelemetry** - Traces and metrics to Grafana Cloud
 
-## 🚀 Quick Start (4 minutes)
+---
+
+## 🚀 Deployment (Vercel)
+
+### Vercel Environment Variables (Required for Production)
+
+Add these environment variables in **Vercel Dashboard → Project → Settings → Environment Variables**:
+
+| Variable | Description | Required | Location |
+|----------|-------------|----------|----------|
+| `GRAFANA_OTLP_ENDPOINT` | Grafana Cloud OTLP URL | ✅ Yes | Vercel |
+| `GRAFANA_INSTANCE_ID` | Your Grafana instance ID | ✅ Yes | Vercel |
+| `GRAFANA_API_KEY` | Grafana Access Policy Token | ✅ Yes | Vercel |
+| `AI_GATEWAY_API_KEY` | Vercel AI Gateway key | Optional* | Vercel |
+| `GROQ_API_KEY` | Groq API key | Optional* | Vercel |
+| `GITHUB_TOKEN` | GitHub PAT for higher rate limits | Optional | Vercel |
+
+*At least one AI service (AI Gateway or Groq) is required for the chat assistant.
+
+### GitHub Actions Secrets (Only for CI/CD)
+
+If you use GitHub Actions workflows that need these values, add them separately in **GitHub Repository → Settings → Secrets and variables → Actions**. These are **not** used by Vercel auto-deploy.
+
+### Deploy to Vercel
+
+1. Add environment variables in Vercel Dashboard (see table above)
+2. Push to your deployment branch (typically `main`)
+3. Vercel will auto-deploy
+4. Check `/api/health` to verify all services are configured
+
+### Health Check Endpoint
 
 ```bash
-# Clone the repository
-git clone https://github.com/johanneslungelo021-cmd/Apex.git
-cd Apex
-git checkout digital-apex
-
-# Install dependencies
-bun install
-
-# Start LocalAI (zero cost AI backend)
-docker run -d -p 8080:8080 localai/localai:latest
-
-# Start the app
-bun run dev
+curl https://your-app.vercel.app/api/health
 ```
 
-Open http://localhost:3000
+Returns:
+```json
+{
+  "status": "ok",
+  "services": {
+    "grafana": { "configured": true },
+    "ai": { "aiGateway": true, "groq": false },
+    "github": true
+  }
+}
+```
 
 ---
 
-## 📊 Grafana Cloud OpenTelemetry Setup
+## 📊 Grafana Cloud Setup
 
-### Step 1: Get Your Grafana Cloud Credentials
+### Step 1: Get Your Credentials
 
-1. Go to your Grafana Cloud setup guide:
-   **https://dimakatsomoleli.grafana.net/a/grafana-setupguide-app/home**
-
+1. Go to: https://dimakatsomoleli.grafana.net/a/grafana-setupguide-app/home
 2. Navigate to **Configuration → OpenTelemetry**
+3. Copy:
+   - **Instance ID** (also called "User")
+   - **OTLP Endpoint**: `https://otlp-gateway-prod-ap-southeast-1.grafana.net/otlp`
 
-3. Copy these values:
-   - **Instance ID** (also called "User" in basic auth)
-   - **OTLP Endpoint** (e.g., `https://otlp-gateway-prod-us-central1.grafana.net/otlp`)
+### Step 2: Create Access Policy Token
 
-4. Create an **Access Policy Token**:
-   - Go to **Configuration → Access Policies**
-   - Click **Create Token**
-   - Required scopes: `metrics:write`, `traces:write`, `logs:write`
-   - Copy the token
+1. Go to **Configuration → Access Policies**
+2. Click **Create Token**
+3. Required scopes: `metrics:write`, `traces:write`, `logs:write`
+4. Copy the token
 
-### Step 2: Configure Environment Variables
+### Step 3: Add to Vercel Environment Variables
 
-Create a `.env.local` file:
-
-```env
-# Grafana Cloud OpenTelemetry
-GRAFANA_OTLP_ENDPOINT=https://otlp-gateway-prod-us-central1.grafana.net/otlp
-GRAFANA_INSTANCE_ID=your_instance_id_here
-GRAFANA_API_KEY=your_api_key_here
-
-# GitHub API (optional but recommended)
-GITHUB_TOKEN=ghp_your_github_token
-```
-
-### Step 3: Restart and Verify
-
-```bash
-bun run dev
-```
-
-Check your Grafana Cloud:
-1. Go to **Explore** in Grafana
-2. Select **traces** or **metrics**
-3. Query: `service.name="apex-sentient-interface"`
+In **Vercel Dashboard → Project → Settings → Environment Variables**, add:
+- `GRAFANA_OTLP_ENDPOINT` → Your OTLP endpoint URL
+- `GRAFANA_INSTANCE_ID` → Your instance ID
+- `GRAFANA_API_KEY` → Your access token
 
 ---
 
-## 📈 Grafana Alloy Setup (Alternative Method)
+## 📊 Available Metrics
 
-For Prometheus-style metrics via Grafana Alloy:
+### Custom Metrics (Sent to Grafana)
 
-### Quick Setup
+| Metric | Description |
+|--------|-------------|
+| `apex_page_view_total` | Total page views |
+| `apex_registration_total` | Successful registrations |
+| `apex_chat_session_total` | AI chat sessions |
 
-```bash
-# Run the automated setup script
-sudo ./scripts/setup-grafana-alloy.sh
-```
+### Automatic Metrics (from @vercel/otel)
 
-### Manual Setup
+- HTTP latency
+- Request rate
+- Error rate
+- Service uptime
 
-**Step 1: Create GitHub Token**
-```bash
-# Go to https://github.com/settings/tokens
-# Create token with scope: public_repo (read-only)
-```
+### Grafana Queries
 
-**Step 2: Store Token**
-```bash
-sudo mkdir -p /etc/alloy
-echo "ghp_YOUR_TOKEN" | sudo tee /etc/alloy/github_token.txt
-sudo chmod 600 /etc/alloy/github_token.txt
-```
+```promql
+# Page Views
+rate(apex_page_view_total[5m])
 
-**Step 3: Configure Alloy**
-```bash
-sudo cp config/grafana-alloy-config.alloy /etc/alloy/config.alloy
-sudo systemctl restart alloy.service
-```
+# Registrations
+apex_registration_total
 
-**Step 4: Verify**
-```bash
-sudo systemctl status alloy.service
-curl http://localhost:12345/metrics | grep github_repo
+# Chat Sessions
+rate(apex_chat_session_total[5m])
 ```
 
 ---
@@ -124,60 +124,44 @@ curl http://localhost:12345/metrics | grep github_repo
 
 ```
 Apex/
-├── instrumentation.ts           # OpenTelemetry configuration
-├── next.config.ts               # Next.js config (instrumentation enabled)
+├── instrumentation.ts           # OpenTelemetry config
+├── next.config.ts               # Next.js config
+├── vercel.json                  # Vercel deployment config
 ├── src/
+│   ├── lib/
+│   │   └── metrics.ts           # Custom OpenTelemetry metrics
 │   └── app/
-│       ├── page.tsx             # Main landing page (Sentient Interface)
+│       ├── page.tsx             # Main landing page
 │       ├── layout.tsx           # Root layout
-│       ├── globals.css          # Liquid Glass styles + animations
+│       ├── globals.css          # Liquid Glass styles
 │       └── api/
-│           ├── assistant/route.ts   # AI chat endpoint
+│           ├── health/route.ts      # Health check
+│           ├── analytics/route.ts   # Page view tracking
+│           ├── assistant/route.ts   # AI chat
 │           ├── register/route.ts    # User registration
 │           ├── metrics/route.ts     # Combined metrics
 │           └── github-metrics/route.ts  # GitHub API
 ├── config/
 │   └── grafana-alloy-config.alloy   # Grafana Alloy config
 ├── scripts/
-│   └── setup-grafana-alloy.sh       # Automated setup script
-├── .env.example                 # Environment template
-└── package.json
+│   └── setup-grafana-alloy.sh       # Setup script
+└── .env.example                 # Environment template
 ```
 
 ---
 
 ## 🔧 Environment Variables
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `GRAFANA_OTLP_ENDPOINT` | Grafana Cloud OTLP URL | Yes |
-| `GRAFANA_INSTANCE_ID` | Your Grafana instance ID | Yes |
-| `GRAFANA_API_KEY` | Access Policy Token | Yes |
-| `GITHUB_TOKEN` | GitHub API token | Optional |
-| `LOCALAI_URL` | LocalAI endpoint | Default: `http://localhost:8080` |
-| `LOCALAI_MODEL` | Model to use | Default: `llama-3.3-70b` |
+| Variable | Description | Required | Set In |
+|----------|-------------|----------|--------|
+| `GRAFANA_OTLP_ENDPOINT` | Grafana Cloud OTLP URL | ✅ Yes | Vercel |
+| `GRAFANA_INSTANCE_ID` | Your Grafana instance ID | ✅ Yes | Vercel |
+| `GRAFANA_API_KEY` | Access Policy Token | ✅ Yes | Vercel |
+| `AI_GATEWAY_API_KEY` | Vercel AI Gateway key | Optional | Vercel |
+| `GROQ_API_KEY` | Groq API key | Optional | Vercel |
+| `GITHUB_TOKEN` | GitHub PAT | Optional | Vercel |
 
----
-
-## 📊 Available Metrics
-
-### GitHub Metrics
-- `github_repo_stars` - Repository stars
-- `github_repo_forks` - Repository forks
-- `github_repo_open_issues` - Open issues count
-- `github_repo_watchers` - Repository watchers
-- `github_repo_size_kb` - Repository size (KB)
-
-### Platform Metrics
-- `users` - Active users
-- `impact` - Total impact (Rands)
-- `courses` - Courses completed
-
-### OpenTelemetry Traces
-- Page views
-- API requests
-- AI assistant interactions
-- Registration events
+> **Note:** Vercel auto-deploy reads from Vercel Environment Variables, not GitHub Secrets. Only use GitHub Secrets for GitHub Actions CI/CD workflows.
 
 ---
 
@@ -185,14 +169,14 @@ Apex/
 
 | Category | Technology |
 |----------|------------|
-| Framework | Next.js 15 (App Router) |
+| Framework | Next.js 16 (App Router) |
 | Language | TypeScript |
 | Styling | Tailwind CSS |
 | Animations | Framer Motion |
 | Icons | Lucide React |
-| AI Backend | LocalAI (zero cost) |
+| AI Backend | AI Gateway / Groq |
 | Observability | OpenTelemetry |
-| Metrics | Grafana Cloud + Alloy |
+| Metrics | Grafana Cloud |
 
 ---
 
@@ -200,9 +184,11 @@ Apex/
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
+| `/api/health` | GET | Health check (verify env vars) |
+| `/api/analytics` | POST | Track page view |
 | `/api/assistant` | POST | Chat with AI |
 | `/api/register` | POST | User registration |
-| `/api/metrics` | GET | Combined metrics (GitHub + Platform) |
+| `/api/metrics` | GET | Combined metrics |
 | `/api/github-metrics` | GET | GitHub metrics only |
 
 ---
@@ -215,10 +201,9 @@ Apex/
 - Glass morphism borders
 
 ### Sentient Interface
-- **Haptic Feedback** - Vibrates on all interactions (mobile)
+- **Haptic Feedback** - Vibrates on interactions (mobile)
 - **Spatial Audio** - Sine wave with stereo panning
 - **Heartbeat Animation** - Visual pulse with glow effect
-- **Multi-sensory Responses** - Every click triggers feedback
 
 ### Real-time Updates
 - 5-minute metrics cache
@@ -237,7 +222,7 @@ Apex/
 
 ## 📜 License
 
-MIT License - See LICENSE file for details.
+MIT License
 
 ---
 
