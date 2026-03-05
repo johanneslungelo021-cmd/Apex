@@ -1,3 +1,13 @@
+/**
+ * Global Styles for Apex Sentient Interface
+ *
+ * Includes:
+ * - Tailwind CSS imports
+ * - Dark theme variables
+ * - Liquid Glass effects
+ * - Sentient animation keyframes
+ */
+
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -43,6 +53,10 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/**
+ * Root CSS variables for light and dark themes.
+ * Uses oklch color space for perceptually uniform colors.
+ */
 :root {
   --radius: 0.625rem;
   --background: oklch(1 0 0);
@@ -78,6 +92,10 @@
   --sidebar-ring: oklch(0.708 0 0);
 }
 
+/**
+ * Dark theme CSS variables for the Sentient Interface.
+ * Optimized for dark backgrounds with glass morphism effects.
+ */
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
@@ -119,4 +137,130 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* ─── Liquid Glass Effect ───────────────────────────────────────────────────── */
+
+/**
+ * Glass morphism effect for cards and panels.
+ * Uses backdrop blur and subtle borders for a frosted glass appearance.
+ */
+.glass {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 4px 30px rgba(0, 0, 0, 0.3),
+    inset 0 0 80px rgba(255, 255, 255, 0.02);
+}
+
+/**
+ * Animated liquid reflection effect for hero sections.
+ * Creates a flowing gradient animation for visual depth.
+ */
+.liquid-reflection {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    transparent 50%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  animation: liquid-flow 8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/**
+ * Heartbeat pulse animation for the sentient heart icon.
+ */
+.heart-pulse {
+  animation: heart-pulse 1.5s ease-in-out infinite;
+}
+
+/* ─── Keyframe Animations ───────────────────────────────────────────────────── */
+
+/**
+ * Liquid flow animation for reflection effects.
+ * Shifts the gradient position smoothly.
+ */
+@keyframes liquid-flow {
+  0%, 100% {
+    transform: translateX(-10%) translateY(-10%) rotate(0deg);
+  }
+  25% {
+    transform: translateX(5%) translateY(-5%) rotate(2deg);
+  }
+  50% {
+    transform: translateX(10%) translateY(5%) rotate(-1deg);
+  }
+  75% {
+    transform: translateX(-5%) translateY(10%) rotate(1deg);
+  }
+}
+
+/**
+ * Heart pulse animation with scale and glow effects.
+ */
+@keyframes heart-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  15% {
+    transform: scale(1.15);
+  }
+  30% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.1);
+  }
+}
+
+/**
+ * General glow pulse for live indicators.
+ */
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 5px rgba(16, 185, 129, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.8);
+  }
+}
+
+/* ─── Custom Scrollbar ──────────────────────────────────────────────────────── */
+
+/**
+ * Styled scrollbar for webkit browsers.
+ * Matches the dark glass theme.
+ */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* ─── Selection Styling ─────────────────────────────────────────────────────── */
+
+/**
+ * Text selection styling for the dark theme.
+ */
+::selection {
+  background: rgba(99, 102, 241, 0.3);
+  color: white;
 }
