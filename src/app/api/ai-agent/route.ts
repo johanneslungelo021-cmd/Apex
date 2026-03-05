@@ -1,22 +1,23 @@
 /**
- * AI Agent API Route
+ * AI Agent API Endpoint
  *
- * The Apex Intelligent Engine - a conversational AI agent for South African
- * digital income opportunities. Provides Answer-First responses grounded in
- * live opportunity data (≤ R2000 cost).
+ * Provides a conversational AI interface powered by Groq's Llama model.
+ * Includes rate limiting, input validation, and integration with the Scout Agent
+ * for live opportunity data in responses.
  *
- * Features:
- * - Rate limiting (20 requests per minute per IP)
- * - Structured logging with request correlation
- * - Live opportunity data from Scout Agent (5-minute cache)
- * - Capability manifest for external AI agents
- *
- * @module api/ai-agent
+ * @module app/api/ai-agent
  *
  * @example
  * // GET /api/ai-agent - Returns capability manifest
- * // POST /api/ai-agent - Query the agent
- * // Body: { "messages": [{ "role": "user", "content": "Find opportunities in Gauteng" }] }
+ * // POST /api/ai-agent - Handles chat queries
+ *
+ * fetch('/api/ai-agent', {
+ *   method: 'POST',
+ *   headers: { 'Content-Type': 'application/json' },
+ *   body: JSON.stringify({
+ *     messages: [{ role: 'user', content: 'Find opportunities in Gauteng' }]
+ *   })
+ * });
  */
 
 import { NextResponse } from 'next/server';
@@ -24,42 +25,77 @@ import { runScoutAgent } from '@/lib/agents/scout-agent';
 import { generateRequestId, log, fetchWithTimeout, envTimeoutMs, checkRateLimit } from '@/lib/api-utils';
 import { agentQueryCounter } from '@/lib/metrics';
 
+/**
+ * Service identifier for log entries from this endpoint.
+ */
 const SERVICE = 'ai-agent';
+
+/**
+ * Groq API timeout in milliseconds, configurable via environment variable.
+ * Defaults to 15 seconds if GROQ_TIMEOUT_MS is not set.
+ */
 const GROQ_TIMEOUT_MS = envTimeoutMs(process.env.GROQ_TIMEOUT_MS, 15_000);
 
-// Rate limit: 20 requests per minute per IP
+/**
+ * Rate limit: maximum requests per window per IP.
+ */
 const RATE_LIMIT = 20;
+
+/**
+ * Rate limit window duration in milliseconds (1 minute).
+ */
 const RATE_WINDOW_MS = 60_000;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /**
- * A single chat message in the conversation.
+ * Represents a single chat message in the conversation history.
  */
 interface ChatMessage {
   /** Message role: user, assistant, or system */
   role: 'user' | 'assistant' | 'system';
-  /** Message content */
+  /** Message content text */
   content: string;
 }
 
-/** Valid message roles for validation */
+/**
+ * Set of valid message roles for validation.
+ */
 const VALID_ROLES = new Set(['user', 'assistant', 'system']);
 
-/** Maximum messages in a single request */
+/**
+ * Maximum number of messages allowed in a single request.
+ */
 const MAX_MESSAGES = 20;
 
-/** Maximum characters per message content */
+/**
+ * Maximum length of a single message content string.
+ */
 const MAX_CONTENT_LENGTH = 4000;
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
 /**
- * Validates a messages array from the request body.
- * Returns either the validated array or an error message string.
+ * Validates an array of chat messages from the request body.
  *
- * @param raw - The raw messages value from the request
- * @returns Validated ChatMessage array or error string
+ * Performs comprehensive validation including:
+ * - Array type and length checks
+ * - Object structure validation for each message
+ * - Role enumeration validation
+ * - Content type and length validation
+ *
+ * @param raw - The raw messages value from the request body
+ * @returns Array of validated ChatMessage objects on success, or error message string on failure
+ *
+ * @example
+ * const result = validateMessages([
+ *   { role: 'user', content: 'Hello' }
+ * ]);
+ * // Returns [{ role: 'user', content: 'Hello' }]
+ *
+ * @example
+ * const result = validateMessages([]);
+ * // Returns 'messages array must not be empty.'
  */
 function validateMessages(raw: unknown): ChatMessage[] | string {
   if (!Array.isArray(raw)) return 'messages must be a non-empty array.';
@@ -87,14 +123,25 @@ function validateMessages(raw: unknown): ChatMessage[] | string {
 // ─── GET — Capability Manifest ────────────────────────────────────────────────
 
 /**
- * Returns a machine-readable capability manifest so external AI agents and
- * crawlers can discover what this endpoint does without making a POST first.
+ * Returns a machine-readable capability manifest for the AI Agent endpoint.
  *
- * @returns JSON response with API capability manifest
+ * This GET handler provides a self-describing API manifest that allows
+ * external AI agents and crawlers to discover what this endpoint does
+ * without making a POST request first. Includes schema.org markup for SEO.
+ *
+ * @returns JSON response with capability manifest and 1-hour cache header
  *
  * @example
  * // GET /api/ai-agent
- * // Response: { name: 'Apex Intelligent Engine', version: '2.0.0', ... }
+ * // Response:
+ * {
+ *   "name": "Apex Intelligent Engine",
+ *   "version": "2.0.0",
+ *   "description": "...",
+ *   "endpoint": "/api/ai-agent",
+ *   "method": "POST",
+ *   ...
+ * }
  */
 export async function GET(): Promise<Response> {
   const manifest = {
@@ -146,20 +193,35 @@ export async function GET(): Promise<Response> {
 /**
  * Handles a conversational query to the Apex Intelligent Engine.
  *
- * Flow:
- * 1. Rate limit check (20 req/min per IP)
+ * Processing flow:
+ * 1. Rate limit check (20 requests per minute per IP)
  * 2. Validate request body and messages array
  * 3. Run Scout Agent (cached — no Groq call if cache is warm)
  * 4. Call Groq with system prompt + live opportunities + user messages
  * 5. Return reply, opportunities, requestId, durationMs with X-Request-Id header
  *
+ * All responses include a unique X-Request-Id header for log correlation.
+ * Errors are returned with appropriate HTTP status codes and descriptive messages.
+ *
  * @param req - The incoming HTTP request
- * @returns JSON response with AI reply and opportunities
+ * @returns JSON response with AI reply, opportunities, and metadata
  *
  * @example
- * // POST /api/ai-agent
- * // Body: { "messages": [{ "role": "user", "content": "Find opportunities" }] }
- * // Response: { "reply": "...", "opportunities": [...], "requestId": "abc123", "durationMs": 1234 }
+ * // Success response
+ * {
+ *   "reply": "Here are 3 opportunities in Gauteng...",
+ *   "opportunities": [...],
+ *   "requestId": "a1b2c3d4e5f6",
+ *   "durationMs": 1234
+ * }
+ *
+ * @example
+ * // Error response (rate limited)
+ * {
+ *   "error": "RATE_LIMITED",
+ *   "message": "Too many requests. Please wait before retrying.",
+ *   "requestId": "a1b2c3d4e5f6"
+ * }
  */
 export async function POST(req: Request): Promise<Response> {
   const requestId = generateRequestId();
@@ -265,36 +327,41 @@ export async function POST(req: Request): Promise<Response> {
     );
 
     if (!response.ok) {
+      const errText = await response.text().catch(() => '');
       log({
-        level: 'error', service: SERVICE,
+        level: 'warn', service: SERVICE,
         message: `Groq returned HTTP ${response.status}`,
-        requestId, durationMs: Date.now() - startMs,
+        requestId, durationMs: Date.now() - startMs, groqError: errText,
       });
       agentQueryCounter.add(1, { status: 'error' });
       return NextResponse.json(
-        { error: 'AI_ERROR', message: 'The AI service returned an error.', requestId },
+        { error: 'UPSTREAM_ERROR', message: 'AI engine temporarily unavailable.', requestId },
         { status: 502, headers: { 'X-Request-Id': requestId } },
       );
     }
 
     const data = await response.json();
-    const reply: string = data?.choices?.[0]?.message?.content ?? '';
+    const reply: string = data?.choices?.[0]?.message?.content?.trim() ?? '';
+
+    if (!reply) {
+      log({ level: 'warn', service: SERVICE, message: 'Groq returned empty content', requestId });
+      agentQueryCounter.add(1, { status: 'error' });
+      return NextResponse.json(
+        { error: 'UPSTREAM_ERROR', message: 'AI engine returned an empty response.', requestId },
+        { status: 502, headers: { 'X-Request-Id': requestId } },
+      );
+    }
 
     agentQueryCounter.add(1, { status: 'success' });
 
     log({
       level: 'info', service: SERVICE,
       message: 'Agent query completed',
-      requestId, durationMs: Date.now() - startMs, replyLength: reply.length,
+      requestId, durationMs: Date.now() - startMs,
     });
 
     return NextResponse.json(
-      {
-        reply,
-        opportunities,
-        requestId,
-        durationMs: Date.now() - startMs,
-      },
+      { reply, opportunities, requestId, durationMs: Date.now() - startMs },
       { headers: { 'X-Request-Id': requestId } },
     );
 
@@ -306,20 +373,20 @@ export async function POST(req: Request): Promise<Response> {
 
     log({
       level: 'error', service: SERVICE,
-      message: isTimeout ? 'Agent query timed out' : 'Agent query failed',
+      message: isTimeout ? 'Groq call timed out' : 'Agent query failed',
       requestId, error: errMsg, durationMs: Date.now() - startMs,
     });
 
     return NextResponse.json(
       {
         error: isTimeout ? 'TIMEOUT' : 'INTERNAL_ERROR',
-        message: isTimeout ? 'The request timed out. Please try again.' : 'An internal error occurred.',
+        message: isTimeout ? 'Request timed out. Please try again.' : 'An unexpected error occurred.',
         requestId,
       },
-      { status: isTimeout ? 504 : 500, headers: { 'X-Request-Id': requestId } },
+      {
+        status: isTimeout ? 504 : 500,
+        headers: { 'X-Request-Id': requestId },
+      },
     );
   }
 }
-
-/** Force dynamic rendering to ensure fresh data */
-export const dynamic = 'force-dynamic';

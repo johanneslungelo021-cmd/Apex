@@ -1,11 +1,9 @@
 /**
  * Scout Agent Module
  *
- * Discovers digital income opportunities in South Africa using Groq AI.
- * Results are cached for 5 minutes to prevent API hammering on concurrent requests.
- *
- * The scout validates all opportunity URLs to prevent hallucinated links
- * from reaching users. Each opportunity must have a real HTTPS URL.
+ * AI-powered agent that finds real digital income opportunities for South Africans.
+ * Uses Groq's Llama model to discover opportunities with cost ≤ R2000.
+ * Results are cached for 5 minutes to optimize API usage.
  *
  * @module lib/agents/scout-agent
  *
@@ -13,60 +11,91 @@
  * import { runScoutAgent, type Opportunity } from '@/lib/agents/scout-agent';
  *
  * const opportunities = await runScoutAgent();
- * console.log(`Found ${opportunities.length} opportunities`);
+ * opportunities.forEach(opp => {
+ *   console.log(`${opp.title} - R${opp.cost} - ${opp.link}`);
+ * });
  */
 
 import { log, generateRequestId, fetchWithTimeout, safeJsonParse, envTimeoutMs, isValidHttpUrl } from '../api-utils';
 import { scoutRunCounter, scoutOpportunitiesCounter } from '../metrics';
 
+/**
+ * Service identifier for log entries from this module.
+ */
 const SERVICE = 'scout-agent';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /**
- * A validated digital income opportunity for South African users.
+ * Represents a validated digital income opportunity.
+ *
+ * Each opportunity includes all details needed for a user to evaluate
+ * and pursue the opportunity, including cost in ZAR and a verified
+ * HTTPS link to the platform or course.
  */
 export interface Opportunity {
-  /** Opportunity title */
+  /** Human-readable title of the opportunity */
   title: string;
-  /** South African province (e.g., "Gauteng" or "All Provinces") */
+  /** South African province where the opportunity is available, or "All Provinces" */
   province: string;
-  /** Cost in ZAR (0-2000) */
+  /** Cost to start in South African Rands (0-2000) */
   cost: number;
-  /** Income potential description (e.g., "R3000–R8000/month") */
+  /** Expected income potential as a human-readable string */
   incomePotential: string;
-  /** Validated HTTPS URL to the platform or course */
+  /** Verified HTTPS URL to the platform or course */
   link: string;
-  /** Opportunity category */
+  /** Category classification for filtering */
   category: string;
 }
 
-// ─── Cache ────────────────────────────────────────────────────────────────────
+// ─── Cache Configuration ──────────────────────────────────────────────────────
 
-/** Cache TTL: 5 minutes — prevents Groq hammering on concurrent requests */
+/**
+ * Cache time-to-live in milliseconds (5 minutes).
+ * Prevents Groq API hammering on concurrent requests while keeping
+ * opportunity data reasonably fresh.
+ */
 const SCOUT_CACHE_TTL_MS = 5 * 60 * 1000;
 
-/** Cached opportunities with timestamp */
+/**
+ * Cached opportunities with timestamp for freshness validation.
+ * Null when cache is empty or invalidated.
+ */
 let scoutCache: { opportunities: Opportunity[]; cachedAt: number } | null = null;
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
 /**
- * Validates a single raw opportunity object from Groq.
- * Returns a typed Opportunity or null if required fields are missing/invalid.
- * Rejects entries with invalid URLs to prevent hallucinated links reaching users.
+ * Validates a single raw opportunity object from Groq's response.
  *
- * @param raw - The raw opportunity object from Groq
- * @returns Validated Opportunity or null if invalid
+ * Performs comprehensive validation of all required fields including:
+ * - Non-empty strings for text fields
+ * - Valid cost range (0-2000 ZAR)
+ * - Valid HTTPS or HTTP URL for the link
+ * - Known category classification
+ *
+ * @param raw - The raw opportunity object from Groq (unknown type for safety)
+ * @returns A typed Opportunity object if valid, null if any field is missing or invalid
  *
  * @example
- * const raw = { title: "Test", province: "Gauteng", cost: 500, ... };
- * const validated = validateOpportunity(raw);
+ * const valid = validateOpportunity({
+ *   title: "Freelance Writing",
+ *   province: "Gauteng",
+ *   cost: 0,
+ *   incomePotential: "R5000-R10000/month",
+ *   link: "https://example.com",
+ *   category: "Freelancing"
+ * });
+ * // Returns Opportunity object
+ *
+ * @example
+ * const invalid = validateOpportunity({ title: "" }); // null - empty title
  */
 function validateOpportunity(raw: unknown): Opportunity | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
 
+  // Validate all required fields with type and constraint checking
   if (
     typeof r.title !== 'string' || !r.title.trim() ||
     typeof r.province !== 'string' || !r.province.trim() ||
@@ -88,23 +117,48 @@ function validateOpportunity(raw: unknown): Opportunity | null {
   };
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
+// ─── Main Scout Function ──────────────────────────────────────────────────────
 
-/** Groq API timeout in milliseconds (configurable via GROQ_TIMEOUT_MS env) */
+/**
+ * Groq API timeout in milliseconds, configurable via environment variable.
+ * Defaults to 12 seconds if GROQ_TIMEOUT_MS is not set.
+ */
 const GROQ_TIMEOUT_MS = envTimeoutMs(process.env.GROQ_TIMEOUT_MS, 12_000);
 
 /**
  * Runs the Scout Agent to find digital income opportunities in South Africa.
  *
- * Results are cached for 5 minutes to prevent repeated Groq API calls on
- * concurrent requests. Returns a validated, typed array — never throws.
- * Falls back to stale cache on any error rather than returning empty.
+ * The agent uses Groq's Llama 3.3 70B model to discover real opportunities
+ * with cost ≤ R2000. Results are cached for 5 minutes to optimize API usage
+ * and reduce latency for subsequent requests.
  *
- * @returns Array of validated opportunities
+ * On cache hit, returns cached opportunities immediately without API call.
+ * On cache miss, calls Groq API with a structured prompt requesting exactly
+ * 3 opportunities in JSON format.
+ *
+ * Error handling strategy:
+ * - Missing GROQ_API_KEY: Returns empty array with warning log
+ * - Groq API error: Returns stale cache if available, else empty array
+ * - Invalid response: Returns stale cache if available, else empty array
+ * - Timeout: Returns stale cache if available, else empty array
+ *
+ * Metrics are emitted for monitoring:
+ * - scoutRunCounter: Tracks runs by status (success/timeout/error)
+ * - scoutOpportunitiesCounter: Tracks total valid opportunities found
+ *
+ * @returns Promise resolving to an array of validated Opportunity objects (may be empty)
  *
  * @example
+ * // Basic usage
  * const opportunities = await runScoutAgent();
- * opportunities.forEach(o => console.log(o.title, o.cost));
+ * console.log(`Found ${opportunities.length} opportunities`);
+ *
+ * @example
+ * // With error handling
+ * const opportunities = await runScoutAgent();
+ * if (opportunities.length === 0) {
+ *   console.log('No opportunities available - check logs for details');
+ * }
  */
 export async function runScoutAgent(): Promise<Opportunity[]> {
   // Return cached data if still fresh
