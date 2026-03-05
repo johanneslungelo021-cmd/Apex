@@ -10,6 +10,7 @@
  * - Platform usage metrics with deterministic variation
  * - AI-powered Intelligent Engine with Scout Agent backend
  * - Scout Agent for live digital income opportunities
+ * - Live news from Perplexity Search API
  * - User registration with PII-safe logging
  * - OpenTelemetry metrics for Grafana Cloud
  * - GEO-optimized content for search and AI crawlers
@@ -20,7 +21,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Heart, Search, User, BarChart3, MessageSquare, Github, Star, GitFork, Eye, AlertCircle, BookOpen, TrendingUp, Users, DollarSign, Zap, ExternalLink } from 'lucide-react';
+import { Heart, Search, User, BarChart3, MessageSquare, Github, Star, GitFork, Eye, AlertCircle, BookOpen, TrendingUp, Users, DollarSign, Zap, ExternalLink, Newspaper, Clock, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 /**
@@ -69,6 +70,18 @@ interface Opportunity {
 }
 
 /**
+ * Live news article from /api/news (Perplexity Search).
+ */
+interface NewsArticle {
+  title: string;
+  url: string;
+  snippet: string;
+  date: string | null;
+  source: string;
+  imageUrl: string;
+}
+
+/**
  * Main Sentient Interface component for the Apex platform.
  *
  * Features:
@@ -76,6 +89,7 @@ interface Opportunity {
  * - Real-time GitHub metrics integration
  * - AI-powered Intelligent Engine with Scout Agent
  * - Live digital income opportunities for South Africans
+ * - Live news from Perplexity Search API
  * - User registration with PII-safe logging
  *
  * @returns The Sentient Interface React component
@@ -93,6 +107,9 @@ export default function SentientInterface() {
   const [heartbeatIntensity, setHeartbeatIntensity] = useState(1);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [agentLoading, setAgentLoading] = useState(false);
+  const [news, setNews] = useState<NewsArticle[]>([]);
+  const [newsLoading, setNewsLoading] = useState(true);
+  const [newsError, setNewsError] = useState(false);
 
   /**
    * Blog posts for the Latest Blogs section.
@@ -150,8 +167,11 @@ export default function SentientInterface() {
   useEffect(() => {
     fetch('/api/analytics', { method: 'POST' }).catch(() => {});
     refreshMetrics();
+    fetchNews();
     const interval = setInterval(refreshMetrics, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+    // Refresh news every 10 minutes
+    const newsInterval = setInterval(fetchNews, 10 * 60 * 1000);
+    return () => { clearInterval(interval); clearInterval(newsInterval); };
   }, []);
 
   /**
@@ -168,6 +188,27 @@ export default function SentientInterface() {
       console.error('Metrics error:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  /**
+   * Fetches live news articles from /api/news (Perplexity Search).
+   */
+  const fetchNews = async () => {
+    setNewsLoading(true);
+    setNewsError(false);
+    try {
+      const res = await fetch('/api/news');
+      const data = await res.json();
+      if (!res.ok || !Array.isArray(data.articles)) {
+        setNewsError(true);
+        return;
+      }
+      setNews(data.articles);
+    } catch {
+      setNewsError(true);
+    } finally {
+      setNewsLoading(false);
     }
   };
 
@@ -323,7 +364,7 @@ export default function SentientInterface() {
             <a href="#opportunities" className="hover:text-white/70 transition" onClick={() => triggerSentient(0.5)}>Opportunities</a>
             <a href="#insights" className="hover:text-white/70 transition" onClick={() => triggerSentient(0.5)}>Insights</a>
             <a href="#github" className="hover:text-white/70 transition" onClick={() => triggerSentient(0.5)}>GitHub</a>
-            <a href="#blogs" className="hover:text-white/70 transition" onClick={() => triggerSentient(0.5)}>Blogs</a>
+            <a href="#news" className="hover:text-white/70 transition" onClick={() => triggerSentient(0.5)}>News</a>
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -490,20 +531,152 @@ export default function SentientInterface() {
         </div>
       </section>
 
-      {/* Blogs Section */}
-      <section id="blogs" className="max-w-5xl mx-auto px-8 py-20 border-t border-white/10">
-        <h2 className="text-4xl font-semibold mb-12">Latest Blogs</h2>
-        <div className="space-y-6">
-          {blogs.map((blog, i) => (
-            <motion.div key={i} className="glass p-8 rounded-3xl flex justify-between items-center hover:scale-[1.01] transition cursor-pointer" whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }} onClick={() => triggerSentient(0.5)}>
-              <div>
-                <div className="font-semibold text-xl">{blog.title}</div>
-                <div className="text-zinc-400 mt-1">{blog.excerpt}</div>
-              </div>
-              <div className="text-xs uppercase tracking-widest text-zinc-500">Read →</div>
-            </motion.div>
-          ))}
+      {/* Live News Section — powered by Perplexity Search API */}
+      <section id="news" className="max-w-5xl mx-auto px-8 py-20 border-t border-white/10">
+        <div className="flex items-center justify-between mb-12">
+          <h2 className="text-4xl font-semibold flex items-center gap-3">
+            <Newspaper className="w-9 h-9 text-blue-400" /> Live News
+          </h2>
+          <button
+            onClick={() => { fetchNews(); triggerSentient(0.4); }}
+            disabled={newsLoading}
+            className="flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition disabled:opacity-40"
+          >
+            <RefreshCw className={`w-4 h-4 ${newsLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
         </div>
+
+        {/* Loading skeleton */}
+        {newsLoading && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="glass rounded-3xl overflow-hidden animate-pulse">
+                <div className="bg-white/5 h-44 w-full" />
+                <div className="p-5 space-y-3">
+                  <div className="flex gap-2">
+                    <div className="bg-white/5 h-4 rounded-full w-20" />
+                    <div className="bg-white/5 h-4 rounded-full w-16" />
+                  </div>
+                  <div className="bg-white/5 h-5 rounded w-full" />
+                  <div className="bg-white/5 h-5 rounded w-4/5" />
+                  <div className="bg-white/5 h-4 rounded w-full" />
+                  <div className="bg-white/5 h-4 rounded w-3/4" />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Error state */}
+        {!newsLoading && newsError && (
+          <div className="glass p-10 rounded-3xl text-center text-zinc-500">
+            <Newspaper className="w-10 h-10 mx-auto mb-4 text-zinc-600" />
+            <p className="text-lg mb-2">News unavailable</p>
+            <p className="text-sm mb-6">Add PERPLEXITY_API_KEY to your environment variables to enable live news.</p>
+            <button
+              onClick={() => { fetchNews(); triggerSentient(0.5); }}
+              className="glass px-6 py-2 rounded-2xl text-sm hover:bg-white/10 transition"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
+        {/* Live news grid */}
+        {!newsLoading && !newsError && news.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* Featured article — spans full width on first card */}
+            {news.slice(0, 1).map((article) => (
+              <motion.a
+                key={article.url}
+                href={article.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="glass rounded-3xl overflow-hidden col-span-1 md:col-span-2 lg:col-span-2 group cursor-pointer border border-transparent hover:border-white/10 transition"
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+                onClick={() => triggerSentient(0.5)}
+              >
+                <div className="relative w-full h-56 overflow-hidden">
+                  <img
+                    src={article.imageUrl}
+                    alt={article.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      target.src = `data:image/svg+xml;base64,${btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="800" height="420"><rect width="800" height="420" fill="#18181b"/><text x="400" y="210" font-family="system-ui" font-size="16" fill="#52525b" text-anchor="middle">${article.source}</text></svg>`)}`;
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+                  <div className="absolute top-4 left-4">
+                    <span className="glass text-xs px-3 py-1 rounded-full text-blue-300 font-medium">Featured</span>
+                  </div>
+                </div>
+                <div className="p-6">
+                  <div className="flex items-center gap-3 mb-3">
+                    <span className="text-xs text-blue-400 font-medium uppercase tracking-wider">{article.source}</span>
+                    {article.date && (
+                      <span className="flex items-center gap-1 text-xs text-zinc-500">
+                        <Clock className="w-3 h-3" />
+                        {new Date(article.date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="font-bold text-xl leading-snug mb-2 group-hover:text-blue-300 transition line-clamp-2">{article.title}</h3>
+                  <p className="text-zinc-400 text-sm leading-relaxed line-clamp-2">{article.snippet}</p>
+                  <div className="mt-4 flex items-center gap-1 text-xs text-zinc-500 group-hover:text-white transition">
+                    Read full article <ExternalLink className="w-3 h-3 ml-1" />
+                  </div>
+                </div>
+              </motion.a>
+            ))}
+
+            {/* Remaining articles */}
+            {news.slice(1).map((article) => (
+              <motion.a
+                key={article.url}
+                href={article.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="glass rounded-3xl overflow-hidden group cursor-pointer border border-transparent hover:border-white/10 transition flex flex-col"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => triggerSentient(0.5)}
+              >
+                <div className="relative w-full h-44 overflow-hidden flex-shrink-0">
+                  <img
+                    src={article.imageUrl}
+                    alt={article.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      target.src = `data:image/svg+xml;base64,${btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="220"><rect width="400" height="220" fill="#18181b"/><text x="200" y="110" font-family="system-ui" font-size="14" fill="#52525b" text-anchor="middle">${article.source}</text></svg>`)}`;
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                </div>
+                <div className="p-5 flex flex-col flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs text-blue-400 font-medium uppercase tracking-wider truncate">{article.source}</span>
+                    {article.date && (
+                      <span className="flex items-center gap-1 text-xs text-zinc-600 flex-shrink-0">
+                        <Clock className="w-3 h-3" />
+                        {new Date(article.date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="font-semibold text-base leading-snug mb-2 group-hover:text-blue-300 transition line-clamp-3 flex-1">{article.title}</h3>
+                  <p className="text-zinc-500 text-xs leading-relaxed line-clamp-2 mb-3">{article.snippet}</p>
+                  <div className="flex items-center gap-1 text-xs text-zinc-600 group-hover:text-white transition mt-auto">
+                    Read more <ExternalLink className="w-3 h-3 ml-1" />
+                  </div>
+                </div>
+              </motion.a>
+            ))}
+          </div>
+        )}
+
       </section>
 
       {/* AI Assistant — powered by /api/ai-agent (Intelligent Engine) */}
