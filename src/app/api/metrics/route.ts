@@ -30,11 +30,27 @@ let cachedCombinedMetrics: {
 
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-// Configurable timeout (env) with default
-const GITHUB_TIMEOUT_MS = parseInt(process.env.GITHUB_TIMEOUT_MS || '8000');
+// Validate GITHUB_TIMEOUT_MS: must be a finite positive integer, else fall back to 8 000 ms
+const rawGithubTimeout = parseInt(process.env.GITHUB_TIMEOUT_MS || '8000', 10);
+const GITHUB_TIMEOUT_MS = Number.isFinite(rawGithubTimeout) && rawGithubTimeout > 0
+  ? rawGithubTimeout
+  : 8000;
+
+const GITHUB_REPO = 'johanneslungelo021-cmd/Apex';
+
+const GITHUB_FALLBACK: GitHubMetrics = {
+  stars: 0,
+  forks: 0,
+  openIssues: 0,
+  watchers: 0,
+  size: 0,
+  lastUpdated: new Date().toISOString(),
+  fullName: GITHUB_REPO,
+  description: 'Apex - Sentient Interface',
+  language: 'TypeScript',
+};
 
 async function fetchGitHubMetrics(): Promise<GitHubMetrics> {
-  const GITHUB_REPO = 'johanneslungelo021-cmd/Apex';
   const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}`;
 
   const headers: HeadersInit = {
@@ -42,13 +58,12 @@ async function fetchGitHubMetrics(): Promise<GitHubMetrics> {
     'User-Agent': 'Apex-Sentient-Interface',
   };
 
-  // Use GITHUB_TOKEN if available (higher rate limits)
   const githubToken = process.env.GITHUB_TOKEN;
   if (githubToken) {
     headers['Authorization'] = `token ${githubToken}`;
   }
 
-  // Retry logic with timeout
+  // Retry with timeout — retry on ALL transient errors (AbortError, 429, 5xx, network)
   for (let attempt = 1; attempt <= 2; attempt++) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), GITHUB_TIMEOUT_MS);
@@ -56,13 +71,14 @@ async function fetchGitHubMetrics(): Promise<GitHubMetrics> {
     try {
       const response = await fetch(GITHUB_API_URL, {
         headers,
-        next: { revalidate: 300 }, // Cache for 5 minutes
+        next: { revalidate: 300 },
         signal: controller.signal,
       });
 
       clearTimeout(timeoutId);
 
       if (!response.ok) {
+        // Treat 4xx/5xx as retriable transient errors on first attempt
         throw new Error(`GitHub HTTP ${response.status}`);
       }
 
@@ -80,61 +96,45 @@ async function fetchGitHubMetrics(): Promise<GitHubMetrics> {
       };
     } catch (error: unknown) {
       clearTimeout(timeoutId);
-      
+
       const err = error as Error;
-      if (attempt === 2 || err.name !== 'AbortError') {
+
+      if (attempt === 2) {
+        // All retries exhausted — return safe fallback
         console.warn(`[METRICS] GitHub fetch failed after ${attempt} attempts:`, err.message);
-        // Return defaults if fetch fails
-        return {
-          stars: 0,
-          forks: 0,
-          openIssues: 0,
-          watchers: 0,
-          size: 0,
-          lastUpdated: new Date().toISOString(),
-          fullName: GITHUB_REPO,
-          description: 'Apex - Sentient Interface',
-          language: 'TypeScript',
-        };
+        return GITHUB_FALLBACK;
       }
-      
-      // Brief backoff before retry
+
+      // First attempt failed (any error) — wait briefly then retry
+      console.warn(`[METRICS] GitHub fetch attempt ${attempt} failed, retrying:`, err.message);
       await new Promise(resolve => setTimeout(resolve, 300));
     }
   }
 
-  // Fallback (should not reach here)
-  return {
-    stars: 0,
-    forks: 0,
-    openIssues: 0,
-    watchers: 0,
-    size: 0,
-    lastUpdated: new Date().toISOString(),
-    fullName: GITHUB_REPO,
-    description: 'Apex - Sentient Interface',
-    language: 'TypeScript',
-  };
+  // TypeScript exhaustiveness guard — unreachable in practice
+  return GITHUB_FALLBACK;
 }
 
 async function fetchPlatformMetrics(): Promise<PlatformMetrics> {
-  // In production, these would come from your database
-  // For demo, we generate realistic-looking metrics
-  
   const baseMetrics = {
     users: 12480,
     impact: 874200,
     courses: 342,
   };
 
-  // Add some variation based on time
-  const hour = new Date().getHours();
-  const variation = Math.sin(hour / 24 * Math.PI) * 0.1 + 1;
+  // Deterministic variation based on hour-of-day — no Math.random() to keep metrics stable
+  const hoursSinceEpoch = Math.floor(Date.now() / (1000 * 60 * 60));
+  const variation = Math.sin((hoursSinceEpoch % 24) / 24 * Math.PI) * 0.1 + 1;
+
+  // Courses uses a stable sine wave instead of random, preventing cardinality pollution
+  const courses = Math.round(
+    baseMetrics.courses + baseMetrics.courses * 0.04 * Math.sin((hoursSinceEpoch % 24) * Math.PI / 12)
+  );
 
   return {
     users: Math.floor(baseMetrics.users * variation),
     impact: Math.floor(baseMetrics.impact * variation),
-    courses: baseMetrics.courses + Math.floor(Math.random() * 10),
+    courses,
   };
 }
 

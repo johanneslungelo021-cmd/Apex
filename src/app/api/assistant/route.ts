@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { chatSessionCounter } from '../../../lib/metrics';
 
-// Configurable timeout for AI calls (env)
-const AI_TIMEOUT_MS = parseInt(process.env.AI_TIMEOUT_MS || '10000');
+// Validate timeout: must be a finite positive number, else fall back to 10 000 ms
+const rawAiTimeout = parseInt(process.env.AI_TIMEOUT_MS || '10000', 10);
+const AI_TIMEOUT_MS = Number.isFinite(rawAiTimeout) && rawAiTimeout > 0 ? rawAiTimeout : 10000;
 
 // Reusable fetch with timeout utility
 const fetchWithTimeout = async (url: string, init: RequestInit, timeoutMs = AI_TIMEOUT_MS) => {
@@ -17,10 +18,27 @@ const fetchWithTimeout = async (url: string, init: RequestInit, timeoutMs = AI_T
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const { message } = body;
+    // Safely parse JSON — a null or malformed body must return 400, not 500
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        { reply: 'Invalid JSON body.', error: 'VALIDATION_ERROR' },
+        { status: 400 }
+      );
+    }
 
-    // Message validation: length limit + sanitization
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json(
+        { reply: 'Request body must be a JSON object.', error: 'VALIDATION_ERROR' },
+        { status: 400 }
+      );
+    }
+
+    const { message } = body as Record<string, unknown>;
+
+    // Message validation: presence, type, length
     if (typeof message !== 'string' || !message.trim()) {
       return NextResponse.json(
         { reply: 'Message is required.' },
@@ -116,11 +134,11 @@ export async function POST(req: Request) {
   } catch (error: unknown) {
     const err = error as Error;
     console.error('[ASSISTANT] Error:', err.message);
-    
+
     return NextResponse.json(
-      { 
-        reply: "I encountered an error. Please try again.",
-        error: "internal_server_error" 
+      {
+        reply: 'I encountered an error. Please try again.',
+        error: 'internal_server_error'
       },
       { status: 500 }
     );
