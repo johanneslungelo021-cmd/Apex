@@ -38,17 +38,20 @@ const GITHUB_TIMEOUT_MS = Number.isFinite(rawGithubTimeout) && rawGithubTimeout 
 
 const GITHUB_REPO = 'johanneslungelo021-cmd/Apex';
 
-const GITHUB_FALLBACK: GitHubMetrics = {
-  stars: 0,
-  forks: 0,
-  openIssues: 0,
-  watchers: 0,
-  size: 0,
-  lastUpdated: new Date().toISOString(),
-  fullName: GITHUB_REPO,
-  description: 'Apex - Sentient Interface',
-  language: 'TypeScript',
-};
+// Factory function for GitHub fallback — generates fresh timestamp per request
+function getGithubFallback(): GitHubMetrics {
+  return {
+    stars: 0,
+    forks: 0,
+    openIssues: 0,
+    watchers: 0,
+    size: 0,
+    lastUpdated: new Date().toISOString(),
+    fullName: GITHUB_REPO,
+    description: 'Apex - Sentient Interface',
+    language: 'TypeScript',
+  };
+}
 
 async function fetchGitHubMetrics(): Promise<GitHubMetrics> {
   const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}`;
@@ -100,9 +103,9 @@ async function fetchGitHubMetrics(): Promise<GitHubMetrics> {
       const err = error as Error;
 
       if (attempt === 2) {
-        // All retries exhausted — return safe fallback
+        // All retries exhausted — return safe fallback with fresh timestamp
         console.warn(`[METRICS] GitHub fetch failed after ${attempt} attempts:`, err.message);
-        return GITHUB_FALLBACK;
+        return getGithubFallback();
       }
 
       // First attempt failed (any error) — wait briefly then retry
@@ -112,7 +115,7 @@ async function fetchGitHubMetrics(): Promise<GitHubMetrics> {
   }
 
   // TypeScript exhaustiveness guard — unreachable in practice
-  return GITHUB_FALLBACK;
+  return getGithubFallback();
 }
 
 async function fetchPlatformMetrics(): Promise<PlatformMetrics> {

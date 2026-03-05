@@ -38,7 +38,7 @@ If you use GitHub Actions workflows that need these values, add them separately 
 ### Deploy to Vercel
 
 1. Add environment variables in Vercel Dashboard (see table above)
-2. Push to `digital-apex` branch
+2. Push to your deployment branch (typically `main`)
 3. Vercel will auto-deploy
 4. Check `/api/health` to verify all services are configured
 
