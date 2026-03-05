@@ -296,22 +296,23 @@ export function checkRateLimit(key: string, limit: number, windowMs: number): bo
   const now = Date.now();
   const entry = rateLimitStore.get(key);
 
-  // No entry or window expired - start fresh
+  // Periodic cleanup runs unconditionally so active-but-stale entries are
+  // also pruned — not just entries that happen to start a new window.
+  // Deletes entries whose window expired more than 2x ago (safely stale).
+  if (rateLimitStore.size > 10_000) {
+    for (const [k, v] of rateLimitStore) {
+      if (now - v.windowStart > windowMs * 2) rateLimitStore.delete(k);
+    }
+  }
+
+  // No entry or window expired — start a fresh window
   if (!entry || now - entry.windowStart > windowMs) {
     rateLimitStore.set(key, { count: 1, windowStart: now });
-    // Periodic cleanup: remove expired entries older than 2x window
-    if (rateLimitStore.size > 10_000) {
-      for (const [k, v] of rateLimitStore) {
-        if (now - v.windowStart > windowMs * 2) rateLimitStore.delete(k);
-      }
-    }
     return true;
   }
 
-  // Check if limit exceeded
+  // Within current window — check limit then increment
   if (entry.count >= limit) return false;
-
-  // Increment count within current window
   entry.count += 1;
   return true;
 }

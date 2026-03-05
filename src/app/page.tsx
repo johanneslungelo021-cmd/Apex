@@ -1,3 +1,22 @@
+/**
+ * Sentient Interface - Main Landing Page (Phase 2)
+ *
+ * A full-functional landing page implementing Phase 2 of the Apex platform.
+ * Features include:
+ *
+ * - Liquid Glass UI effects with responsive glassmorphism
+ * - Haptic feedback and spatial audio for sentient interactions
+ * - Real-time GitHub repository metrics via API
+ * - Platform usage metrics with deterministic variation
+ * - AI-powered Intelligent Engine with Scout Agent backend
+ * - Scout Agent for live digital income opportunities
+ * - User registration with PII-safe logging
+ * - OpenTelemetry metrics for Grafana Cloud
+ * - GEO-optimized content for search and AI crawlers
+ *
+ * @module app/page
+ */
+
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -215,15 +234,17 @@ export default function SentientInterface() {
       const data = await res.json();
       if (res.ok) {
         alert('Account created – welcome to the Sentient Interface');
+        setShowRegister(false);
+        triggerSentient(1);
       } else {
+        // Server returned a structured error — show it and keep modal open so
+        // the user can correct their input and retry without re-opening.
         alert(data.message || 'Registration failed. Please check your email and try again.');
       }
-      setShowRegister(false);
-      triggerSentient(1);
     } catch (error) {
+      // Network failure or unparseable response — keep modal open for retry.
       console.error('Registration error:', error);
-      alert('Registration failed. Please try again.');
-      setShowRegister(false);
+      alert('Registration failed: ' + (error instanceof Error ? error.message : 'Please try again.'));
     }
   };
 
