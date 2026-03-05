@@ -1,22 +1,29 @@
 /**
  * OpenTelemetry Metrics Module
- * 
- * Provides custom metrics counters for tracking page views, registrations,
- * and chat sessions. All metrics are exported to Grafana Cloud via OpenTelemetry.
- * 
+ *
+ * Provides custom metrics counters for Phase 1 and Phase 2 of the Apex platform.
+ * All metrics are exported to Grafana Cloud via OpenTelemetry.
+ *
+ * Phase 1 Metrics:
+ * - apex_page_view_total: Page views tracked via /api/analytics
+ * - apex_registration_total: User registrations via /api/register
+ * - apex_chat_session_total: AI chat sessions via /api/assistant
+ *
+ * Phase 2 Metrics:
+ * - apex_scout_run_total: Scout agent runs by status
+ * - apex_scout_opportunities_found_total: Valid opportunities found
+ * - apex_agent_query_total: AI agent queries by status
+ *
  * @module lib/metrics
- * 
+ *
  * @example
- * import { pageViewCounter, registrationCounter, chatSessionCounter } from './lib/metrics';
- * 
+ * import { pageViewCounter, scoutRunCounter } from './lib/metrics';
+ *
  * // Record a page view
  * pageViewCounter.add(1);
- * 
- * // Record a registration with attributes
- * registrationCounter.add(1, { email_domain: 'gmail.com' });
- * 
- * // Record a chat session
- * chatSessionCounter.add(1);
+ *
+ * // Record a successful scout run
+ * scoutRunCounter.add(1, { status: 'success' });
  */
 
 import { metrics } from '@opentelemetry/api';
@@ -27,26 +34,28 @@ import { metrics } from '@opentelemetry/api';
  */
 const meter = metrics.getMeter('apex-sentient');
 
+// ─── Phase 1 Metrics ──────────────────────────────────────────────────────────
+
 /**
  * Counter for tracking total page views across the application.
  * Incremented on each page load via the /api/analytics endpoint.
- * 
+ *
  * Metric name: `apex_page_view_total`
- * 
+ *
  * @example
  * pageViewCounter.add(1);
  */
 export const pageViewCounter = meter.createCounter('apex_page_view_total', {
-  description: 'Total page views'
+  description: 'Total page views',
 });
 
 /**
  * Counter for tracking successful user registrations.
  * Includes email domain as an attribute for segmentation analysis.
  * PII (email address) is never exposed - only the domain is recorded.
- * 
+ *
  * Metric name: `apex_registration_total`
- * 
+ *
  * @example
  * registrationCounter.add(1, {
  *   email_domain: 'gmail.com',
@@ -54,18 +63,66 @@ export const pageViewCounter = meter.createCounter('apex_page_view_total', {
  * });
  */
 export const registrationCounter = meter.createCounter('apex_registration_total', {
-  description: 'Total successful registrations'
+  description: 'Total successful registrations',
 });
 
 /**
  * Counter for tracking AI chat sessions.
  * Incremented after each successful response from the AI assistant.
- * 
+ *
  * Metric name: `apex_chat_session_total`
- * 
+ *
  * @example
  * chatSessionCounter.add(1);
  */
 export const chatSessionCounter = meter.createCounter('apex_chat_session_total', {
-  description: 'Total AI chat sessions'
+  description: 'Total AI chat sessions',
+});
+
+// ─── Phase 2 Metrics ──────────────────────────────────────────────────────────
+
+/**
+ * Counter for tracking scout agent runs by status.
+ * Tagged with status: 'success' | 'timeout' | 'error'.
+ * Used to monitor the health and reliability of opportunity discovery.
+ *
+ * Metric name: `apex_scout_run_total`
+ *
+ * @example
+ * scoutRunCounter.add(1, { status: 'success' });
+ * scoutRunCounter.add(1, { status: 'timeout' });
+ * scoutRunCounter.add(1, { status: 'error' });
+ */
+export const scoutRunCounter = meter.createCounter('apex_scout_run_total', {
+  description: 'Total scout agent runs by status',
+});
+
+/**
+ * Counter for tracking total valid opportunities found per scout run.
+ * Counter because the domain range is 0-10 with no meaningful percentile distribution.
+ * Used to measure the yield of the scout agent's opportunity discovery.
+ *
+ * Metric name: `apex_scout_opportunities_found_total`
+ *
+ * @example
+ * scoutOpportunitiesCounter.add(opportunities.length);
+ */
+export const scoutOpportunitiesCounter = meter.createCounter('apex_scout_opportunities_found_total', {
+  description: 'Total valid opportunities found by the scout agent',
+});
+
+/**
+ * Counter for tracking AI agent queries via /api/ai-agent.
+ * Tagged with status: 'success' | 'timeout' | 'error'.
+ * Used to monitor the health and reliability of the intelligent engine.
+ *
+ * Metric name: `apex_agent_query_total`
+ *
+ * @example
+ * agentQueryCounter.add(1, { status: 'success' });
+ * agentQueryCounter.add(1, { status: 'timeout' });
+ * agentQueryCounter.add(1, { status: 'error' });
+ */
+export const agentQueryCounter = meter.createCounter('apex_agent_query_total', {
+  description: 'Total AI agent queries by status',
 });
