@@ -1,12 +1,29 @@
+/**
+ * AI Assistant API Route
+ * 
+ * Handles chat completions using Vercel AI Gateway or Groq API as backends.
+ * Supports fallback behavior and emits metrics to Grafana.
+ * 
+ * @module api/assistant
+ */
+
 import { NextResponse } from 'next/server';
 import { chatSessionCounter } from '../../../lib/metrics';
 
-// Validate timeout: must be a finite positive number, else fall back to 10 000 ms
+/** Default timeout for AI API calls (10 seconds) */
 const rawAiTimeout = parseInt(process.env.AI_TIMEOUT_MS || '10000', 10);
 const AI_TIMEOUT_MS = Number.isFinite(rawAiTimeout) && rawAiTimeout > 0 ? rawAiTimeout : 10000;
 
-// Reusable fetch with timeout utility
-const fetchWithTimeout = async (url: string, init: RequestInit, timeoutMs = AI_TIMEOUT_MS) => {
+/**
+ * Fetches a URL with an abort signal for timeout control.
+ * 
+ * @param url - The URL to fetch
+ * @param init - Fetch request init options
+ * @param timeoutMs - Timeout in milliseconds (default: AI_TIMEOUT_MS)
+ * @returns Promise resolving to the Response object
+ * @throws AbortError if the request times out
+ */
+const fetchWithTimeout = async (url: string, init: RequestInit, timeoutMs = AI_TIMEOUT_MS): Promise<Response> => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -16,7 +33,23 @@ const fetchWithTimeout = async (url: string, init: RequestInit, timeoutMs = AI_T
   }
 };
 
-export async function POST(req: Request) {
+/**
+ * Handles POST requests for AI chat completions.
+ * 
+ * @param req - The incoming HTTP request
+ * @returns JSON response with AI reply or error message
+ * 
+ * @example
+ * // Request body
+ * { "message": "Hello, how are you?" }
+ * 
+ * // Success response
+ * { "reply": "I'm doing great! How can I help you today?" }
+ * 
+ * // Error response
+ * { "reply": "Message is required.", "error": "VALIDATION_ERROR" }
+ */
+export async function POST(req: Request): Promise<Response> {
   try {
     // Safely parse JSON — a null or malformed body must return 400, not 500
     let body: unknown;

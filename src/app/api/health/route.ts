@@ -1,6 +1,25 @@
+/**
+ * Health Check API Route
+ * 
+ * Provides system health status and service configuration checks.
+ * Detailed service status is only exposed when a valid internal token is provided.
+ * 
+ * @module api/health
+ */
+
 import { NextResponse } from 'next/server';
 
-// Timing-safe string comparison to prevent timing attacks
+/**
+ * Performs a timing-safe comparison of two strings to prevent timing attacks.
+ * 
+ * @param a - First string to compare
+ * @param b - Second string to compare
+ * @returns True if strings are equal, false otherwise
+ * 
+ * @example
+ * timingSafeEqual('secret-token', 'secret-token') // true
+ * timingSafeEqual('secret-token', 'wrong-token') // false
+ */
 function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let mismatch = 0;
@@ -10,7 +29,26 @@ function timingSafeEqual(a: string, b: string): boolean {
   return mismatch === 0;
 }
 
-export async function GET(req: Request) {
+/**
+ * Handles GET requests for health status.
+ * 
+ * Returns basic health information by default. Detailed service configuration
+ * is only included when a valid x-health-token header matches HEALTH_DETAILS_TOKEN.
+ * 
+ * @param req - The incoming HTTP request
+ * @returns JSON response with health status
+ * 
+ * @example
+ * // Basic health check (public)
+ * GET /api/health
+ * // Response: { status: 'ok', timestamp: '...', environment: 'production', version: '1.0.0-phase1' }
+ * 
+ * // Detailed health check (internal)
+ * GET /api/health
+ * Header: x-health-token: your-secret-token
+ * // Response: { status: 'ok', ..., services: { grafana: {...}, ai: {...}, github: true } }
+ */
+export async function GET(req: Request): Promise<Response> {
   // Require BOTH a non-empty configured token AND a non-empty provided token.
   // If HEALTH_DETAILS_TOKEN is unset or empty, internal details are always hidden.
   const providedToken = (req.headers.get('x-health-token') ?? '').trim();
