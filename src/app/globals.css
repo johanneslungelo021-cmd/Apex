@@ -94,6 +94,22 @@ html {
   background: rgba(255, 255, 255, 0.3);
 }
 
+/* Insight Sparkline Pulse */
+.insight-pulse {
+  animation: insightPulse 2s ease-in-out infinite;
+}
+
+@keyframes insightPulse {
+  0%, 100% {
+    opacity: 1;
+    r: 3;
+  }
+  50% {
+    opacity: 0.6;
+    r: 4.5;
+  }
+}
+
 /* Selection Style */
 ::selection {
   background: rgba(255, 255, 255, 0.2);
