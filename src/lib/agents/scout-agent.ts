@@ -16,7 +16,7 @@
  * });
  */
 
-import { log, generateRequestId, fetchWithTimeout, safeJsonParse, envTimeoutMs, isValidHttpUrl } from '../api-utils';
+import { log, generateRequestId, fetchWithTimeout, safeJsonParse, envTimeoutMs, isValidHttpsUrl } from '../api-utils';
 import { scoutRunCounter, scoutOpportunitiesCounter } from '../metrics';
 
 /**
@@ -66,43 +66,41 @@ let scoutCache: { opportunities: Opportunity[]; cachedAt: number } | null = null
 // ─── Validation ───────────────────────────────────────────────────────────────
 
 /**
+ * Whitelist of permitted opportunity categories.
+ * Rejects any AI-generated category not on this list to prevent injection
+ * of unexpected values into the UI and metrics labels.
+ */
+const ALLOWED_CATEGORIES = new Set([
+  'Freelancing',
+  'E-commerce',
+  'Content Creation',
+  'Online Tutoring',
+  'Digital Skills',
+]);
+
+/**
  * Validates a single raw opportunity object from Groq's response.
  *
- * Performs comprehensive validation of all required fields including:
- * - Non-empty strings for text fields
- * - Valid cost range (0-2000 ZAR)
- * - Valid HTTPS or HTTP URL for the link
- * - Known category classification
+ * Enforces:
+ * - Non-empty strings for all text fields
+ * - Valid cost range (0–2000 ZAR)
+ * - HTTPS-only link (plain HTTP rejected — prevents mixed-content and phishing risks)
+ * - Category must be in the ALLOWED_CATEGORIES whitelist
  *
  * @param raw - The raw opportunity object from Groq (unknown type for safety)
  * @returns A typed Opportunity object if valid, null if any field is missing or invalid
- *
- * @example
- * const valid = validateOpportunity({
- *   title: "Freelance Writing",
- *   province: "Gauteng",
- *   cost: 0,
- *   incomePotential: "R5000-R10000/month",
- *   link: "https://example.com",
- *   category: "Freelancing"
- * });
- * // Returns Opportunity object
- *
- * @example
- * const invalid = validateOpportunity({ title: "" }); // null - empty title
  */
 function validateOpportunity(raw: unknown): Opportunity | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
 
-  // Validate all required fields with type and constraint checking
   if (
     typeof r.title !== 'string' || !r.title.trim() ||
     typeof r.province !== 'string' || !r.province.trim() ||
     typeof r.cost !== 'number' || r.cost < 0 || r.cost > 2000 ||
     typeof r.incomePotential !== 'string' || !r.incomePotential.trim() ||
-    typeof r.link !== 'string' || !isValidHttpUrl(r.link) ||
-    typeof r.category !== 'string' || !r.category.trim()
+    typeof r.link !== 'string' || !isValidHttpsUrl(r.link) ||
+    typeof r.category !== 'string' || !ALLOWED_CATEGORIES.has(r.category)
   ) {
     return null;
   }

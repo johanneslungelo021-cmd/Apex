@@ -49,19 +49,21 @@ const RATE_WINDOW_MS = 60_000;
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /**
- * Represents a single chat message in the conversation history.
+ * Represents a single chat message accepted from clients.
+ * 'system' is intentionally excluded — the server is the sole injector of system prompts.
  */
 interface ChatMessage {
-  /** Message role: user, assistant, or system */
-  role: 'user' | 'assistant' | 'system';
+  /** Message role: only 'user' or 'assistant' accepted from clients */
+  role: 'user' | 'assistant';
   /** Message content text */
   content: string;
 }
 
 /**
- * Set of valid message roles for validation.
+ * Set of valid message roles accepted from client requests.
+ * 'system' is excluded: only the server may inject system messages.
  */
-const VALID_ROLES = new Set(['user', 'assistant', 'system']);
+const VALID_ROLES = new Set(['user', 'assistant']);
 
 /**
  * Maximum number of messages allowed in a single request.
@@ -69,9 +71,18 @@ const VALID_ROLES = new Set(['user', 'assistant', 'system']);
 const MAX_MESSAGES = 20;
 
 /**
- * Maximum length of a single message content string.
+ * Maximum length of a single message content string in characters.
  */
 const MAX_CONTENT_LENGTH = 4000;
+
+/**
+ * Maximum aggregate byte size of all message content in a single request.
+ * Guards against crafted payloads that individually pass per-message limits
+ * but inflate the total context sent to Groq. Set conservatively below
+ * the theoretical maximum (MAX_MESSAGES × MAX_CONTENT_LENGTH = 80 000 chars)
+ * to leave headroom for the server-side system prompt and JSON serialization overhead.
+ */
+const MAX_TOTAL_PAYLOAD_BYTES = 50_000;
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -102,12 +113,15 @@ function validateMessages(raw: unknown): ChatMessage[] | string {
   if (raw.length === 0) return 'messages array must not be empty.';
   if (raw.length > MAX_MESSAGES) return `messages array must not exceed ${MAX_MESSAGES} items.`;
 
+  let totalBytes = 0;
+
   for (let i = 0; i < raw.length; i++) {
     const item = raw[i];
     if (!item || typeof item !== 'object') return `messages[${i}] must be an object.`;
     const { role, content } = item as Record<string, unknown>;
+
     if (typeof role !== 'string' || !VALID_ROLES.has(role)) {
-      return `messages[${i}].role must be "user", "assistant", or "system".`;
+      return `messages[${i}].role must be "user" or "assistant".`;
     }
     if (typeof content !== 'string' || !content.trim()) {
       return `messages[${i}].content must be a non-empty string.`;
@@ -115,6 +129,14 @@ function validateMessages(raw: unknown): ChatMessage[] | string {
     if (content.length > MAX_CONTENT_LENGTH) {
       return `messages[${i}].content must be under ${MAX_CONTENT_LENGTH} characters.`;
     }
+
+    totalBytes += Buffer.byteLength(content, 'utf8');
+  }
+
+  // Aggregate payload guard — runs after per-message checks so we have an accurate byte sum.
+  // Prevents payloads that pass individually but exceed safe Groq context limits in aggregate.
+  if (totalBytes > MAX_TOTAL_PAYLOAD_BYTES) {
+    return `messages total payload must be under ${MAX_TOTAL_PAYLOAD_BYTES} bytes.`;
   }
 
   return raw as ChatMessage[];
@@ -156,8 +178,9 @@ export async function GET(): Promise<Response> {
       messages: {
         type: 'array',
         maxItems: MAX_MESSAGES,
+        maxTotalBytes: MAX_TOTAL_PAYLOAD_BYTES,
         items: {
-          role: { type: 'string', enum: ['user', 'assistant', 'system'] },
+          role: { type: 'string', enum: ['user', 'assistant'] },
           content: { type: 'string', maxLength: MAX_CONTENT_LENGTH },
         },
       },

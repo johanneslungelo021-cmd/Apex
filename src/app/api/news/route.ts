@@ -12,6 +12,7 @@
 
 import { NextResponse } from 'next/server';
 import { generateRequestId, log, fetchWithTimeout, envTimeoutMs } from '@/lib/api-utils';
+import dns from 'dns/promises';
 
 const SERVICE = 'news';
 const PERPLEXITY_TIMEOUT_MS = envTimeoutMs(process.env.PERPLEXITY_TIMEOUT_MS, 14_000);
@@ -71,14 +72,99 @@ function sourceFromUrl(url: string): string {
 }
 
 /**
- * Fetches the og:image from an article URL.
- * Returns a deterministic SVG gradient placeholder on any failure.
+ * Private/reserved IP ranges that must never be fetched (SSRF protection).
+ * Covers: loopback, RFC-1918 private, link-local, unique-local, and IPv6 loopback.
+ */
+const PRIVATE_IP_PATTERNS = [
+  // IPv4 loopback
+  /^127\./,
+  // IPv4 private class A
+  /^10\./,
+  // IPv4 private class B (172.16.0.0–172.31.255.255)
+  /^172\.(1[6-9]|2\d|3[01])\./,
+  // IPv4 private class C
+  /^192\.168\./,
+  // IPv4 link-local
+  /^169\.254\./,
+  // IPv4 "this network" and broadcast
+  /^0\./,
+  /^255\./,
+  // IPv6 loopback (::1) and unique-local (fc00::/7)
+  /^::1$/,
+  /^[Ff][Cc-Dd]/,
+  // IPv6 link-local (fe80::/10)
+  /^[Ff][Ee][89aAbB]/,
+];
+
+/**
+ * Validates that a URL is safe to fetch (SSRF prevention).
  *
- * @param articleUrl - The article URL to fetch the image from
+ * Checks:
+ * 1. URL parses as http: or https: — no other schemes
+ * 2. Hostname resolves and the resolved IP is not in a private/reserved range
+ *
+ * @param rawUrl - The URL string to validate
+ * @throws Error with a descriptive message if the URL fails any check
+ */
+async function assertSafeUrl(rawUrl: string): Promise<void> {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    throw new Error(`Invalid URL: ${rawUrl}`);
+  }
+
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    throw new Error(`Rejected non-HTTP(S) scheme: ${parsed.protocol}`);
+  }
+
+  // Reject bare IP literals that are private without DNS lookup
+  const hostname = parsed.hostname;
+  for (const pattern of PRIVATE_IP_PATTERNS) {
+    if (pattern.test(hostname)) {
+      throw new Error(`Blocked private/reserved host: ${hostname}`);
+    }
+  }
+
+  // Resolve hostname → IPs and verify none are private
+  try {
+    const addresses = await dns.resolve(hostname);
+    for (const addr of addresses) {
+      for (const pattern of PRIVATE_IP_PATTERNS) {
+        if (pattern.test(addr)) {
+          throw new Error(`Hostname ${hostname} resolves to private IP: ${addr}`);
+        }
+      }
+    }
+  } catch (err: unknown) {
+    // If it was our own validation error, re-throw
+    if (err instanceof Error && err.message.startsWith('Hostname')) throw err;
+    // DNS resolution failure for unknown host — also reject
+    throw new Error(`DNS resolution failed for ${hostname}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
+ * Fetches the og:image or twitter:image from an article URL.
+ *
+ * SSRF protection: validates the URL scheme and resolves the hostname
+ * to confirm it does not point to a private/reserved IP before fetching.
+ *
+ * Relative image URLs are resolved to absolute using the article URL as base.
+ * Falls back to a deterministic SVG gradient placeholder on any failure.
+ *
+ * @param articleUrl - The article URL to fetch the image from (must be http/https + public host)
  * @param title - The article title (used for placeholder generation)
- * @returns The image URL or gradient placeholder
+ * @returns An absolute image URL or a base64 SVG gradient data URI
  */
 async function fetchOgImage(articleUrl: string, title: string): Promise<string> {
+  // SSRF guard — throws early for private/invalid URLs so fetchWithTimeout is never called
+  try {
+    await assertSafeUrl(articleUrl);
+  } catch {
+    return gradientPlaceholder(title);
+  }
+
   try {
     const res = await fetchWithTimeout(
       articleUrl,
@@ -88,15 +174,33 @@ async function fetchOgImage(articleUrl: string, title: string): Promise<string> 
     if (!res.ok) return gradientPlaceholder(title);
     const html = await res.text();
 
-    // og:image — standard
+    /**
+     * Resolves a potentially relative image URL to absolute using the article URL as base.
+     * Returns null if resolution fails (e.g. truly malformed value).
+     */
+    const toAbsolute = (value: string): string | null => {
+      try {
+        return new URL(value, articleUrl).toString();
+      } catch {
+        return null;
+      }
+    };
+
+    // og:image — standard property (two attribute orders)
     const ogMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
       ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
-    if (ogMatch?.[1]) return ogMatch[1];
+    if (ogMatch?.[1]) {
+      const abs = toAbsolute(ogMatch[1]);
+      if (abs) return abs;
+    }
 
     // twitter:image fallback
     const twMatch = html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i)
       ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i);
-    if (twMatch?.[1]) return twMatch[1];
+    if (twMatch?.[1]) {
+      const abs = toAbsolute(twMatch[1]);
+      if (abs) return abs;
+    }
 
     return gradientPlaceholder(title);
   } catch {
@@ -156,11 +260,12 @@ export async function GET(): Promise<Response> {
   log({ level: 'info', service: SERVICE, message: 'Fetching live news', requestId });
 
   try {
-    // Multi-query: per the Perplexity docs, query array returns results grouped per query
+    // Dynamic year so results always reference the current year — never stale
+    const currentYear = new Date().getFullYear();
     const body = {
       query: [
-        'South Africa digital economy freelancing online income opportunities 2025',
-        'AI tools digital income South Africa entrepreneurs creators 2025',
+        `South Africa digital economy freelancing online income opportunities ${currentYear}`,
+        `AI tools digital income South Africa entrepreneurs creators ${currentYear}`,
       ],
       max_results: 5,
       max_tokens_per_page: 512,

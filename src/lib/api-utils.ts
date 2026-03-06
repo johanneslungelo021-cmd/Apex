@@ -245,6 +245,29 @@ export function isValidHttpUrl(raw: string): boolean {
   }
 }
 
+/**
+ * Validates that a string is a well-formed HTTPS-only URL.
+ *
+ * Stricter than isValidHttpUrl — rejects plain http:// links.
+ * Used where HTTPS is mandatory, e.g. AI-generated opportunity links
+ * that must be served over a secure connection.
+ *
+ * @param raw - The string to validate as a URL
+ * @returns true if the string is a valid https:// URL, false otherwise
+ *
+ * @example
+ * isValidHttpsUrl('https://example.com/path'); // true
+ * isValidHttpsUrl('http://example.com');       // false — no plain HTTP
+ * isValidHttpsUrl('ftp://files.example.com');  // false
+ */
+export function isValidHttpsUrl(raw: string): boolean {
+  try {
+    return new URL(raw).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 // ─── Simple In-Memory Rate Limiter ────────────────────────────────────────────
 
 /**
