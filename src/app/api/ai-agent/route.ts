@@ -47,6 +47,12 @@ const RATE_LIMIT = 20;
  */
 const RATE_WINDOW_MS = 60_000;
 
+/**
+ * Maximum request body size in bytes (5 MB ceiling).
+ * Guards against memory exhaustion from oversized payloads.
+ */
+const MAX_REQUEST_BODY_BYTES = 5 * 1024 * 1024;
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /**
@@ -267,12 +273,20 @@ export async function POST(req: Request): Promise<Response> {
     'unknown';
 
   if (!checkRateLimit(ip, RATE_LIMIT, RATE_WINDOW_MS)) {
-    // Hash the raw IP with a server-side salt before logging — the raw IP is personal
-    // data under GDPR/POPIA. The hash is one-way and preserves correlation across
-    // requests from the same origin without exposing the address itself.
-    const ipSalt = process.env.IP_LOG_SALT || 'apex-ip-log-salt';
-    const hashedIp = crypto.createHash('sha256').update(ip + ipSalt).digest('hex').slice(0, 16);
-    log({ level: 'warn', service: SERVICE, message: 'Rate limit exceeded', requestId, hashedIp });
+    // Use HMAC-SHA256 for PII-safe IP logging — rainbow-table resistant.
+    // Only log the hashed IP if IP_LOG_SALT is configured; otherwise omit entirely
+    // rather than providing a false sense of protection with a hardcoded fallback.
+    const ipLogSalt = process.env.IP_LOG_SALT;
+    const logPayload: Record<string, unknown> = {
+      level: 'warn',
+      service: SERVICE,
+      message: 'Rate limit exceeded',
+      requestId,
+    };
+    if (ipLogSalt) {
+      logPayload.hashedIp = crypto.createHmac('sha256', ipLogSalt).update(ip).digest('hex').slice(0, 16);
+    }
+    log(logPayload);
     return NextResponse.json(
       { error: 'RATE_LIMITED', message: 'Too many requests. Please wait before retrying.', requestId },
       {
@@ -282,6 +296,15 @@ export async function POST(req: Request): Promise<Response> {
           'Retry-After': String(Math.ceil(RATE_WINDOW_MS / 1000)),
         },
       },
+    );
+  }
+
+  // ── Request size guard ─────────────────────────────────────────────────────
+  const contentLength = req.headers.get('content-length');
+  if (contentLength && parseInt(contentLength, 10) > MAX_REQUEST_BODY_BYTES) {
+    return NextResponse.json(
+      { error: 'PAYLOAD_TOO_LARGE', message: 'Request body exceeds 5 MB limit.', requestId },
+      { status: 413, headers: { 'X-Request-Id': requestId } },
     );
   }
 
@@ -365,11 +388,12 @@ export async function POST(req: Request): Promise<Response> {
     );
 
     if (!response.ok) {
-      const errText = await response.text().catch(() => '');
+      // Log Groq error status only, not the raw response body.
+      // The body may echo user prompts back and must not appear in structured logs.
       log({
         level: 'warn', service: SERVICE,
         message: `Groq returned HTTP ${response.status}`,
-        requestId, durationMs: Date.now() - startMs, groqError: errText,
+        requestId, durationMs: Date.now() - startMs,
       });
       agentQueryCounter.add(1, { status: 'error' });
       return NextResponse.json(

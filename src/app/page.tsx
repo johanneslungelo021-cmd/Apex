@@ -10,7 +10,7 @@
  * - Platform usage metrics with deterministic variation
  * - AI-powered Intelligent Engine with Scout Agent backend
  * - Scout Agent for live digital income opportunities
- * - Live news from Perplexity Search API
+ * - Live news from Perplexity Search API with Research Context
  * - User registration with PII-safe logging
  * - OpenTelemetry metrics for Grafana Cloud
  * - GEO-optimized content for search and AI crawlers
@@ -20,8 +20,8 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Heart, Search, User, BarChart3, MessageSquare, Github, Star, GitFork, Eye, AlertCircle, BookOpen, TrendingUp, Users, DollarSign, Zap, ExternalLink, Newspaper, Clock, RefreshCw } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Heart, Search, User, BarChart3, MessageSquare, Github, Star, GitFork, Eye, AlertCircle, BookOpen, TrendingUp, Users, DollarSign, Zap, ExternalLink, Newspaper, Clock, RefreshCw, Microscope } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 /**
@@ -89,7 +89,7 @@ interface NewsArticle {
  * - Real-time GitHub metrics integration
  * - AI-powered Intelligent Engine with Scout Agent
  * - Live digital income opportunities for South Africans
- * - Live news from Perplexity Search API
+ * - Live news from Perplexity Search API with Research Context
  * - User registration with PII-safe logging
  *
  * @returns The Sentient Interface React component
@@ -110,6 +110,9 @@ export default function SentientInterface() {
   const [news, setNews] = useState<NewsArticle[]>([]);
   const [newsLoading, setNewsLoading] = useState(true);
   const [newsError, setNewsError] = useState(false);
+
+  // Ref for the chat panel to enable scrolling into view
+  const chatPanelRef = useRef<HTMLDivElement>(null);
 
   /**
    * Triggers sentient feedback: haptic vibration and spatial audio pulse.
@@ -245,6 +248,25 @@ export default function SentientInterface() {
       setAgentLoading(false);
     }
   };
+
+  /**
+   * Investigates a news article by pre-filling the AI chat with a research prompt.
+   *
+   * Scrolls the chat panel into view, sets a structured research prompt,
+   * and focuses the input field for immediate user interaction.
+   *
+   * @param articleTitle - The title of the news article to investigate
+   */
+  const investigateNews = useCallback((articleTitle: string) => {
+    triggerSentient(0.6);
+    const researchPrompt = `Research the following news topic and explain its relevance to South African digital income opportunities:\n\n"${articleTitle}"\n\nProvide: 1) Key insights, 2) Potential opportunities, 3) Actionable next steps.`;
+    setAiMessage(researchPrompt);
+    // Scroll chat panel into view
+    chatPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    // Focus the input field
+    const inputEl = document.getElementById('ai-chat-input') as HTMLInputElement | null;
+    inputEl?.focus();
+  }, [triggerSentient]);
 
   /**
    * Handles user registration form submission.
@@ -610,8 +632,20 @@ export default function SentientInterface() {
                   </div>
                   <h3 className="font-bold text-xl leading-snug mb-2 group-hover:text-blue-300 transition line-clamp-2">{article.title}</h3>
                   <p className="text-zinc-400 text-sm leading-relaxed line-clamp-2">{article.snippet}</p>
-                  <div className="mt-4 flex items-center gap-1 text-xs text-zinc-500 group-hover:text-white transition">
-                    Read full article <ExternalLink className="w-3 h-3 ml-1" />
+                  <div className="mt-4 flex items-center justify-between">
+                    <span className="flex items-center gap-1 text-xs text-zinc-500 group-hover:text-white transition">
+                      Read full article <ExternalLink className="w-3 h-3 ml-1" />
+                    </span>
+                    {/* Research Context button */}
+                    <button
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); investigateNews(article.title); }}
+                      disabled={agentLoading}
+                      className="flex items-center gap-1.5 text-xs glass px-3 py-1.5 rounded-full text-zinc-300 hover:text-white hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                      title="Research this article with AI"
+                    >
+                      <Microscope className="w-3.5 h-3.5" />
+                      Research
+                    </button>
                   </div>
                 </div>
               </motion.a>
@@ -653,8 +687,20 @@ export default function SentientInterface() {
                   </div>
                   <h3 className="font-semibold text-base leading-snug mb-2 group-hover:text-blue-300 transition line-clamp-3 flex-1">{article.title}</h3>
                   <p className="text-zinc-500 text-xs leading-relaxed line-clamp-2 mb-3">{article.snippet}</p>
-                  <div className="flex items-center gap-1 text-xs text-zinc-600 group-hover:text-white transition mt-auto">
-                    Read more <ExternalLink className="w-3 h-3 ml-1" />
+                  <div className="flex items-center justify-between mt-auto">
+                    <span className="flex items-center gap-1 text-xs text-zinc-600 group-hover:text-white transition">
+                      Read more <ExternalLink className="w-3 h-3 ml-1" />
+                    </span>
+                    {/* Research Context button */}
+                    <button
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); investigateNews(article.title); }}
+                      disabled={agentLoading}
+                      className="flex items-center gap-1.5 text-xs glass px-2.5 py-1 rounded-full text-zinc-400 hover:text-white hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                      title="Research this article with AI"
+                    >
+                      <Microscope className="w-3 h-3" />
+                      Research
+                    </button>
                   </div>
                 </div>
               </motion.a>
@@ -665,7 +711,7 @@ export default function SentientInterface() {
       </section>
 
       {/* AI Assistant — powered by /api/ai-agent (Intelligent Engine) */}
-      <div className="fixed bottom-8 right-8 w-96">
+      <div ref={chatPanelRef} className="fixed bottom-8 right-8 w-96">
         <div className="glass rounded-3xl overflow-hidden">
           <div className="p-4 border-b border-white/10 flex items-center gap-3 cursor-pointer" onClick={() => triggerSentient(0.3)}>
             <MessageSquare className="w-5 h-5" />
@@ -696,6 +742,7 @@ export default function SentientInterface() {
           </div>
           <div className="p-4 border-t border-white/10 flex gap-3">
             <input
+              id="ai-chat-input"
               type="text"
               value={aiMessage}
               onChange={(e) => setAiMessage(e.target.value)}
