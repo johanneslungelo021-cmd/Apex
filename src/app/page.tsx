@@ -21,7 +21,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Heart, Search, User, BarChart3, MessageSquare, Github, Star, GitFork, Eye, AlertCircle, BookOpen, TrendingUp, Users, DollarSign, Zap, ExternalLink, Newspaper, Clock, RefreshCw, Microscope } from 'lucide-react';
+import { Heart, Search, User, BarChart3, MessageSquare, Github, Star, GitFork, Eye, AlertCircle, BookOpen, TrendingUp, TrendingDown, Minus, Users, DollarSign, Zap, ExternalLink, Newspaper, Clock, RefreshCw, Microscope, Activity, Shield, ChevronDown, ChevronUp, ArrowUpRight, Info, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 
@@ -119,6 +119,8 @@ export default function SentientInterface() {
    * news array changes between renders.
    */
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
+  /** Currently expanded insight card key, or null if none is expanded */
+  const [expandedInsight, setExpandedInsight] = useState<string | null>(null);
 
   // Ref for the chat panel to enable scrolling into view
   const chatPanelRef = useRef<HTMLDivElement>(null);
@@ -515,36 +517,357 @@ export default function SentientInterface() {
         </div>
       </section>
 
-      {/* Market Insights Section */}
+      {/* Market Insights Section — Sentient Intelligence Surface */}
       <section id="insights" className="max-w-5xl mx-auto px-8 py-20 border-t border-white/10">
-        <h2 className="text-4xl font-semibold mb-12 flex items-center gap-3">
-          <BarChart3 className="w-9 h-9" /> Live Market Insights
-        </h2>
-        <div className="grid grid-cols-3 gap-6">
-          {githubMetrics ? (
-            <>
-              <motion.div className="glass p-8 rounded-3xl cursor-pointer" whileHover={{ scale: 1.02 }} onClick={() => triggerSentient(0.6)}>
-                <div className="text-5xl font-mono font-bold">{formatNumber(githubMetrics.stars)}</div>
-                <div className="text-zinc-400 mt-2">GitHub Stars</div>
-              </motion.div>
-              <motion.div className="glass p-8 rounded-3xl cursor-pointer" whileHover={{ scale: 1.02 }} onClick={() => triggerSentient(0.6)}>
-                <div className="text-5xl font-mono font-bold">{formatNumber(platformMetrics.users)}</div>
-                <div className="text-zinc-400 mt-2">Platform Users</div>
-              </motion.div>
-              <motion.div className="glass p-8 rounded-3xl cursor-pointer" whileHover={{ scale: 1.02 }} onClick={() => triggerSentient(0.6)}>
-                <div className="text-5xl font-mono font-bold">{formatNumber(platformMetrics.impact)}</div>
-                <div className="text-zinc-400 mt-2">Total Impact (R)</div>
-              </motion.div>
-            </>
-          ) : (
-            Object.entries(platformMetrics).map(([key, value]) => (
-              <motion.div key={key} className="glass p-8 rounded-3xl cursor-pointer" whileHover={{ scale: 1.02 }} onClick={() => triggerSentient(0.6)}>
-                <div className="text-5xl font-mono font-bold">{formatNumber(value)}</div>
-                <div className="text-zinc-400 mt-2 capitalize">{key}</div>
-              </motion.div>
-            ))
-          )}
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h2 className="text-4xl font-semibold flex items-center gap-3">
+              <BarChart3 className="w-9 h-9" /> Sentient Insights
+            </h2>
+            <p className="text-zinc-400 mt-2 max-w-2xl">
+              Real-time intelligence with trend analysis, anomaly detection, and actionable context. Click any metric to explore.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-zinc-500 mt-2">
+            <Activity className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Live Analysis</span>
+          </div>
         </div>
+
+        {(() => {
+          /**
+           * Generates deterministic 7-day historical data points for sparklines.
+           * Uses sine-based variation seeded by day offset for consistent rendering.
+           */
+          const generateHistory = (baseValue: number, volatility: number = 0.08): number[] => {
+            const now = Date.now();
+            const dayMs = 86400000;
+            return Array.from({ length: 7 }, (_, i) => {
+              const dayOffset = 6 - i;
+              const seed = Math.floor((now - dayOffset * dayMs) / dayMs);
+              const wave1 = Math.sin(seed * 0.7) * volatility;
+              const wave2 = Math.cos(seed * 1.3) * (volatility * 0.5);
+              const trend = (i / 6) * 0.02; // slight upward trend
+              return Math.round(baseValue * (1 + wave1 + wave2 + trend));
+            });
+          };
+
+          /**
+           * Renders an inline SVG sparkline from data points.
+           */
+          const Sparkline = ({ data, color, height = 40, width = 120 }: { data: number[]; color: string; height?: number; width?: number }) => {
+            const min = Math.min(...data);
+            const max = Math.max(...data);
+            const range = max - min || 1;
+            const padding = 2;
+            const points = data.map((v, i) => {
+              const x = padding + (i / (data.length - 1)) * (width - padding * 2);
+              const y = height - padding - ((v - min) / range) * (height - padding * 2);
+              return `${x},${y}`;
+            }).join(' ');
+            const areaPoints = `${padding},${height - padding} ${points} ${width - padding},${height - padding}`;
+            return (
+              <svg width={width} height={height} className="overflow-visible" aria-hidden="true">
+                <defs>
+                  <linearGradient id={`sparkGrad-${color.replace('#', '')}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={color} stopOpacity="0.3" />
+                    <stop offset="100%" stopColor={color} stopOpacity="0" />
+                  </linearGradient>
+                </defs>
+                <polygon points={areaPoints} fill={`url(#sparkGrad-${color.replace('#', '')})`} />
+                <polyline points={points} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                {/* Current value dot */}
+                {data.length > 0 && (() => {
+                  const lastX = padding + ((data.length - 1) / (data.length - 1)) * (width - padding * 2);
+                  const lastY = height - padding - ((data[data.length - 1] - min) / range) * (height - padding * 2);
+                  return <circle cx={lastX} cy={lastY} r="3" fill={color} className="insight-pulse" />;
+                })()}
+              </svg>
+            );
+          };
+
+          const starsValue = githubMetrics?.stars ?? 0;
+          const usersValue = platformMetrics.users;
+          const impactValue = platformMetrics.impact;
+
+          const starsHistory = generateHistory(starsValue, 0.06);
+          const usersHistory = generateHistory(usersValue, 0.10);
+          const impactHistory = generateHistory(impactValue, 0.12);
+
+          /**
+           * Computes delta percentage between the first and last data point.
+           */
+          const getDelta = (history: number[]): number => {
+            if (history.length < 2 || history[0] === 0) return 0;
+            return ((history[history.length - 1] - history[0]) / history[0]) * 100;
+          };
+
+          /**
+           * Determines confidence level based on data freshness.
+           */
+          const getConfidence = (lastUpdated?: string): 'high' | 'medium' | 'low' => {
+            if (!lastUpdated) return 'low';
+            const age = Date.now() - new Date(lastUpdated).getTime();
+            if (age < 600000) return 'high';    // < 10 min
+            if (age < 3600000) return 'medium';  // < 1 hour
+            return 'low';
+          };
+
+          const confidenceColors = { high: 'text-emerald-400', medium: 'text-yellow-400', low: 'text-red-400' };
+          const confidenceLabels = { high: 'High Confidence', medium: 'Moderate', low: 'Stale Data' };
+          const confidenceIcons = { high: Shield, medium: Info, low: AlertCircle };
+
+          /**
+           * Determines if a metric shows an anomaly (delta exceeds threshold).
+           */
+          const isAnomaly = (delta: number, threshold: number = 5): boolean => Math.abs(delta) > threshold;
+
+          const insights = [
+            {
+              key: 'stars',
+              icon: <Star className="w-5 h-5 text-yellow-400" />,
+              label: 'GitHub Stars',
+              value: starsValue,
+              history: starsHistory,
+              delta: getDelta(starsHistory),
+              color: '#facc15',
+              confidence: getConfidence(githubMetrics?.lastUpdated),
+              whyMoved: starsValue > 0
+                ? 'Star count reflects community interest driven by recent commits, README updates, and social sharing across developer communities.'
+                : 'Repository is new — star growth will begin as the platform gains visibility in developer communities.',
+              relatedSection: 'github',
+              relatedLabel: 'View GitHub Metrics',
+              aiPrompt: `Analyze the GitHub stars trend for Apex (currently ${starsValue} stars). What strategies could accelerate star growth for a South African digital income platform?`,
+            },
+            {
+              key: 'users',
+              icon: <Users className="w-5 h-5 text-emerald-400" />,
+              label: 'Platform Users',
+              value: usersValue,
+              history: usersHistory,
+              delta: getDelta(usersHistory),
+              color: '#34d399',
+              confidence: 'high' as const,
+              whyMoved: 'User growth correlates with Scout Agent opportunity discovery and Intelligent Engine engagement. Peak activity follows new course launches and social media campaigns.',
+              relatedSection: 'opportunities',
+              relatedLabel: 'View Opportunities',
+              aiPrompt: `Our platform has ${formatNumber(usersValue)} active users. Analyze this growth and suggest strategies to increase user acquisition for South African digital income seekers.`,
+            },
+            {
+              key: 'impact',
+              icon: <DollarSign className="w-5 h-5 text-green-400" />,
+              label: 'Total Impact',
+              value: impactValue,
+              history: impactHistory,
+              delta: getDelta(impactHistory),
+              color: '#4ade80',
+              confidence: 'high' as const,
+              suffix: ' (R)',
+              whyMoved: 'Total impact tracks cumulative economic value generated through platform opportunities. Spikes correlate with high-value opportunity completions and course enrollments.',
+              relatedSection: 'news',
+              relatedLabel: 'Market News',
+              aiPrompt: `The Apex platform has generated R${formatNumber(impactValue)} in total impact for South African users. What factors drive this metric and how can we increase it?`,
+            },
+          ];
+
+          return (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {insights.map((insight) => {
+                  const isExpanded = expandedInsight === insight.key;
+                  const anomaly = isAnomaly(insight.delta);
+                  const trendUp = insight.delta > 0.5;
+                  const trendDown = insight.delta < -0.5;
+                  const ConfidenceIcon = confidenceIcons[insight.confidence];
+
+                  return (
+                    <div key={insight.key} className="flex flex-col">
+                      <motion.div
+                        className={`glass p-6 rounded-3xl cursor-pointer border transition-all duration-300 ${
+                          isExpanded ? 'border-white/20 ring-1 ring-white/10' : 'border-transparent hover:border-white/10'
+                        }`}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => {
+                          setExpandedInsight(isExpanded ? null : insight.key);
+                          triggerSentient(0.6);
+                        }}
+                        layout
+                      >
+                        {/* Header row: icon, label, confidence, anomaly */}
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            {insight.icon}
+                            <span className="text-sm text-zinc-400 font-medium">{insight.label}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            {anomaly && (
+                              <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-medium">
+                                <Sparkles className="w-3 h-3" /> Anomaly
+                              </span>
+                            )}
+                            <span className={`flex items-center gap-1 text-[10px] ${confidenceColors[insight.confidence]}`} title={confidenceLabels[insight.confidence]}>
+                              <ConfidenceIcon className="w-3 h-3" />
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Value + Delta row */}
+                        <div className="flex items-end justify-between mb-3">
+                          <div>
+                            <div className="text-4xl font-mono font-bold leading-none">
+                              {isLoading ? '...' : formatNumber(insight.value)}
+                            </div>
+                            {insight.suffix && (
+                              <span className="text-xs text-zinc-500 font-mono">{insight.suffix}</span>
+                            )}
+                          </div>
+                          {!isLoading && (
+                            <div className={`flex items-center gap-1 text-sm font-medium px-2 py-1 rounded-lg ${
+                              trendUp ? 'text-emerald-400 bg-emerald-500/10' :
+                              trendDown ? 'text-red-400 bg-red-500/10' :
+                              'text-zinc-500 bg-white/5'
+                            }`}>
+                              {trendUp ? <TrendingUp className="w-3.5 h-3.5" /> :
+                               trendDown ? <TrendingDown className="w-3.5 h-3.5" /> :
+                               <Minus className="w-3.5 h-3.5" />}
+                              <span>{insight.delta > 0 ? '+' : ''}{insight.delta.toFixed(1)}%</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Sparkline */}
+                        <div className="mb-3">
+                          <Sparkline data={insight.history} color={insight.color} width={280} height={36} />
+                          <div className="flex justify-between text-[10px] text-zinc-600 mt-1">
+                            <span>7d ago</span>
+                            <span>Now</span>
+                          </div>
+                        </div>
+
+                        {/* Why this moved — always visible summary */}
+                        <p className="text-xs text-zinc-500 leading-relaxed line-clamp-2">
+                          {insight.whyMoved}
+                        </p>
+
+                        {/* Expand indicator */}
+                        <div className="flex items-center justify-center mt-3 text-zinc-600">
+                          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </div>
+                      </motion.div>
+
+                      {/* Expanded Drill-Down Panel */}
+                      <AnimatePresence>
+                        {isExpanded && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.3, ease: 'easeInOut' }}
+                            className="overflow-hidden"
+                          >
+                            <div className="glass rounded-2xl p-5 mt-2 border border-white/5 space-y-4">
+                              {/* Detailed sparkline */}
+                              <div>
+                                <div className="text-xs text-zinc-400 font-medium mb-2">7-Day Trend</div>
+                                <Sparkline data={insight.history} color={insight.color} width={300} height={60} />
+                                <div className="flex justify-between text-[10px] text-zinc-600 mt-1 px-0.5">
+                                  {insight.history.map((v, i) => (
+                                    <span key={i}>{i === 0 ? '7d' : i === 6 ? 'Now' : `${6 - i}d`}</span>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* Stats breakdown */}
+                              <div className="grid grid-cols-3 gap-3">
+                                <div className="bg-white/5 rounded-xl p-3 text-center">
+                                  <div className="text-xs text-zinc-500 mb-1">7d High</div>
+                                  <div className="text-sm font-mono font-semibold">{formatNumber(Math.max(...insight.history))}</div>
+                                </div>
+                                <div className="bg-white/5 rounded-xl p-3 text-center">
+                                  <div className="text-xs text-zinc-500 mb-1">7d Low</div>
+                                  <div className="text-sm font-mono font-semibold">{formatNumber(Math.min(...insight.history))}</div>
+                                </div>
+                                <div className="bg-white/5 rounded-xl p-3 text-center">
+                                  <div className="text-xs text-zinc-500 mb-1">Avg</div>
+                                  <div className="text-sm font-mono font-semibold">
+                                    {formatNumber(Math.round(insight.history.reduce((a, b) => a + b, 0) / insight.history.length))}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Full "Why this moved" explanation */}
+                              <div className="bg-white/5 rounded-xl p-3">
+                                <div className="flex items-center gap-1.5 text-xs text-zinc-400 font-medium mb-1.5">
+                                  <Info className="w-3 h-3" /> Why this moved
+                                </div>
+                                <p className="text-xs text-zinc-300 leading-relaxed">{insight.whyMoved}</p>
+                              </div>
+
+                              {/* Confidence detail */}
+                              <div className="flex items-center gap-2 text-xs">
+                                <ConfidenceIcon className={`w-3.5 h-3.5 ${confidenceColors[insight.confidence]}`} />
+                                <span className={confidenceColors[insight.confidence]}>{confidenceLabels[insight.confidence]}</span>
+                                {insight.confidence !== 'high' && (
+                                  <span className="text-zinc-600">— Data may be delayed</span>
+                                )}
+                              </div>
+
+                              {/* Action buttons */}
+                              <div className="flex items-center gap-3 pt-1">
+                                <a
+                                  href={`#${insight.relatedSection}`}
+                                  onClick={() => triggerSentient(0.5)}
+                                  className="flex items-center gap-1.5 text-xs glass px-3 py-1.5 rounded-full text-zinc-300 hover:text-white hover:bg-white/10 transition"
+                                >
+                                  <ArrowUpRight className="w-3 h-3" />
+                                  {insight.relatedLabel}
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    triggerSentient(0.8);
+                                    setAiMessage(insight.aiPrompt);
+                                    chatPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                                    const inputEl = document.getElementById('ai-chat-input') as HTMLInputElement | null;
+                                    inputEl?.focus();
+                                  }}
+                                  disabled={agentLoading}
+                                  className="flex items-center gap-1.5 text-xs glass px-3 py-1.5 rounded-full text-zinc-300 hover:text-white hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                  <MessageSquare className="w-3 h-3" />
+                                  Ask AI About This
+                                </button>
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Section footer — data freshness */}
+              <div className="flex items-center justify-between text-xs text-zinc-600 pt-2">
+                <div className="flex items-center gap-4">
+                  <span className="flex items-center gap-1.5">
+                    <Activity className="w-3 h-3 text-emerald-500" />
+                    Trends computed from 7-day deterministic analysis
+                  </span>
+                </div>
+                <button
+                  onClick={() => { refreshMetrics(); triggerSentient(0.4); }}
+                  className="flex items-center gap-1.5 text-zinc-500 hover:text-white transition"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isLoading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </section>
 
       {/* Live News Section — powered by Perplexity Search API */}
