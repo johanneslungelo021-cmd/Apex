@@ -274,19 +274,21 @@ export async function POST(req: Request): Promise<Response> {
 
   if (!checkRateLimit(ip, RATE_LIMIT, RATE_WINDOW_MS)) {
     // Use HMAC-SHA256 for PII-safe IP logging — rainbow-table resistant.
-    // Only log the hashed IP if IP_LOG_SALT is configured; otherwise omit entirely
-    // rather than providing a false sense of protection with a hardcoded fallback.
+    // Only include hashedIp when IP_LOG_SALT is configured; omit entirely
+    // rather than using a hardcoded fallback that gives a false sense of protection.
     const ipLogSalt = process.env.IP_LOG_SALT;
-    const logPayload: Record<string, unknown> = {
+    const hashedIp = ipLogSalt
+      ? crypto.createHmac('sha256', ipLogSalt).update(ip).digest('hex').slice(0, 16)
+      : undefined;
+    log({
       level: 'warn',
       service: SERVICE,
       message: 'Rate limit exceeded',
       requestId,
-    };
-    if (ipLogSalt) {
-      logPayload.hashedIp = crypto.createHmac('sha256', ipLogSalt).update(ip).digest('hex').slice(0, 16);
-    }
-    log(logPayload);
+      // Spread only when defined — LogEntry's index signature accepts extra fields,
+      // but we avoid always passing `hashedIp: undefined` to keep log lines clean.
+      ...(hashedIp !== undefined ? { hashedIp } : {}),
+    });
     return NextResponse.json(
       { error: 'RATE_LIMITED', message: 'Too many requests. Please wait before retrying.', requestId },
       {
