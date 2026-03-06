@@ -158,7 +158,8 @@ async function assertSafeUrl(rawUrl: string): Promise<void> {
  * @returns An absolute image URL or a base64 SVG gradient data URI
  */
 async function fetchOgImage(articleUrl: string, title: string): Promise<string> {
-  // SSRF guard — throws early for private/invalid URLs so fetchWithTimeout is never called
+  // SSRF guard — validates the initial URL before any network call.
+  // assertSafeUrl checks scheme + DNS resolution against private IP patterns.
   try {
     await assertSafeUrl(articleUrl);
   } catch {
@@ -168,9 +169,20 @@ async function fetchOgImage(articleUrl: string, title: string): Promise<string> 
   try {
     const res = await fetchWithTimeout(
       articleUrl,
-      { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ApexNewsBot/1.0; +https://apex-coral-zeta.vercel.app)' } },
+      {
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ApexNewsBot/1.0; +https://apex-coral-zeta.vercel.app)' },
+        // Disable automatic redirect following. A public domain could validate cleanly
+        // via assertSafeUrl and then redirect to an internal address (e.g. 169.254.x.x,
+        // localhost), bypassing all SSRF protections. With 'manual', the fetch returns
+        // the 3xx response directly without following the Location header.
+        redirect: 'manual',
+      },
       IMAGE_FETCH_TIMEOUT_MS,
     );
+
+    // Reject any redirect response outright — never follow or validate Location.
+    // The Location header may point to a private/internal address and must not be trusted.
+    if (res.status >= 300 && res.status < 400) return gradientPlaceholder(title);
     if (!res.ok) return gradientPlaceholder(title);
     const html = await res.text();
 
