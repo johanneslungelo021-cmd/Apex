@@ -423,9 +423,9 @@ export default function SentientInterface() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {opportunities.map((opp, i) => (
+            {opportunities.map((opp) => (
               <motion.a
-                key={i}
+                key={opp.link}
                 href={opp.link}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -604,12 +604,9 @@ export default function SentientInterface() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {/* Featured article — spans full width on first card */}
             {news.slice(0, 1).map((article) => (
-              <motion.a
+              <motion.div
                 key={article.url}
-                href={article.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="glass rounded-3xl overflow-hidden col-span-1 md:col-span-2 lg:col-span-2 group cursor-pointer border border-transparent hover:border-white/10 transition"
+                className="glass rounded-3xl overflow-hidden col-span-1 md:col-span-2 lg:col-span-2 group border border-transparent hover:border-white/10 transition"
                 whileHover={{ scale: 1.01 }}
                 whileTap={{ scale: 0.99 }}
                 onClick={() => triggerSentient(0.5)}
@@ -659,12 +656,17 @@ export default function SentientInterface() {
                   <h3 className="font-bold text-xl leading-snug mb-2 group-hover:text-blue-300 transition line-clamp-2">{article.title}</h3>
                   <p className="text-zinc-400 text-sm leading-relaxed line-clamp-2">{article.snippet}</p>
                   <div className="mt-4 flex items-center justify-between">
-                    <span className="flex items-center gap-1 text-xs text-zinc-500 group-hover:text-white transition">
+                    <a
+                      href={article.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-xs text-zinc-500 group-hover:text-white transition"
+                    >
                       Read full article <ExternalLink className="w-3 h-3 ml-1" />
-                    </span>
-                    {/* Research Context button */}
+                    </a>
                     <button
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); investigateNews(article.title); }}
+                      type="button"
+                      onClick={() => investigateNews(article.title)}
                       disabled={agentLoading}
                       className="flex items-center gap-1.5 text-xs glass px-3 py-1.5 rounded-full text-zinc-300 hover:text-white hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed"
                       title="Research this article with AI"
@@ -674,17 +676,14 @@ export default function SentientInterface() {
                     </button>
                   </div>
                 </div>
-              </motion.a>
+              </motion.div>
             ))}
 
             {/* Remaining articles */}
             {news.slice(1).map((article) => (
-              <motion.a
+              <motion.div
                 key={article.url}
-                href={article.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="glass rounded-3xl overflow-hidden group cursor-pointer border border-transparent hover:border-white/10 transition flex flex-col"
+                className="glass rounded-3xl overflow-hidden group border border-transparent hover:border-white/10 transition flex flex-col"
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => triggerSentient(0.5)}
@@ -726,12 +725,17 @@ export default function SentientInterface() {
                   <h3 className="font-semibold text-base leading-snug mb-2 group-hover:text-blue-300 transition line-clamp-3 flex-1">{article.title}</h3>
                   <p className="text-zinc-500 text-xs leading-relaxed line-clamp-2 mb-3">{article.snippet}</p>
                   <div className="flex items-center justify-between mt-auto">
-                    <span className="flex items-center gap-1 text-xs text-zinc-600 group-hover:text-white transition">
+                    <a
+                      href={article.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-xs text-zinc-600 group-hover:text-white transition"
+                    >
                       Read more <ExternalLink className="w-3 h-3 ml-1" />
-                    </span>
-                    {/* Research Context button */}
+                    </a>
                     <button
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); investigateNews(article.title); }}
+                      type="button"
+                      onClick={() => investigateNews(article.title)}
                       disabled={agentLoading}
                       className="flex items-center gap-1.5 text-xs glass px-2.5 py-1 rounded-full text-zinc-400 hover:text-white hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed"
                       title="Research this article with AI"
@@ -741,7 +745,7 @@ export default function SentientInterface() {
                     </button>
                   </div>
                 </div>
-              </motion.a>
+              </motion.div>
             ))}
           </div>
         )}
