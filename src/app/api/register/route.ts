@@ -1,11 +1,47 @@
+/**
+ * User Registration API Route
+ * 
+ * Handles user registration with email validation and PII-safe logging.
+ * Emits registration metrics to Grafana without exposing personal data.
+ * 
+ * @module api/register
+ */
+
 import { NextResponse } from 'next/server';
 import { registrationCounter } from '../../../lib/metrics';
 import crypto from 'crypto';
 
-// RFC-5322-inspired regex: requires local@domain.tld — rejects bare @, double dots, etc.
+/**
+ * RFC-5322-inspired email validation regex.
+ * Requires local@domain.tld format, rejects bare @, double dots, etc.
+ * 
+ * @constant
+ * @example
+ * EMAIL_RE.test('user@example.com') // true
+ * EMAIL_RE.test('invalid-email') // false
+ */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
-export async function POST(req: Request) {
+/**
+ * Handles POST requests for user registration.
+ * 
+ * Validates email format, generates PII-safe hash for logging,
+ * and emits registration metrics to Grafana.
+ * 
+ * @param req - The incoming HTTP request
+ * @returns JSON response with registration result
+ * 
+ * @example
+ * // Request body
+ * { "email": "user@example.com" }
+ * 
+ * // Success response
+ * { "success": true, "message": "Registration successful! ...", "timestamp": "..." }
+ * 
+ * // Error response (validation)
+ * { "success": false, "error": "VALIDATION_ERROR", "message": "email is required." }
+ */
+export async function POST(req: Request): Promise<Response> {
   // Safely parse JSON — null or malformed body must return 400, not 500
   let body: unknown;
   try {

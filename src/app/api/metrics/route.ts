@@ -1,44 +1,86 @@
+/**
+ * Metrics API Route
+ * 
+ * Aggregates GitHub repository metrics and platform usage metrics.
+ * Implements caching with 5-minute TTL for optimal performance.
+ * 
+ * @module api/metrics
+ */
+
 import { NextResponse } from 'next/server';
 
+/**
+ * GitHub repository metrics from the GitHub API.
+ */
 interface GitHubMetrics {
+  /** Number of repository stars */
   stars: number;
+  /** Number of repository forks */
   forks: number;
+  /** Number of open issues */
   openIssues: number;
+  /** Number of repository watchers */
   watchers: number;
+  /** Repository size in kilobytes */
   size: number;
+  /** ISO timestamp of last update */
   lastUpdated: string;
+  /** Full repository name (owner/repo) */
   fullName: string;
+  /** Repository description */
   description: string;
+  /** Primary programming language */
   language: string;
 }
 
+/**
+ * Platform usage metrics for the Apex application.
+ */
 interface PlatformMetrics {
+  /** Number of active users */
   users: number;
+  /** Total impact value (in rands) */
   impact: number;
+  /** Number of completed courses */
   courses: number;
 }
 
-// Cache for combined metrics (5 minute TTL)
+/**
+ * Combined metrics response structure.
+ */
+interface CombinedMetrics {
+  /** GitHub repository metrics */
+  github: GitHubMetrics;
+  /** Platform usage metrics */
+  platform: PlatformMetrics;
+  /** Unix timestamp of metrics collection */
+  timestamp: number;
+}
+
+/** Cache for combined metrics with 5-minute TTL */
 let cachedCombinedMetrics: {
-  data: {
-    github: GitHubMetrics;
-    platform: PlatformMetrics;
-    timestamp: number;
-  } | null;
+  data: CombinedMetrics | null;
   timestamp: number;
 } = { data: null, timestamp: 0 };
 
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+/** Cache time-to-live in milliseconds (5 minutes) */
+const CACHE_TTL = 5 * 60 * 1000;
 
-// Validate GITHUB_TIMEOUT_MS: must be a finite positive integer, else fall back to 8 000 ms
+/** GitHub API timeout in milliseconds (configurable via env) */
 const rawGithubTimeout = parseInt(process.env.GITHUB_TIMEOUT_MS || '8000', 10);
 const GITHUB_TIMEOUT_MS = Number.isFinite(rawGithubTimeout) && rawGithubTimeout > 0
   ? rawGithubTimeout
   : 8000;
 
+/** Target GitHub repository */
 const GITHUB_REPO = 'johanneslungelo021-cmd/Apex';
 
-// Factory function for GitHub fallback — generates fresh timestamp per request
+/**
+ * Generates a fresh GitHub fallback metrics object.
+ * Factory function ensures lastUpdated timestamp is generated per-request.
+ * 
+ * @returns GitHubMetrics object with zero values and current timestamp
+ */
 function getGithubFallback(): GitHubMetrics {
   return {
     stars: 0,
@@ -53,6 +95,16 @@ function getGithubFallback(): GitHubMetrics {
   };
 }
 
+/**
+ * Fetches GitHub repository metrics from the GitHub API.
+ * Implements retry logic with timeout control for resilience.
+ * 
+ * @returns Promise resolving to GitHubMetrics object
+ * 
+ * @example
+ * const metrics = await fetchGitHubMetrics();
+ * console.log(metrics.stars); // 42
+ */
 async function fetchGitHubMetrics(): Promise<GitHubMetrics> {
   const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}`;
 
@@ -81,7 +133,6 @@ async function fetchGitHubMetrics(): Promise<GitHubMetrics> {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        // Treat 4xx/5xx as retriable transient errors on first attempt
         throw new Error(`GitHub HTTP ${response.status}`);
       }
 
@@ -103,21 +154,28 @@ async function fetchGitHubMetrics(): Promise<GitHubMetrics> {
       const err = error as Error;
 
       if (attempt === 2) {
-        // All retries exhausted — return safe fallback with fresh timestamp
         console.warn(`[METRICS] GitHub fetch failed after ${attempt} attempts:`, err.message);
         return getGithubFallback();
       }
 
-      // First attempt failed (any error) — wait briefly then retry
       console.warn(`[METRICS] GitHub fetch attempt ${attempt} failed, retrying:`, err.message);
       await new Promise(resolve => setTimeout(resolve, 300));
     }
   }
 
-  // TypeScript exhaustiveness guard — unreachable in practice
   return getGithubFallback();
 }
 
+/**
+ * Calculates platform usage metrics with deterministic variation.
+ * Uses hour-based sine waves instead of random values for metric stability.
+ * 
+ * @returns Promise resolving to PlatformMetrics object
+ * 
+ * @example
+ * const metrics = await fetchPlatformMetrics();
+ * console.log(metrics.users); // ~12480 with ±10% hourly variation
+ */
 async function fetchPlatformMetrics(): Promise<PlatformMetrics> {
   const baseMetrics = {
     users: 12480,
@@ -125,11 +183,11 @@ async function fetchPlatformMetrics(): Promise<PlatformMetrics> {
     courses: 342,
   };
 
-  // Deterministic variation based on hour-of-day — no Math.random() to keep metrics stable
+  // Deterministic variation based on hour-of-day — prevents cardinality pollution
   const hoursSinceEpoch = Math.floor(Date.now() / (1000 * 60 * 60));
   const variation = Math.sin((hoursSinceEpoch % 24) / 24 * Math.PI) * 0.1 + 1;
 
-  // Courses uses a stable sine wave instead of random, preventing cardinality pollution
+  // Courses uses a stable sine wave instead of random
   const courses = Math.round(
     baseMetrics.courses + baseMetrics.courses * 0.04 * Math.sin((hoursSinceEpoch % 24) * Math.PI / 12)
   );
@@ -141,7 +199,24 @@ async function fetchPlatformMetrics(): Promise<PlatformMetrics> {
   };
 }
 
-export async function GET() {
+/**
+ * Handles GET requests for combined metrics.
+ * Returns cached data if still valid, otherwise fetches fresh metrics.
+ * 
+ * @returns JSON response with combined GitHub and platform metrics
+ * 
+ * @example
+ * // Request
+ * GET /api/metrics
+ * 
+ * // Response
+ * {
+ *   "github": { "stars": 42, "forks": 10, ... },
+ *   "platform": { "users": 12480, "impact": 874200, "courses": 342 },
+ *   "timestamp": 1234567890123
+ * }
+ */
+export async function GET(): Promise<Response> {
   const now = Date.now();
 
   // Return cached data if still valid
@@ -155,7 +230,7 @@ export async function GET() {
     fetchPlatformMetrics(),
   ]);
 
-  const combinedMetrics = {
+  const combinedMetrics: CombinedMetrics = {
     github: githubMetrics,
     platform: platformMetrics,
     timestamp: now,
@@ -167,5 +242,5 @@ export async function GET() {
   return NextResponse.json(combinedMetrics);
 }
 
-// Force dynamic rendering
+/** Force dynamic rendering to ensure fresh data */
 export const dynamic = 'force-dynamic';
