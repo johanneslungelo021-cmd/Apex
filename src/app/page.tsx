@@ -23,6 +23,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Heart, Search, User, BarChart3, MessageSquare, Github, Star, GitFork, Eye, AlertCircle, BookOpen, TrendingUp, Users, DollarSign, Zap, ExternalLink, Newspaper, Clock, RefreshCw, Microscope } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Image from 'next/image';
 
 /**
  * GitHub repository metrics from the GitHub API.
@@ -606,17 +607,31 @@ export default function SentientInterface() {
                 onClick={() => triggerSentient(0.5)}
               >
                 <div className="relative w-full h-56 overflow-hidden">
-                  <img
-                    src={article.imageUrl}
-                    alt={article.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    onError={(e) => {
-                      const target = e.currentTarget;
-                      target.src = `data:image/svg+xml;base64,${btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="800" height="420"><rect width="800" height="420" fill="#18181b"/><text x="400" y="210" font-family="system-ui" font-size="16" fill="#52525b" text-anchor="middle">${article.source}</text></svg>`)}`;
-                    }}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-                  <div className="absolute top-4 left-4">
+                  {article.imageUrl.startsWith('data:') ? (
+                    // Data URIs must use raw <img> — Next.js Image doesn't support them.
+                    // These are inline SVGs generated server-side, already optimized.
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={article.imageUrl}
+                      alt={article.title}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <Image
+                      src={article.imageUrl}
+                      alt={article.title}
+                      fill
+                      sizes="(max-width: 768px) 100vw, 66vw"
+                      className="object-cover group-hover:scale-105 transition-transform duration-500"
+                      onError={(e) => {
+                        // Replace with data URI placeholder on error
+                        const target = e.currentTarget as HTMLImageElement;
+                        target.src = `data:image/svg+xml;base64,${btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="800" height="420"><rect width="800" height="420" fill="#18181b"/><text x="400" y="210" font-family="system-ui" font-size="16" fill="#52525b" text-anchor="middle">${article.source}</text></svg>`)}`;
+                      }}
+                    />
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent pointer-events-none" />
+                  <div className="absolute top-4 left-4 z-10">
                     <span className="glass text-xs px-3 py-1 rounded-full text-blue-300 font-medium">Featured</span>
                   </div>
                 </div>
@@ -664,16 +679,30 @@ export default function SentientInterface() {
                 onClick={() => triggerSentient(0.5)}
               >
                 <div className="relative w-full h-44 overflow-hidden flex-shrink-0">
-                  <img
-                    src={article.imageUrl}
-                    alt={article.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    onError={(e) => {
-                      const target = e.currentTarget;
-                      target.src = `data:image/svg+xml;base64,${btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="220"><rect width="400" height="220" fill="#18181b"/><text x="200" y="110" font-family="system-ui" font-size="14" fill="#52525b" text-anchor="middle">${article.source}</text></svg>`)}`;
-                    }}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                  {article.imageUrl.startsWith('data:') ? (
+                    // Data URIs must use raw <img> — Next.js Image doesn't support them.
+                    // These are inline SVGs generated server-side, already optimized.
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={article.imageUrl}
+                      alt={article.title}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <Image
+                      src={article.imageUrl}
+                      alt={article.title}
+                      fill
+                      sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                      className="object-cover group-hover:scale-105 transition-transform duration-500"
+                      onError={(e) => {
+                        // Replace with data URI placeholder on error
+                        const target = e.currentTarget as HTMLImageElement;
+                        target.src = `data:image/svg+xml;base64,${btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="220"><rect width="400" height="220" fill="#18181b"/><text x="200" y="110" font-family="system-ui" font-size="14" fill="#52525b" text-anchor="middle">${article.source}</text></svg>`)}`;
+                      }}
+                    />
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
                 </div>
                 <div className="p-5 flex flex-col flex-1">
                   <div className="flex items-center gap-2 mb-2">
