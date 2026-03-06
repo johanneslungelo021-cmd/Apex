@@ -47,6 +47,13 @@ const RATE_LIMIT = 20;
  */
 const RATE_WINDOW_MS = 60_000;
 
+/**
+ * Maximum request body size in bytes.
+ * Checked against Content-Length header before body parse to reject
+ * oversized payloads early without reading the body into memory.
+ */
+const MAX_REQUEST_BYTES = 5 * 1024 * 1024; // 5 MB
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /**
@@ -94,6 +101,28 @@ const MAX_CONTENT_LENGTH = 4000;
  */
 const MAX_TOTAL_PAYLOAD_BYTES = 50_000;
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Returns a PII-safe HMAC-SHA256 fingerprint of a client IP for rate-limit logging.
+ *
+ * Uses HMAC (keyed hash) rather than plain SHA-256 so the fingerprint cannot be
+ * reversed via rainbow tables even if the salt is short. The raw IP is never
+ * logged or persisted — only this derived value appears in structured logs.
+ *
+ * If IP_LOG_SALT is not configured, returns undefined so the field is omitted
+ * entirely from the log entry. A hardcoded fallback salt would offer no real
+ * protection and is intentionally absent.
+ *
+ * @param ip - Raw client IP address
+ * @returns 16-char hex fingerprint, or undefined if IP_LOG_SALT is not set
+ */
+function hashIpForLog(ip: string): string | undefined {
+  const salt = process.env.IP_LOG_SALT;
+  if (!salt) return undefined;
+  return crypto.createHmac('sha256', salt).update(ip).digest('hex').slice(0, 16);
+}
+
 // ─── Validation ───────────────────────────────────────────────────────────────
 
 /**
@@ -104,6 +133,7 @@ const MAX_TOTAL_PAYLOAD_BYTES = 50_000;
  * - Object structure validation for each message
  * - Role enumeration validation
  * - Content type and length validation
+ * - Aggregate payload byte guard
  *
  * @param raw - The raw messages value from the request body
  * @returns Array of validated ChatMessage objects on success, or error message string on failure
@@ -227,38 +257,34 @@ export async function GET(): Promise<Response> {
  * Handles a conversational query to the Apex Intelligent Engine.
  *
  * Processing flow:
- * 1. Rate limit check (20 requests per minute per IP)
- * 2. Validate request body and messages array
- * 3. Run Scout Agent (cached — no Groq call if cache is warm)
- * 4. Call Groq with system prompt + live opportunities + user messages
- * 5. Return reply, opportunities, requestId, durationMs with X-Request-Id header
+ * 1. Request size guard (Content-Length check, 413 on excess)
+ * 2. Rate limit check (20 requests per minute per IP)
+ * 3. Validate request body and messages array
+ * 4. Run Scout Agent (cached — no Groq call if cache is warm)
+ * 5. Call Groq with system prompt + live opportunities + user messages
+ * 6. Return JSON: { reply, opportunities, requestId, durationMs }
  *
  * All responses include a unique X-Request-Id header for log correlation.
  * Errors are returned with appropriate HTTP status codes and descriptive messages.
  *
  * @param req - The incoming HTTP request
  * @returns JSON response with AI reply, opportunities, and metadata
- *
- * @example
- * // Success response
- * {
- *   "reply": "Here are 3 opportunities in Gauteng...",
- *   "opportunities": [...],
- *   "requestId": "a1b2c3d4e5f6",
- *   "durationMs": 1234
- * }
- *
- * @example
- * // Error response (rate limited)
- * {
- *   "error": "RATE_LIMITED",
- *   "message": "Too many requests. Please wait before retrying.",
- *   "requestId": "a1b2c3d4e5f6"
- * }
  */
 export async function POST(req: Request): Promise<Response> {
   const requestId = generateRequestId();
   const startMs = Date.now();
+
+  // ── Request size guard ────────────────────────────────────────────────────
+  // Check Content-Length header before reading the body — fast rejection of
+  // oversized payloads without allocating memory for the body first.
+  const contentLength = Number(req.headers.get('content-length') ?? 0);
+  if (contentLength > MAX_REQUEST_BYTES) {
+    log({ level: 'warn', service: SERVICE, message: 'Request body too large', requestId, contentLength });
+    return NextResponse.json(
+      { error: 'PAYLOAD_TOO_LARGE', message: `Request body must be under ${MAX_REQUEST_BYTES / 1024 / 1024} MB.`, requestId },
+      { status: 413, headers: { 'X-Request-Id': requestId } },
+    );
+  }
 
   // ── Rate limiting ──────────────────────────────────────────────────────────
   const ip =
@@ -267,12 +293,19 @@ export async function POST(req: Request): Promise<Response> {
     'unknown';
 
   if (!checkRateLimit(ip, RATE_LIMIT, RATE_WINDOW_MS)) {
-    // Hash the raw IP with a server-side salt before logging — the raw IP is personal
-    // data under GDPR/POPIA. The hash is one-way and preserves correlation across
-    // requests from the same origin without exposing the address itself.
-    const ipSalt = process.env.IP_LOG_SALT || 'apex-ip-log-salt';
-    const hashedIp = crypto.createHash('sha256').update(ip + ipSalt).digest('hex').slice(0, 16);
-    log({ level: 'warn', service: SERVICE, message: 'Rate limit exceeded', requestId, hashedIp });
+    // HMAC-SHA256 fingerprint of the IP for rate-limit log correlation.
+    // The raw IP is personal data under GDPR/POPIA — never logged directly.
+    // HMAC (keyed hash) is used rather than plain SHA-256: without the key,
+    // the fingerprint cannot be reversed via rainbow tables.
+    // If IP_LOG_SALT is not set, the field is omitted entirely (no fallback).
+    const hashedIp = hashIpForLog(ip);
+    log({
+      level: 'warn',
+      service: SERVICE,
+      message: 'Rate limit exceeded',
+      requestId,
+      ...(hashedIp !== undefined ? { hashedIp } : {}),
+    });
     return NextResponse.json(
       { error: 'RATE_LIMITED', message: 'Too many requests. Please wait before retrying.', requestId },
       {
@@ -365,11 +398,11 @@ export async function POST(req: Request): Promise<Response> {
     );
 
     if (!response.ok) {
-      const errText = await response.text().catch(() => '');
+      // Log status only — never log raw Groq error body as it may echo user content
       log({
         level: 'warn', service: SERVICE,
         message: `Groq returned HTTP ${response.status}`,
-        requestId, durationMs: Date.now() - startMs, groqError: errText,
+        requestId, durationMs: Date.now() - startMs,
       });
       agentQueryCounter.add(1, { status: 'error' });
       return NextResponse.json(

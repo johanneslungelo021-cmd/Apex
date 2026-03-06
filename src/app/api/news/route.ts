@@ -12,7 +12,7 @@
 
 import { NextResponse } from 'next/server';
 import { generateRequestId, log, fetchWithTimeout, envTimeoutMs } from '@/lib/api-utils';
-import dns from 'dns/promises';
+import dns, { type LookupAddress } from 'dns/promises';
 
 const SERVICE = 'news';
 const PERPLEXITY_TIMEOUT_MS = envTimeoutMs(process.env.PERPLEXITY_TIMEOUT_MS, 14_000);
@@ -73,35 +73,85 @@ function sourceFromUrl(url: string): string {
 
 /**
  * Private/reserved IP ranges that must never be fetched (SSRF protection).
- * Covers: loopback, RFC-1918 private, link-local, unique-local, and IPv6 loopback.
+ *
+ * Extended to cover:
+ * - IPv4: loopback, RFC-1918 private, link-local, CGNAT (100.64/10, RFC-6598),
+ *         benchmark (198.18/15, RFC-2544), documentation (192.0.2, 198.51.100,
+ *         203.0.113, RFC-5737), this-network (0/8), broadcast (255/8),
+ *         multicast (224-239/4), reserved (240-255/4)
+ * - IPv6: loopback (::1), link-local (fe80::/10), unique-local (fc00::/7),
+ *         unspecified (::), documentation (2001:db8::/32), multicast (ff00::/8),
+ *         IPv4-mapped private ranges (::ffff:10.x, ::ffff:192.168.x, etc.)
  */
-const PRIVATE_IP_PATTERNS = [
-  // IPv4 loopback
+const PRIVATE_IP_PATTERNS: RegExp[] = [
+  // ── IPv4 ──────────────────────────────────────────────────────────────────
+  // Loopback (127.0.0.0/8)
   /^127\./,
-  // IPv4 private class A
+  // Private class A (10.0.0.0/8, RFC-1918)
   /^10\./,
-  // IPv4 private class B (172.16.0.0–172.31.255.255)
+  // Private class B (172.16.0.0–172.31.255.255, RFC-1918)
   /^172\.(1[6-9]|2\d|3[01])\./,
-  // IPv4 private class C
+  // Private class C (192.168.0.0/16, RFC-1918)
   /^192\.168\./,
-  // IPv4 link-local
+  // Link-local (169.254.0.0/16)
   /^169\.254\./,
-  // IPv4 "this network" and broadcast
+  // CGNAT (100.64.0.0/10, RFC-6598) — carrier-grade NAT, often internal
+  /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./,
+  // Benchmark testing (198.18.0.0/15, RFC-2544)
+  /^198\.1[89]\./,
+  // Documentation: TEST-NET-1 (192.0.2.0/24, RFC-5737)
+  /^192\.0\.2\./,
+  // Documentation: TEST-NET-2 (198.51.100.0/24, RFC-5737)
+  /^198\.51\.100\./,
+  // Documentation: TEST-NET-3 (203.0.113.0/24, RFC-5737)
+  /^203\.0\.113\./,
+  // This-network (0.0.0.0/8) and broadcast (255.0.0.0/8)
   /^0\./,
   /^255\./,
-  // IPv6 loopback (::1) and unique-local (fc00::/7, so fc and fd prefixes)
+  // Multicast (224.0.0.0/4, RFC-5771)
+  /^(22[4-9]|23\d)\./,
+  // Reserved / future use (240.0.0.0/4, RFC-1112)
+  /^(24\d|25[0-5])\./,
+
+  // ── IPv6 ──────────────────────────────────────────────────────────────────
+  // Loopback (::1)
   /^::1$/,
+  // Unique-local (fc00::/7 — fc and fd prefixes, RFC-4193)
   /^[Ff][CcDd]/,
-  // IPv6 link-local (fe80::/10)
+  // Link-local (fe80::/10, RFC-4291)
   /^[Ff][Ee][89aAbB]/,
+  // Unspecified address (::)
+  /^::$/,
+  // Documentation (2001:db8::/32, RFC-3849)
+  /^2001:db8:/i,
+  // Multicast (ff00::/8, RFC-4291)
+  /^[Ff][Ff][0-9a-fA-F]{2}:/,
+  // IPv4-mapped private ranges (::ffff:10.x, ::ffff:127.x, ::ffff:192.168.x, etc.)
+  /^::ffff:(?:127|10)\./i,
+  /^::ffff:172\.(1[6-9]|2\d|3[01])\./i,
+  /^::ffff:192\.168\./i,
+  /^::ffff:169\.254\./i,
 ];
+
+/**
+ * Maximum upstream response body size (2 MB).
+ * Prevents OOM from runaway servers returning unexpectedly large payloads.
+ */
+const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 
 /**
  * Validates that a URL is safe to fetch (SSRF prevention).
  *
  * Checks:
  * 1. URL parses as http: or https: — no other schemes
- * 2. Hostname resolves and the resolved IP is not in a private/reserved range
+ * 2. Bare hostname/IP is not in a private range (fast path)
+ * 3. dns.lookup({ all: true, verbatim: true }) resolves ALL address families
+ *    (IPv4 + IPv6). Every resolved address is validated against PRIVATE_IP_PATTERNS.
+ *
+ * Why dns.lookup instead of dns.resolve:
+ * dns.resolve() only returns A records by default, leaving IPv6-only internal
+ * hosts unblocked. dns.lookup({ all: true }) returns both A and AAAA records,
+ * closing that bypass path.
  *
  * @param rawUrl - The URL string to validate
  * @throws Error with a descriptive message if the URL fails any check
@@ -118,28 +168,43 @@ async function assertSafeUrl(rawUrl: string): Promise<void> {
     throw new Error(`Rejected non-HTTP(S) scheme: ${parsed.protocol}`);
   }
 
-  // Reject bare IP literals that are private without DNS lookup
-  const hostname = parsed.hostname;
+  // Strip IPv6 brackets (e.g. [::1] → ::1) before pattern matching
+  const hostname = parsed.hostname.replace(/^\[|\]$/g, '');
+
+  // Fast path: reject bare IP literals that are already in private ranges
   for (const pattern of PRIVATE_IP_PATTERNS) {
     if (pattern.test(hostname)) {
       throw new Error(`Blocked private/reserved host: ${hostname}`);
     }
   }
 
-  // Resolve hostname → IPs and verify none are private
+  // Resolve hostname → ALL address families (IPv4 + IPv6) and validate each.
+  // dns.lookup({ all: true, verbatim: true }) is the correct API here —
+  // dns.resolve() only returns A records and misses AAAA (IPv6) addresses.
   try {
-    const addresses = await dns.resolve(hostname);
-    for (const addr of addresses) {
+    const addresses: LookupAddress[] = await dns.lookup(hostname, { all: true, verbatim: true });
+
+    if (addresses.length === 0) {
+      throw new Error(`No DNS records found for ${hostname}`);
+    }
+
+    for (const { address } of addresses) {
       for (const pattern of PRIVATE_IP_PATTERNS) {
-        if (pattern.test(addr)) {
-          throw new Error(`Hostname ${hostname} resolves to private IP: ${addr}`);
+        if (pattern.test(address)) {
+          throw new Error(`Hostname ${hostname} resolves to private/reserved IP: ${address}`);
         }
       }
     }
   } catch (err: unknown) {
-    // If it was our own validation error, re-throw
-    if (err instanceof Error && err.message.startsWith('Hostname')) throw err;
-    // DNS resolution failure for unknown host — also reject
+    // Re-throw our own validation errors unconditionally
+    if (
+      err instanceof Error && (
+        err.message.startsWith('Hostname') ||
+        err.message.startsWith('No DNS records') ||
+        err.message.startsWith('Blocked')
+      )
+    ) throw err;
+    // DNS resolution failure for unknown host — reject as unsafe
     throw new Error(`DNS resolution failed for ${hostname}: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
@@ -147,8 +212,11 @@ async function assertSafeUrl(rawUrl: string): Promise<void> {
 /**
  * Fetches the og:image or twitter:image from an article URL.
  *
- * SSRF protection: validates the URL scheme and resolves the hostname
- * to confirm it does not point to a private/reserved IP before fetching.
+ * SSRF protection:
+ * - assertSafeUrl validates scheme + resolves ALL address families before fetching
+ * - redirect:'manual' prevents redirect-based SSRF bypass (3xx → internal address)
+ * - Any 3xx response is rejected immediately — Location header is never followed
+ * - Response body capped at MAX_RESPONSE_BYTES to prevent OOM
  *
  * Relative image URLs are resolved to absolute using the article URL as base.
  * Falls back to a deterministic SVG gradient placeholder on any failure.
@@ -158,7 +226,7 @@ async function assertSafeUrl(rawUrl: string): Promise<void> {
  * @returns An absolute image URL or a base64 SVG gradient data URI
  */
 async function fetchOgImage(articleUrl: string, title: string): Promise<string> {
-  // SSRF guard — throws early for private/invalid URLs so fetchWithTimeout is never called
+  // SSRF guard — validates scheme + DNS (all families) before any network call
   try {
     await assertSafeUrl(articleUrl);
   } catch {
@@ -171,9 +239,9 @@ async function fetchOgImage(articleUrl: string, title: string): Promise<string> 
       {
         headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ApexNewsBot/1.0; +https://apex-coral-zeta.vercel.app)' },
         // Disable automatic redirect following. A public domain could validate cleanly
-        // via assertSafeUrl and then redirect to an internal address (e.g. 169.254.x.x,
-        // localhost), bypassing all SSRF protections. With 'manual', the fetch returns
-        // the 3xx response directly without following the Location header.
+        // via assertSafeUrl then redirect to an internal address (e.g. 169.254.169.254),
+        // bypassing all SSRF protections. With 'manual', the fetch returns the 3xx
+        // response directly without following the Location header.
         redirect: 'manual',
       },
       IMAGE_FETCH_TIMEOUT_MS,
@@ -183,7 +251,14 @@ async function fetchOgImage(articleUrl: string, title: string): Promise<string> 
     // The Location header may point to a private/internal address and must not be trusted.
     if (res.status >= 300 && res.status < 400) return gradientPlaceholder(title);
     if (!res.ok) return gradientPlaceholder(title);
-    const html = await res.text();
+
+    // Response size guard — prevents OOM if an article page is unexpectedly large
+    const contentLength = Number(res.headers.get('content-length') ?? 0);
+    if (contentLength > MAX_RESPONSE_BYTES) return gradientPlaceholder(title);
+
+    const rawHtml = await res.text();
+    if (rawHtml.length > MAX_RESPONSE_BYTES) return gradientPlaceholder(title);
+    const html = rawHtml;
 
     /**
      * Resolves a potentially relative image URL to absolute using the article URL as base.
