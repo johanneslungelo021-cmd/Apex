@@ -24,6 +24,7 @@ import { NextResponse } from 'next/server';
 import { runScoutAgent } from '@/lib/agents/scout-agent';
 import { generateRequestId, log, fetchWithTimeout, envTimeoutMs, checkRateLimit } from '@/lib/api-utils';
 import { agentQueryCounter } from '@/lib/metrics';
+import crypto from 'crypto';
 
 /**
  * Service identifier for log entries from this endpoint.
@@ -266,7 +267,12 @@ export async function POST(req: Request): Promise<Response> {
     'unknown';
 
   if (!checkRateLimit(ip, RATE_LIMIT, RATE_WINDOW_MS)) {
-    log({ level: 'warn', service: SERVICE, message: 'Rate limit exceeded', requestId, ip });
+    // Hash the raw IP with a server-side salt before logging — the raw IP is personal
+    // data under GDPR/POPIA. The hash is one-way and preserves correlation across
+    // requests from the same origin without exposing the address itself.
+    const ipSalt = process.env.IP_LOG_SALT || 'apex-ip-log-salt';
+    const hashedIp = crypto.createHash('sha256').update(ip + ipSalt).digest('hex').slice(0, 16);
+    log({ level: 'warn', service: SERVICE, message: 'Rate limit exceeded', requestId, hashedIp });
     return NextResponse.json(
       { error: 'RATE_LIMITED', message: 'Too many requests. Please wait before retrying.', requestId },
       {
