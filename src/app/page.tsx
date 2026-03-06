@@ -111,6 +111,14 @@ export default function SentientInterface() {
   const [news, setNews] = useState<NewsArticle[]>([]);
   const [newsLoading, setNewsLoading] = useState(true);
   const [newsError, setNewsError] = useState(false);
+  /**
+   * Tracks article URLs whose remote images failed to load.
+   * When an image load fails, its article URL is added here and the image
+   * slot falls back to the server-generated SVG gradient data URI.
+   * Using a Set keyed by article URL avoids index-based issues when the
+   * news array changes between renders.
+   */
+  const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
 
   // Ref for the chat panel to enable scrolling into view
   const chatPanelRef = useRef<HTMLDivElement>(null);
@@ -607,9 +615,12 @@ export default function SentientInterface() {
                 onClick={() => triggerSentient(0.5)}
               >
                 <div className="relative w-full h-56 overflow-hidden">
-                  {article.imageUrl.startsWith('data:') ? (
-                    // Data URIs must use raw <img> — Next.js Image doesn't support them.
-                    // These are inline SVGs generated server-side, already optimized.
+                  {article.imageUrl.startsWith('data:') || failedImages.has(article.url) ? (
+                    // Data URIs (server-generated SVG gradients) and failed remote
+                    // images both render via raw <img>. Next.js Image does not support
+                    // data: URIs, and mutating target.src inside onError is an
+                    // anti-pattern that Next.js may override. React state is the
+                    // correct mechanism for switching render paths on load failure.
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={article.imageUrl}
@@ -623,10 +634,10 @@ export default function SentientInterface() {
                       fill
                       sizes="(max-width: 768px) 100vw, 66vw"
                       className="object-cover group-hover:scale-105 transition-transform duration-500"
-                      onError={(e) => {
-                        // Replace with data URI placeholder on error
-                        const target = e.currentTarget as HTMLImageElement;
-                        target.src = `data:image/svg+xml;base64,${btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="800" height="420"><rect width="800" height="420" fill="#18181b"/><text x="400" y="210" font-family="system-ui" font-size="16" fill="#52525b" text-anchor="middle">${article.source}</text></svg>`)}`;
+                      onError={() => {
+                        // Mark this article's image as failed so the next render
+                        // switches to the server-generated SVG gradient placeholder.
+                        setFailedImages((prev) => new Set(prev).add(article.url));
                       }}
                     />
                   )}
@@ -679,9 +690,9 @@ export default function SentientInterface() {
                 onClick={() => triggerSentient(0.5)}
               >
                 <div className="relative w-full h-44 overflow-hidden flex-shrink-0">
-                  {article.imageUrl.startsWith('data:') ? (
-                    // Data URIs must use raw <img> — Next.js Image doesn't support them.
-                    // These are inline SVGs generated server-side, already optimized.
+                  {article.imageUrl.startsWith('data:') || failedImages.has(article.url) ? (
+                    // Data URIs (server-generated SVG gradients) and failed remote
+                    // images both render via raw <img>. See featured card comment.
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={article.imageUrl}
@@ -695,10 +706,8 @@ export default function SentientInterface() {
                       fill
                       sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
                       className="object-cover group-hover:scale-105 transition-transform duration-500"
-                      onError={(e) => {
-                        // Replace with data URI placeholder on error
-                        const target = e.currentTarget as HTMLImageElement;
-                        target.src = `data:image/svg+xml;base64,${btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="220"><rect width="400" height="220" fill="#18181b"/><text x="200" y="110" font-family="system-ui" font-size="14" fill="#52525b" text-anchor="middle">${article.source}</text></svg>`)}`;
+                      onError={() => {
+                        setFailedImages((prev) => new Set(prev).add(article.url));
                       }}
                     />
                   )}
