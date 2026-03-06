@@ -66,6 +66,15 @@ interface ChatMessage {
 const VALID_ROLES = new Set(['user', 'assistant']);
 
 /**
+ * Server-only message type that allows the 'system' role.
+ * Never accepted from clients — only used internally to build the Groq request.
+ */
+interface ServerMessage {
+  role: 'system';
+  content: string;
+}
+
+/**
  * Maximum number of messages allowed in a single request.
  */
 const MAX_MESSAGES = 20;
@@ -321,7 +330,7 @@ export async function POST(req: Request): Promise<Response> {
       `${o.title} (${o.category}, R${o.cost}, ${o.province}) — ${o.link}`
     ).join('\n');
 
-    const systemPrompt: ChatMessage = {
+    const systemPrompt: ServerMessage = {
       role: 'system',
       content:
         'You are the Apex Intelligent Engine — a practical, empathetic assistant helping South Africans ' +

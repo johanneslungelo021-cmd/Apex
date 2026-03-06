@@ -89,9 +89,9 @@ const PRIVATE_IP_PATTERNS = [
   // IPv4 "this network" and broadcast
   /^0\./,
   /^255\./,
-  // IPv6 loopback (::1) and unique-local (fc00::/7)
+  // IPv6 loopback (::1) and unique-local (fc00::/7, so fc and fd prefixes)
   /^::1$/,
-  /^[Ff][Cc-Dd]/,
+  /^[Ff][CcDd]/,
   // IPv6 link-local (fe80::/10)
   /^[Ff][Ee][89aAbB]/,
 ];
