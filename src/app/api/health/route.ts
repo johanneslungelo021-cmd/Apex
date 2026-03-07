@@ -1,84 +1,73 @@
-/**
- * Health Check API Route
- * 
- * Provides system health status and service configuration checks.
- * Detailed service status is only exposed when a valid internal token is provided.
- * 
- * @module api/health
- */
-
+// src/app/api/health/route.ts
 import { NextResponse } from 'next/server';
+import crypto from 'crypto';
+import { APP_VERSION } from '@/lib/version';
 
-/**
- * Performs a timing-safe comparison of two strings to prevent timing attacks.
- * 
- * @param a - First string to compare
- * @param b - Second string to compare
- * @returns True if strings are equal, false otherwise
- * 
- * @example
- * timingSafeEqual('secret-token', 'secret-token') // true
- * timingSafeEqual('secret-token', 'wrong-token') // false
- */
 function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let mismatch = 0;
-  for (let i = 0; i < a.length; i++) {
-    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return mismatch === 0;
+  // Pad both buffers to the same length to avoid leaking expected token length
+  const maxLen = Math.max(a.length, b.length, 1);
+  const bufA = Buffer.alloc(maxLen);
+  const bufB = Buffer.alloc(maxLen);
+  Buffer.from(a).copy(bufA);
+  Buffer.from(b).copy(bufB);
+  // Use Node.js built-in timing-safe comparison
+  return a.length === b.length && crypto.timingSafeEqual(bufA, bufB);
 }
 
-/**
- * Handles GET requests for health status.
- * 
- * Returns basic health information by default. Detailed service configuration
- * is only included when a valid x-health-token header matches HEALTH_DETAILS_TOKEN.
- * 
- * @param req - The incoming HTTP request
- * @returns JSON response with health status
- * 
- * @example
- * // Basic health check (public)
- * GET /api/health
- * // Response: { status: 'ok', timestamp: '...', environment: 'production', version: '1.0.0-phase1' }
- * 
- * // Detailed health check (internal)
- * GET /api/health
- * Header: x-health-token: your-secret-token
- * // Response: { status: 'ok', ..., services: { grafana: {...}, ai: {...}, github: true } }
- */
-export async function GET(req: Request): Promise<Response> {
-  // Require BOTH a non-empty configured token AND a non-empty provided token.
-  // If HEALTH_DETAILS_TOKEN is unset or empty, internal details are always hidden.
-  const providedToken = (req.headers.get('x-health-token') ?? '').trim();
-  const expectedToken = (process.env.HEALTH_DETAILS_TOKEN ?? '').trim();
+export async function GET(req: Request) {
+  const providedToken = req.headers.get('x-health-token') || '';
+  const expectedToken = process.env.HEALTH_DETAILS_TOKEN || '';
 
   const isInternal =
-    expectedToken.length > 0 &&
     providedToken.length > 0 &&
+    expectedToken.length > 0 &&
     timingSafeEqual(providedToken, expectedToken);
 
-  const health = {
+  const otelConfigured = Boolean(
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT &&
+      process.env.OTEL_EXPORTER_OTLP_HEADERS
+  );
+
+  const grafanaSourceConfigured = Boolean(
+    process.env.GRAFANA_API_KEY &&
+      process.env.GRAFANA_INSTANCE_ID &&
+      process.env.GRAFANA_OTLP_ENDPOINT
+  );
+
+  const payload = {
     status: 'ok',
     timestamp: new Date().toISOString(),
-    environment: process.env.VERCEL_ENV || process.env.NODE_ENV || 'unknown',
-    version: '1.0.0-phase1',
-    // Only show detailed service status with a valid, configured internal token
-    ...(isInternal && {
-      services: {
-        grafana: {
-          configured: !!(process.env.GRAFANA_API_KEY && process.env.GRAFANA_INSTANCE_ID),
-          endpoint: process.env.GRAFANA_OTLP_ENDPOINT ? 'configured' : 'missing',
-        },
-        ai: {
-          aiGateway: !!process.env.AI_GATEWAY_API_KEY,
-          groq: !!process.env.GROQ_API_KEY,
-        },
-        github: !!process.env.GITHUB_TOKEN,
-      }
-    })
-  };
+    environment:
+      process.env.VERCEL_ENV || process.env.NODE_ENV || 'unknown',
+    version: APP_VERSION,
+  } as Record<string, unknown>;
 
-  return NextResponse.json(health);
+  if (isInternal) {
+    payload.services = {
+      ai: {
+        groqConfigured: Boolean(process.env.GROQ_API_KEY),
+        perplexityConfigured: Boolean(process.env.PERPLEXITY_API_KEY),
+        aiGatewayConfigured: Boolean(process.env.AI_GATEWAY_API_KEY),
+      },
+      observability: {
+        otelConfigured,
+        otelEndpointConfigured: Boolean(process.env.OTEL_EXPORTER_OTLP_ENDPOINT),
+        otelHeadersConfigured: Boolean(process.env.OTEL_EXPORTER_OTLP_HEADERS),
+        grafanaSourceConfigured,
+      },
+      security: {
+        ipLogSaltConfigured: Boolean(process.env.IP_LOG_SALT),
+        healthDetailsTokenConfigured: Boolean(process.env.HEALTH_DETAILS_TOKEN),
+      },
+      github: {
+        tokenConfigured: Boolean(process.env.GITHUB_TOKEN),
+      },
+    };
+  }
+
+  return NextResponse.json(payload, {
+    headers: {
+      'Cache-Control': 'no-store',
+    },
+  });
 }
