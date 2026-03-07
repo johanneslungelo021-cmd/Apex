@@ -222,7 +222,19 @@ function hashIp(ip: string): string | undefined {
 
 // ─── Cost Estimation ──────────────────────────────────────────────────────────
 
-function estimateCost(tier: TierConfig, outputTokens: number): string {
+function estimateInputTokensFromMessages(messages: ServerMessage[]): number {
+  const combined = messages
+    .map((m) => (typeof m.content === 'string' ? m.content : ''))
+    .join('\n');
+
+  return estimateOutputTokensFromText(combined);
+}
+
+function estimateCost(
+  tier: TierConfig,
+  inputTokens: number,
+  outputTokens: number
+): string {
   const pricing: Record<string, { input: number; output: number }> = {
     'llama-3.1-8b-instant': { input: 0.05, output: 0.08 },
     'llama-3.3-70b-versatile': { input: 0.59, output: 0.79 },
@@ -230,7 +242,7 @@ function estimateCost(tier: TierConfig, outputTokens: number): string {
   };
 
   const p = pricing[tier.model] || { input: 0, output: 0 };
-  const inputCost = (500 / 1_000_000) * p.input;
+  const inputCost = (inputTokens / 1_000_000) * p.input;
   const outputCost = (outputTokens / 1_000_000) * p.output;
   return (inputCost + outputCost).toFixed(6);
 }
@@ -418,6 +430,15 @@ export async function POST(req: Request): Promise<Response> {
     // Scout context as untrusted user message (not instructions)
     const scoutContext = buildScoutContextMessage(opportunitySummary);
 
+    // Build upstream messages array once for reuse
+    const upstreamMessages: ServerMessage[] = [
+      systemPrompt,
+      ...(scoutContext ? [scoutContext] : []),
+      ...messages,
+    ];
+
+    const estimatedInputTokens = estimateInputTokensFromMessages(upstreamMessages);
+
     const apiKey = tierConfig.provider === 'perplexity'
       ? process.env.PERPLEXITY_API_KEY
       : process.env.GROQ_API_KEY;
@@ -454,11 +475,7 @@ export async function POST(req: Request): Promise<Response> {
         },
         body: JSON.stringify({
           model: tierConfig.model,
-          messages: [
-            systemPrompt,
-            ...(scoutContext ? [scoutContext] : []),
-            ...messages,
-          ],
+          messages: upstreamMessages,
           max_tokens: tierConfig.maxTokens,
           temperature: tierConfig.temperature,
           stream: true,
@@ -576,7 +593,11 @@ export async function POST(req: Request): Promise<Response> {
 
           // Estimate tokens from actual text length (~4 chars per token for English)
           const estimatedOutputTokens = estimateOutputTokensFromText(outputText);
-          const costEst = estimateCost(tierConfig, estimatedOutputTokens);
+          const costEst = estimateCost(
+            tierConfig,
+            estimatedInputTokens,
+            estimatedOutputTokens
+          );
 
           // Record histogram
           inferenceLatencyHistogram.record(durationMs, {
@@ -594,14 +615,21 @@ export async function POST(req: Request): Promise<Response> {
             });
           }
 
-          // Record query counter
-          agentQueryCounter.add(1, { status: 'success', tier: tierConfig.tier });
-
           if (!reply.trim()) {
-            log({ level: 'warn', service: SERVICE, message: 'Empty content from upstream', requestId });
+            log({
+              level: 'warn',
+              service: SERVICE,
+              message: 'Empty content from upstream',
+              requestId,
+            });
+
             agentQueryCounter.add(1, { status: 'error', tier: tierConfig.tier });
-            controller.enqueue(encodeNdjsonEvent('error', 'AI engine returned an empty response.'));
+            controller.enqueue(
+              encodeNdjsonEvent('error', 'AI engine returned an empty response.')
+            );
           } else {
+            agentQueryCounter.add(1, { status: 'success', tier: tierConfig.tier });
+
             log({
               level: 'info',
               service: SERVICE,
@@ -610,6 +638,7 @@ export async function POST(req: Request): Promise<Response> {
               durationMs,
               tier: tierConfig.tier,
               model: tierConfig.model,
+              estimatedInputTokens,
               estimatedOutputTokens,
               estimatedCostUsd: costEst,
             });

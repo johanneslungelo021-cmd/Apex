@@ -691,7 +691,7 @@ class Document:
             DocxXMLEditor instance for the specified file
 
         Raises:
-            ValueError: If the file does not exist
+            ValueError: If the file does not exist or escapes the unpacked workspace
 
         Example:
             # Get node from document.xml
@@ -700,15 +700,29 @@ class Document:
             # Get node from comments.xml
             comment = doc["word/comments.xml"].get_node(tag="w:comment", attrs={"w:id": "0"})
         """
-        if xml_path not in self._editors:
-            file_path = self.unpacked_path / xml_path
+        root = self.unpacked_path.resolve()
+
+        raw_path = Path(xml_path)
+        if raw_path.is_absolute():
+            raise ValueError("XML path must be relative to the unpacked workspace")
+
+        file_path = (root / raw_path).resolve()
+
+        try:
+            relative_path = file_path.relative_to(root)
+        except ValueError as exc:
+            raise ValueError(f"XML path must stay within {root}") from exc
+
+        cache_key = relative_path.as_posix()
+
+        if cache_key not in self._editors:
             if not file_path.exists():
                 raise ValueError(f"XML file not found: {xml_path}")
             # Use DocxXMLEditor with RSID, author, and initials for all editors
-            self._editors[xml_path] = DocxXMLEditor(
+            self._editors[cache_key] = DocxXMLEditor(
                 file_path, rsid=self.rsid, author=self.author, initials=self.initials
             )
-        return self._editors[xml_path]
+        return self._editors[cache_key]
 
     def add_comment(self, start, end, text: str) -> int:
         """

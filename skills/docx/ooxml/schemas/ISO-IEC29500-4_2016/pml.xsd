@@ -1033,17 +1033,13 @@
     </xsd:restriction>
   </xsd:simpleType>
   <xsd:complexType name="CT_ModifyVerifier">
-    <xsd:attribute name="algorithmName" type="xsd:string" use="optional"/>
-    <xsd:attribute name="hashValue" type="xsd:base64Binary" use="optional"/>
-    <xsd:attribute name="saltValue" type="xsd:base64Binary" use="optional"/>
-    <xsd:attribute name="spinValue" type="xsd:unsignedInt" use="optional"/>
-    <xsd:attribute name="cryptProviderType" type="s:ST_CryptProv" use="optional"/>
-    <xsd:attribute name="cryptAlgorithmClass" type="s:ST_AlgClass" use="optional"/>
-    <xsd:attribute name="cryptAlgorithmType" type="s:ST_AlgType" use="optional"/>
-    <xsd:attribute name="cryptAlgorithmSid" type="xsd:unsignedInt" use="optional"/>
-    <xsd:attribute name="spinCount" type="xsd:unsignedInt" use="optional"/>
-    <xsd:attribute name="saltData" type="xsd:base64Binary" use="optional"/>
-    <xsd:attribute name="hashData" type="xsd:base64Binary" use="optional"/>
+    <xsd:attribute name="cryptProviderType" type="s:ST_CryptProv" use="required"/>
+    <xsd:attribute name="cryptAlgorithmClass" type="s:ST_AlgClass" use="required"/>
+    <xsd:attribute name="cryptAlgorithmType" type="s:ST_AlgType" use="required"/>
+    <xsd:attribute name="cryptAlgorithmSid" type="xsd:unsignedInt" use="required"/>
+    <xsd:attribute name="spinCount" type="xsd:unsignedInt" use="required"/>
+    <xsd:attribute name="saltData" type="xsd:string" use="required"/>
+    <xsd:attribute name="hashData" type="xsd:string" use="required"/>
     <xsd:attribute name="cryptProvider" type="xsd:string" use="optional"/>
     <xsd:attribute name="algIdExt" type="xsd:unsignedInt" use="optional"/>
     <xsd:attribute name="algIdExtSource" type="xsd:string" use="optional"/>
