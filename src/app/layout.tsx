@@ -1,92 +1,92 @@
 /**
- * Root Layout Component
+ * Root Layout Component — Phase 3
  *
- * Defines the root HTML structure and global configuration for the Apex
- * Sentient Interface application. This layout wraps all pages and provides:
- *
- * - Google Fonts configuration (Geist Sans and Geist Mono)
- * - Global metadata for SEO and social sharing
- * - Vercel Speed Insights for performance monitoring
- * - Antialiasing and base typography styles
+ * Sets up the HTML document structure with:
+ * - Google Fonts (Geist Sans + Geist Mono)
+ * - Full SEO metadata with Open Graph and Twitter cards
+ * - PWA manifest link, theme-color, and apple-touch-icon
+ * - Vercel Speed Insights
+ * - Service worker registration script
  *
  * @module app/layout
- *
- * @see https://nextjs.org/docs/app/api-reference/file-conventions/layout
  */
 
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import { SpeedInsights } from "@vercel/speed-insights/next";
-import "./globals.css";
+import type { Metadata, Viewport } from 'next';
+import { Geist, Geist_Mono } from 'next/font/google';
+import { SpeedInsights } from '@vercel/speed-insights/next';
+import './globals.css';
 
-/**
- * Geist Sans font configuration with CSS variable for Tailwind integration.
- * Provides the primary typeface for the application.
- */
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] });
+const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] });
 
-/**
- * Geist Mono font configuration for code and monospace content.
- * Used for metrics displays and technical text.
- */
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-/**
- * Application metadata for SEO and social sharing.
- *
- * Includes Open Graph configuration for rich link previews on social platforms
- * and search engine optimization settings.
- */
 export const metadata: Metadata = {
-  title: "Apex - Sentient Interface",
-  description: "Phase 1 Complete - Full functional landing page with AI-powered features, real-time GitHub metrics, and OpenTelemetry integration.",
-  keywords: ["Apex", "Sentient Interface", "AI", "Next.js", "Grafana", "OpenTelemetry"],
-  authors: [{ name: "Apex Team" }],
+  title: 'Apex — Sentient Interface',
+  description:
+    'Live digital income opportunities for South African creators. AI-powered Scout Agent finds real options under R2000. Categorised live news from Tech, Finance, Startups.',
+  keywords: [
+    'Apex',
+    'digital income South Africa',
+    'Sentient Interface',
+    'Scout Agent',
+    'AI opportunities',
+    'South Africa freelancing',
+    'ZAR income',
+    'Grafana OpenTelemetry',
+  ],
+  authors: [{ name: 'Apex Team' }],
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Apex',
+  },
   openGraph: {
-    title: "Apex - Sentient Interface",
-    description: "Phase 1 Complete - Full functional landing page with AI-powered features",
-    type: "website",
+    title: 'Apex — Sentient Interface',
+    description:
+      'AI-powered Scout Agent finds real digital income opportunities under R2000 for South African creators.',
+    type: 'website',
+    locale: 'en_ZA',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Apex — Sentient Interface',
+    description: 'Live SA digital income opportunities powered by Scout Agent + Intelligent Engine.',
   },
 };
 
-/**
- * Root layout component that wraps all pages in the application.
- *
- * Sets up the HTML document structure with proper lang attribute,
- * font CSS variables, and includes Vercel Speed Insights for
- * performance monitoring.
- *
- * @param props - Component props
- * @param props.children - Child page components to render
- * @returns The root HTML layout structure
- *
- * @example
- * // This layout automatically wraps all pages
- * // Pages are rendered as {children}
- *
- * // For a page at /about:
- * <RootLayout>
- *   <AboutPage />
- * </RootLayout>
- */
+export const viewport: Viewport = {
+  themeColor: '#09090b',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+};
+
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+    <html lang="en-ZA">
+      <head>
+        <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
+        <meta name="mobile-web-app-capable" content="yes" />
+      </head>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         {children}
         <SpeedInsights />
+
+        {/* Service worker registration — runs only in the browser */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js', { scope: '/' })
+                    .catch(function() {});
+                });
+              }
+            `,
+          }}
+        />
       </body>
     </html>
   );

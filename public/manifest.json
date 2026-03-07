@@ -1,0 +1,47 @@
+{
+  "name": "Apex — Sentient Interface",
+  "short_name": "Apex",
+  "description": "Live digital income opportunities for South African creators, powered by Scout Agent and Intelligent Engine.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "orientation": "portrait-primary",
+  "lang": "en-ZA",
+  "categories": ["business", "finance", "productivity"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshot-mobile.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Live news categories and AI Scout on mobile"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Open AI Scout",
+      "url": "/?openChat=1",
+      "description": "Jump straight to the AI income opportunity finder"
+    },
+    {
+      "name": "Tech & AI News",
+      "url": "/?category=Tech+%26+AI",
+      "description": "Browse latest SA tech and AI news"
+    }
+  ]
+}

@@ -16,6 +16,8 @@
 
 import { NextResponse } from 'next/server';
 import { generateRequestId, log, fetchWithTimeout, envTimeoutMs } from '@/lib/api-utils';
+import { getNotionArticles } from '@/lib/notion-cache';
+import { newsFetchCounter } from '@/lib/metrics';
 import dns, { type LookupAddress } from 'dns/promises';
 
 const SERVICE = 'news';
@@ -173,9 +175,22 @@ export async function GET(req: Request): Promise<Response> {
   const category = VALID_CATEGORIES.has(raw) ? raw : 'Latest';
   const queries = CATEGORY_QUERIES[category];
 
+  // ── Perplexity in-memory cache ────────────────────────────────────────────
   const cached = newsCache.get(category);
   if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+    newsFetchCounter.add(1, { category, source: 'cache' });
     return NextResponse.json({ articles: cached.articles, cached: true, category, requestId });
+  }
+
+  // ── Notion cache — highest priority live source ───────────────────────────
+  // If a Notion automation has pushed curated articles for this category within
+  // the last 30 minutes, serve them directly and skip the Perplexity API call.
+  // Falls back to Perplexity when Notion content is absent or stale.
+  const notionArticles = getNotionArticles(category);
+  if (notionArticles) {
+    log({ level: 'info', service: SERVICE, message: `Serving Notion articles for ${category}`, requestId, count: notionArticles.length });
+    newsFetchCounter.add(1, { category, source: 'notion' });
+    return NextResponse.json({ articles: notionArticles, cached: false, source: 'notion', category, requestId });
   }
 
   const apiKey = process.env.PERPLEXITY_API_KEY;
@@ -245,6 +260,7 @@ export async function GET(req: Request): Promise<Response> {
     );
 
     newsCache.set(category, { articles, cachedAt: Date.now() });
+    newsFetchCounter.add(1, { category, source: 'perplexity' });
     log({ level: 'info', service: SERVICE, message: `News ready — ${articles.length} articles for ${category}`, requestId, durationMs: Date.now() - startMs });
     return NextResponse.json({ articles, cached: false, category, requestId }, { headers: { 'X-Request-Id': requestId } });
 

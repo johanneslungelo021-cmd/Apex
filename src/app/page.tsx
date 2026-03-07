@@ -59,6 +59,8 @@ export default function SentientInterface() {
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
   const [activeCategory, setActiveCategory] = useState<NewsCategory>('Latest');
   const [isChatOpen, setIsChatOpen] = useState(false);
+  /** Authenticated user from session cookie — null when not logged in */
+  const [sessionUser, setSessionUser] = useState<{ domain: string } | null>(null);
 
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
@@ -104,6 +106,20 @@ export default function SentientInterface() {
 
   useEffect(() => {
     fetch('/api/analytics', { method: 'POST' }).catch(() => {});
+
+    // Check for existing session
+    fetch('/api/auth/session')
+      .then((r) => r.json())
+      .then((d) => { if (d.user) setSessionUser(d.user); })
+      .catch(() => {});
+
+    // PWA shortcut URL params: ?openChat=1, ?category=Tech+%26+AI
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('openChat') === '1') setIsChatOpen(true);
+    const catParam = params.get('category');
+    if (catParam && (NEWS_CATEGORIES as readonly string[]).includes(catParam)) {
+      setActiveCategory(catParam as NewsCategory);
+    }
   }, []);
 
   useEffect(() => {
@@ -178,14 +194,22 @@ export default function SentientInterface() {
       });
       const data = await res.json();
       if (res.ok) {
-        alert('Account created – welcome to the Sentient Interface');
         setShowRegister(false);
+        setRegisterEmail('');
+        if (data.user?.domain) setSessionUser({ domain: data.user.domain });
+        triggerSentient(1);
       } else {
         alert(data.message || 'Registration failed. Please check your email and try again.');
       }
     } catch (err) {
       alert('Registration failed: ' + (err instanceof Error ? err.message : 'Please try again.'));
     }
+  };
+
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    setSessionUser(null);
+    triggerSentient(0.5);
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -255,12 +279,26 @@ export default function SentientInterface() {
               onChange={(e) => { setSearchTerm(e.target.value); if (e.target.value.length % 3 === 0) triggerSentient(0.3); }}
             />
           </div>
-          <button
-            onClick={() => { setShowRegister(true); triggerSentient(1); }}
-            className="glass px-6 py-3 rounded-2xl flex items-center gap-2 hover:scale-105 transition"
-          >
-            <User className="w-4 h-4" /> Register
-          </button>
+          {sessionUser ? (
+            <div className="flex items-center gap-2">
+              <span className="glass px-3 py-2 rounded-2xl text-xs text-emerald-400 hidden sm:block">
+                ● {sessionUser.domain}
+              </span>
+              <button
+                onClick={handleLogout}
+                className="glass px-4 py-3 rounded-2xl flex items-center gap-2 hover:scale-105 transition text-zinc-400 hover:text-white text-sm"
+              >
+                <User className="w-4 h-4" /> Sign out
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => { setShowRegister(true); triggerSentient(1); }}
+              className="glass px-6 py-3 rounded-2xl flex items-center gap-2 hover:scale-105 transition"
+            >
+              <User className="w-4 h-4" /> Register
+            </button>
+          )}
         </div>
       </nav>
 
