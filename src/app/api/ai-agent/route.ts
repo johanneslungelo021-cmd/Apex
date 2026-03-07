@@ -6,17 +6,36 @@
  * - Complex queries → llama-3.3-70b-versatile ($0.59/$0.79 per M tokens)
  * - Research queries → Perplexity Sonar ($1/$1 per M tokens)
  *
- * Features SSE streaming, rate limiting, input validation, streaming responses,
+ * Features NDJSON streaming, rate limiting, input validation, streaming responses,
  * and integration with the Scout Agent for live opportunity data.
  *
  * @module app/api/ai-agent
  */
 
 import { NextResponse } from 'next/server';
-import { runScoutAgent } from '@/lib/agents/scout-agent';
-import { generateRequestId, log, fetchWithTimeout, envTimeoutMs, checkRateLimit } from '@/lib/api-utils';
-import { agentQueryCounter, inferenceLatencyHistogram, costAccumulator, rateLimitCounter, payloadRejectCounter } from '@/lib/metrics';
 import crypto from 'crypto';
+import { runScoutAgent } from '@/lib/agents/scout-agent';
+import {
+  generateRequestId,
+  log,
+  envTimeoutMs,
+  checkRateLimit,
+} from '@/lib/api-utils';
+import {
+  agentQueryCounter,
+  inferenceLatencyHistogram,
+  costAccumulator,
+  rateLimitCounter,
+  payloadRejectCounter,
+} from '@/lib/metrics';
+import {
+  STATIC_SYSTEM_PROMPT,
+  buildScoutContextMessage,
+  encodeNdjsonEvent,
+  estimateOutputTokensFromText,
+  type ServerMessage,
+} from '@/lib/ai-agent/contracts';
+import { APP_VERSION } from '@/lib/version';
 
 const SERVICE = 'ai-agent';
 const GROQ_TIMEOUT_MS = envTimeoutMs(process.env.GROQ_TIMEOUT_MS, 15_000);
@@ -29,11 +48,6 @@ const MAX_CONTENT_LENGTH = 4000;
 const MAX_TOTAL_PAYLOAD_BYTES = 50_000;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-interface ServerMessage {
-  role: 'system';
-  content: string;
-}
 
 interface ValidatedMessage {
   role: 'user' | 'assistant';
@@ -206,25 +220,6 @@ function hashIp(ip: string): string | undefined {
   return crypto.createHmac('sha256', ipLogSalt).update(ip).digest('hex').slice(0, 16);
 }
 
-// ─── System Prompt Builder ────────────────────────────────────────────────────
-
-function buildSystemPrompt(opportunitySummary: string): string {
-  return `You are the Apex Intelligent Engine — a practical, empathetic assistant helping South Africans build sustainable digital income. Always lead with a direct Answer-First paragraph (2–3 sentences). Then provide a structured breakdown with clear headings. Use ZAR pricing and reference local platforms.
-
-Guidelines:
-- Be direct, analytical, and action-oriented
-- When discussing money, use ZAR (South African Rand)
-- When a user asks you to "Research" a news topic, provide:
-  1. 📰 What happened (3 bullet summary)
-  2. 🇿🇦 South African impact analysis
-  3. 💰 Actionable opportunities for digital creators
-- Keep responses under 300 words unless the user explicitly asks for detail
-- Use [1], [2] citation format when referencing sources
-
-Live opportunities (refreshed every 5 minutes):
-${opportunitySummary || 'None available right now.'}`;
-}
-
 // ─── Cost Estimation ──────────────────────────────────────────────────────────
 
 function estimateCost(tier: TierConfig, outputTokens: number): string {
@@ -240,11 +235,7 @@ function estimateCost(tier: TierConfig, outputTokens: number): string {
   return (inputCost + outputCost).toFixed(6);
 }
 
-// ─── Stream Helpers ───────────────────────────────────────────────────────────
-
-function encodeStreamEvent(payload: Record<string, unknown>): Uint8Array {
-  return new TextEncoder().encode(`${JSON.stringify(payload)}\n`);
-}
+// ─── SSE Helpers ──────────────────────────────────────────────────────────────
 
 function extractContentChunk(dataLine: string): string {
   try {
@@ -273,7 +264,7 @@ function parseSseBuffer(buffer: string): { events: string[]; rest: string } {
 export async function GET(): Promise<Response> {
   const manifest = {
     name: 'Apex Intelligent Engine',
-    version: '3.0.0',
+    version: APP_VERSION,
     description:
       'Tiered AI assistant with streaming responses, cost-optimized model routing, and live web research for South African digital income opportunities.',
     models: {
@@ -282,6 +273,7 @@ export async function GET(): Promise<Response> {
       research: 'sonar (Perplexity, $1/$1 per M tokens + $0.005/request)',
     },
     streaming: true,
+    stream: 'application/x-ndjson — one JSON object per line: { "type": "...", "data": ... }',
     rateLimit: { requests: RATE_LIMIT, windowMs: RATE_WINDOW_MS },
     inputSchema: {
       type: 'object',
@@ -410,14 +402,21 @@ export async function POST(req: Request): Promise<Response> {
 
   try {
     const opportunities = await runScoutAgent();
-    const opportunitySummary = opportunities.map(o =>
-      `${o.title} (${o.category}, R${o.cost}, ${o.province}) — ${o.link}`
-    ).join('\n');
+    const opportunitySummary = opportunities
+      .map(
+        (o) =>
+          `${o.title} (${o.category}, R${o.cost}, ${o.province}) — ${o.link}`
+      )
+      .join('\n');
 
+    // Static system prompt (no dynamic scout data inside privileged instructions)
     const systemPrompt: ServerMessage = {
       role: 'system',
-      content: buildSystemPrompt(opportunitySummary),
+      content: STATIC_SYSTEM_PROMPT,
     };
+
+    // Scout context as untrusted user message (not instructions)
+    const scoutContext = buildScoutContextMessage(opportunitySummary);
 
     const apiKey = tierConfig.provider === 'perplexity'
       ? process.env.PERPLEXITY_API_KEY
@@ -440,7 +439,7 @@ export async function POST(req: Request): Promise<Response> {
       ? 'https://api.perplexity.ai/chat/completions'
       : 'https://api.groq.com/openai/v1/chat/completions';
 
-    // CR-3: Create abort controller that responds to BOTH timeout AND client disconnect
+    // Create abort controller that responds to BOTH timeout AND client disconnect
     const abortController = new AbortController();
     const timeoutMs = tierConfig.provider === 'perplexity' ? PERPLEXITY_TIMEOUT_MS : GROQ_TIMEOUT_MS;
     const timeoutId = setTimeout(() => abortController.abort('timeout'), timeoutMs);
@@ -455,7 +454,11 @@ export async function POST(req: Request): Promise<Response> {
         },
         body: JSON.stringify({
           model: tierConfig.model,
-          messages: [systemPrompt, ...messages],
+          messages: [
+            systemPrompt,
+            ...(scoutContext ? [scoutContext] : []),
+            ...messages,
+          ],
           max_tokens: tierConfig.maxTokens,
           temperature: tierConfig.temperature,
           stream: true,
@@ -507,7 +510,7 @@ export async function POST(req: Request): Promise<Response> {
       );
     }
 
-    // CR-3: Store reader for cancellation in cancel() callback
+    // Store reader for cancellation in cancel() callback
     const upstreamReader = response.body.getReader();
     const decoder = new TextDecoder();
 
@@ -515,10 +518,11 @@ export async function POST(req: Request): Promise<Response> {
       async start(controller) {
         let buffer = '';
         let reply = '';
-        // CR-2: Track actual text length for token estimation
+        // Track actual text length for token estimation
         let outputText = '';
 
-        controller.enqueue(encodeStreamEvent({ type: 'opportunities', data: opportunities }));
+        // Send opportunities as first event using NDJSON format
+        controller.enqueue(encodeNdjsonEvent('opportunities', opportunities));
 
         try {
           while (true) {
@@ -543,7 +547,7 @@ export async function POST(req: Request): Promise<Response> {
 
                 reply += chunk;
                 outputText += chunk;
-                controller.enqueue(encodeStreamEvent({ type: 'chunk', data: chunk }));
+                controller.enqueue(encodeNdjsonEvent('chunk', chunk));
               }
             }
           }
@@ -563,16 +567,16 @@ export async function POST(req: Request): Promise<Response> {
 
               reply += chunk;
               outputText += chunk;
-              controller.enqueue(encodeStreamEvent({ type: 'chunk', data: chunk }));
+              controller.enqueue(encodeNdjsonEvent('chunk', chunk));
             }
           }
 
-          // CR-1: Record ALL metrics in success path
+          // Record ALL metrics in success path
           const durationMs = Date.now() - startMs;
 
-          // CR-2: Estimate tokens from actual text length (~4 chars per token for English)
-          const estimatedOutputTokens = Math.ceil(outputText.length / 4);
-          const costEstimate = estimateCost(tierConfig, estimatedOutputTokens);
+          // Estimate tokens from actual text length (~4 chars per token for English)
+          const estimatedOutputTokens = estimateOutputTokensFromText(outputText);
+          const costEst = estimateCost(tierConfig, estimatedOutputTokens);
 
           // Record histogram
           inferenceLatencyHistogram.record(durationMs, {
@@ -582,7 +586,7 @@ export async function POST(req: Request): Promise<Response> {
           });
 
           // Record cost counter
-          const costFloat = parseFloat(costEstimate);
+          const costFloat = parseFloat(costEst);
           if (costFloat > 0) {
             costAccumulator.add(costFloat, {
               tier: tierConfig.tier,
@@ -596,7 +600,7 @@ export async function POST(req: Request): Promise<Response> {
           if (!reply.trim()) {
             log({ level: 'warn', service: SERVICE, message: 'Empty content from upstream', requestId });
             agentQueryCounter.add(1, { status: 'error', tier: tierConfig.tier });
-            controller.enqueue(encodeStreamEvent({ type: 'error', data: 'AI engine returned an empty response.' }));
+            controller.enqueue(encodeNdjsonEvent('error', 'AI engine returned an empty response.'));
           } else {
             log({
               level: 'info',
@@ -607,20 +611,21 @@ export async function POST(req: Request): Promise<Response> {
               tier: tierConfig.tier,
               model: tierConfig.model,
               estimatedOutputTokens,
-              estimatedCostUsd: costEstimate,
+              estimatedCostUsd: costEst,
             });
           }
 
           // Send done event with metadata
-          controller.enqueue(encodeStreamEvent({
-            type: 'done',
-            requestId,
-            durationMs,
-            tier: tierConfig.tier,
-            model: tierConfig.model,
-            estimatedOutputTokens,
-            estimatedCostUsd: costEstimate,
-          }));
+          controller.enqueue(
+            encodeNdjsonEvent('done', {
+              requestId,
+              durationMs,
+              tier: tierConfig.tier,
+              model: tierConfig.model,
+              estimatedOutputTokens,
+              estimatedCostUsd: costEst,
+            })
+          );
         } catch (err: unknown) {
           const errMsg = err instanceof Error ? err.message : String(err);
           const isClientDisconnect = err instanceof Error && err.message.includes('cancel');
@@ -642,17 +647,16 @@ export async function POST(req: Request): Promise<Response> {
             tier: tierConfig.tier,
           });
 
-          controller.enqueue(encodeStreamEvent({
-            type: 'error',
-            data: 'Stream interrupted. Please try again.',
-          }));
+          controller.enqueue(
+            encodeNdjsonEvent('error', 'Stream interrupted. Please try again.')
+          );
         } finally {
           controller.close();
           upstreamReader.releaseLock();
         }
       },
 
-      // CR-3: Abort upstream when client disconnects
+      // Abort upstream when client disconnects
       cancel() {
         abortController.abort('client_disconnect');
         upstreamReader.cancel().catch(() => {});

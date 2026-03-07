@@ -1,5 +1,6 @@
 // instrumentation.ts
 import { registerOTel } from '@vercel/otel';
+import { APP_VERSION } from '@/lib/version';
 
 export function register() {
   registerOTel({
@@ -7,7 +8,7 @@ export function register() {
     attributes: {
       'deployment.environment':
         process.env.VERCEL_ENV || process.env.NODE_ENV || 'production',
-      'service.version': '2.1.0-phase2',
+      'service.version': APP_VERSION,
       'service.instance.id': process.env.VERCEL_REGION || 'local',
     },
   });

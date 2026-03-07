@@ -33,6 +33,7 @@
     "skills",
     "scripts",
     "db",
-    "config"
+    "config",
+    "tests"
   ]
 }

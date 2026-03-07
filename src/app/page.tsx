@@ -212,27 +212,54 @@ export default function SentientInterface() {
         const trimmed = line.trim();
         if (!trimmed) return;
 
-        let event: { type?: string; data?: unknown };
+        let parsed: unknown;
         try {
-          event = JSON.parse(trimmed);
+          parsed = JSON.parse(trimmed);
         } catch {
           return;
         }
 
-        if (event.type === 'opportunities' && Array.isArray(event.data) && event.data.length > 0) {
-          setOpportunities(event.data as Opportunity[]);
+        if (!parsed || typeof parsed !== 'object') return;
+        const event = parsed as Record<string, unknown>;
+        const type = typeof event.type === 'string' ? event.type : undefined;
+        const data = event.data;
+
+        if (type === 'opportunities') {
+          if (Array.isArray(data) && data.length > 0) {
+            setOpportunities(data as Opportunity[]);
+          }
           return;
         }
 
-        if (event.type === 'chunk' && typeof event.data === 'string') {
-          assistantReply += event.data;
-          setAssistantContent(assistantReply);
+        if (type === 'chunk') {
+          if (typeof data === 'string') {
+            assistantReply += data;
+            setAssistantContent(assistantReply);
+          }
           return;
         }
 
-        if (event.type === 'error' && typeof event.data === 'string') {
-          assistantReply = event.data;
-          setAssistantContent(event.data);
+        if (type === 'error') {
+          if (typeof data === 'string' && data.trim()) {
+            assistantReply = data;
+            setAssistantContent(data);
+          }
+          return;
+        }
+
+        if (type === 'done') {
+          return;
+        }
+
+        // Backward-compatibility for older payloads if any stale deployment emits them
+        if (Array.isArray(event.opportunities) && event.opportunities.length > 0) {
+          setOpportunities(event.opportunities as Opportunity[]);
+          return;
+        }
+
+        if (typeof event.message === 'string' && event.message.trim()) {
+          assistantReply = event.message;
+          setAssistantContent(event.message);
         }
       };
 
@@ -411,15 +438,25 @@ export default function SentientInterface() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {opportunities.map((opp) => (
-              <motion.a
-                key={opp.link}
-                href={opp.link}
-                target="_blank"
-                rel="noopener noreferrer"
+              <motion.div
+                key={opp.link || opp.title}
                 className="glass p-6 rounded-3xl cursor-pointer hover:border-white/20 border border-transparent transition"
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => triggerSentient(0.6)}
+                onClick={() => {
+                  triggerSentient(0.6);
+                  window.open(opp.link, '_blank', 'noopener,noreferrer');
+                }}
+                role="article"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    triggerSentient(0.6);
+                    window.open(opp.link, '_blank', 'noopener,noreferrer');
+                  }
+                }}
+                aria-label={`View opportunity: ${opp.title}`}
               >
                 <div className="flex items-start justify-between mb-3">
                   <span className="text-xs glass px-3 py-1 rounded-full text-zinc-400">{opp.category}</span>
@@ -431,7 +468,7 @@ export default function SentientInterface() {
                   <span className="text-emerald-400 font-mono">R{opp.cost} cost</span>
                   <span className="text-zinc-300">{opp.incomePotential}</span>
                 </div>
-              </motion.a>
+              </motion.div>
             ))}
           </div>
         )}
