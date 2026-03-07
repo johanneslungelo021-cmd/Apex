@@ -100,6 +100,87 @@ const MAX_CONTENT_LENGTH = 4000;
  */
 const MAX_TOTAL_PAYLOAD_BYTES = 50_000;
 
+// ─── Chunked Body Protection ──────────────────────────────────────────────────
+
+/**
+ * Custom error for request body exceeding size limits.
+ * Allows callers to distinguish payload-too-large from other parse errors.
+ */
+class PayloadTooLargeError extends Error {
+  constructor(message: string = 'Request body exceeds size limit') {
+    super(message);
+    this.name = 'PayloadTooLargeError';
+  }
+}
+
+/**
+ * Reads and parses a JSON request body while enforcing the MAX_REQUEST_BODY_BYTES limit.
+ *
+ * Handles both Content-Length (fast path) and chunked transfer encoding (streaming path).
+ * For chunked requests where Content-Length is absent, streams the body in chunks and
+ * stops if accumulated bytes would exceed the limit.
+ *
+ * @param req - The incoming Request object
+ * @returns Parsed JSON value on success
+ * @throws PayloadTooLargeError if body exceeds MAX_REQUEST_BODY_BYTES
+ * @throws SyntaxError if body is not valid JSON
+ *
+ * @example
+ * try {
+ *   const body = await readJsonBodyWithinLimit(req);
+ * } catch (err) {
+ *   if (err instanceof PayloadTooLargeError) {
+ *     return NextResponse.json({ error: 'PAYLOAD_TOO_LARGE' }, { status: 413 });
+ *   }
+ * }
+ */
+async function readJsonBodyWithinLimit(req: Request): Promise<unknown> {
+  // Fast path: Content-Length header present
+  const contentLength = req.headers.get('content-length');
+  if (contentLength) {
+    const declaredLength = parseInt(contentLength, 10);
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_REQUEST_BODY_BYTES) {
+      throw new PayloadTooLargeError();
+    }
+    return req.json();
+  }
+
+  // Streaming path: chunked transfer encoding (no Content-Length)
+  const reader = req.body?.getReader();
+  if (!reader) {
+    throw new SyntaxError('No request body');
+  }
+
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+
+    totalBytes += value.byteLength;
+    if (totalBytes > MAX_REQUEST_BODY_BYTES) {
+      // Cancel the stream to stop receiving more data
+      await reader.cancel().catch(() => {});
+      throw new PayloadTooLargeError();
+    }
+
+    chunks.push(value);
+  }
+
+  // Merge chunks and decode
+  const merged = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  const text = new TextDecoder().decode(merged);
+  return JSON.parse(text);
+}
+
 // ─── Validation ───────────────────────────────────────────────────────────────
 
 /**
@@ -301,20 +382,18 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  // ── Request size guard ─────────────────────────────────────────────────────
-  const contentLength = req.headers.get('content-length');
-  if (contentLength && parseInt(contentLength, 10) > MAX_REQUEST_BODY_BYTES) {
-    return NextResponse.json(
-      { error: 'PAYLOAD_TOO_LARGE', message: 'Request body exceeds 5 MB limit.', requestId },
-      { status: 413, headers: { 'X-Request-Id': requestId } },
-    );
-  }
-
-  // ── Parse body ────────────────────────────────────────────────────────────
+  // ── Parse body with chunked protection ──────────────────────────────────────
   let body: unknown;
   try {
-    body = await req.json();
-  } catch {
+    body = await readJsonBodyWithinLimit(req);
+  } catch (err: unknown) {
+    if (err instanceof PayloadTooLargeError) {
+      return NextResponse.json(
+        { error: 'PAYLOAD_TOO_LARGE', message: 'Request body exceeds 5 MB limit.', requestId },
+        { status: 413, headers: { 'X-Request-Id': requestId } },
+      );
+    }
+    // JSON parse error or no body
     return NextResponse.json(
       { error: 'VALIDATION_ERROR', message: 'Invalid JSON body.', requestId },
       { status: 400, headers: { 'X-Request-Id': requestId } },

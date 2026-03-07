@@ -209,9 +209,17 @@ async function fetchOgImage(articleUrl: string, title: string): Promise<string> 
     const html = await readHtmlWithinLimit(res);
     if (html === null) return gradientPlaceholder(title);
 
-    const toAbsolute = (value: string): string | null => {
+    /**
+     * Resolves a potentially relative image URL to absolute AND re-validates with SSRF checks.
+     * This prevents bypass where a public page includes an OG:image pointing to a private IP.
+     * Returns null if resolution fails OR the resolved URL fails SSRF validation.
+     */
+    const resolveSafeImageUrl = async (value: string): Promise<string | null> => {
       try {
-        return new URL(value, articleUrl).toString();
+        const absolute = new URL(value, articleUrl).toString();
+        // Re-validate the resolved URL — it may now point to a private IP
+        await assertSafeUrl(absolute);
+        return absolute;
       } catch {
         return null;
       }
@@ -220,14 +228,14 @@ async function fetchOgImage(articleUrl: string, title: string): Promise<string> 
     const ogMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
       ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
     if (ogMatch?.[1]) {
-      const abs = toAbsolute(ogMatch[1]);
+      const abs = await resolveSafeImageUrl(ogMatch[1]);
       if (abs) return abs;
     }
 
     const twMatch = html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i)
       ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i);
     if (twMatch?.[1]) {
-      const abs = toAbsolute(twMatch[1]);
+      const abs = await resolveSafeImageUrl(twMatch[1]);
       if (abs) return abs;
     }
 
@@ -294,8 +302,10 @@ export async function GET(): Promise<Response> {
     );
 
     if (!response.ok) {
-      const errText = await response.text().catch(() => '');
-      log({ level: 'warn', service: SERVICE, message: `Perplexity HTTP ${response.status}`, requestId, error: errText });
+      // Consume the response body to allow connection reuse, but do NOT log raw error text.
+      // The body may contain sensitive user data echoed back from Perplexity.
+      await response.text().catch(() => {});
+      log({ level: 'warn', service: SERVICE, message: `Perplexity HTTP ${response.status}`, requestId });
       if (newsCache) return NextResponse.json({ articles: newsCache.articles, cached: true, stale: true, requestId });
       return NextResponse.json(
         { error: 'UPSTREAM_ERROR', message: 'News service temporarily unavailable.', requestId },
