@@ -212,22 +212,31 @@ export default function SentientInterface() {
   /**
    * Sends a message to the Intelligent Engine (/api/ai-agent).
    *
-   * Includes live Scout Agent data in the response. Updates chat history
-   * and opportunities panel when new opportunities are returned.
+   * Consumes SSE streaming response for real-time token display.
+   * Updates chat history progressively as chunks arrive.
+   *
+   * @param messageOverride - Optional message to send instead of aiMessage state
    */
-  const sendToAIAssistant = async () => {
-    if (!aiMessage.trim() || agentLoading) return;
+  const sendToAIAssistant = useCallback(async (messageOverride?: string) => {
+    const messageToSend = messageOverride || aiMessage;
+    if (!messageToSend.trim() || agentLoading) return;
 
     triggerSentient(1.2);
 
-    const userMsg = { role: 'user', content: aiMessage };
-    const newHistory = [...chatHistory, userMsg];
+    const userMsg = { role: 'user' as const, content: messageToSend };
+    const assistantMsg = { role: 'assistant' as const, content: '' };
+    
+    // Add user message and empty assistant placeholder
+    const newHistory = [...chatHistory, userMsg, assistantMsg];
     setChatHistory(newHistory);
     setAiMessage('');
     setAgentLoading(true);
 
-    // Build messages array for the agent (exclude system messages from history)
+    const assistantMsgIndex = newHistory.length - 1;
+
+    // Build messages array for the agent
     const agentMessages = newHistory
+      .slice(0, -1) // Exclude the empty assistant message
       .filter(m => m.role === 'user' || m.role === 'assistant')
       .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }));
 
@@ -238,44 +247,140 @@ export default function SentientInterface() {
         body: JSON.stringify({ messages: agentMessages }),
       });
 
-      const data = await res.json();
-
+      // Handle non-OK responses (rate limit, validation errors, etc.)
       if (!res.ok) {
-        setChatHistory([...newHistory, { role: 'assistant', content: data.message || 'Something went wrong. Please try again.' }]);
-      } else {
-        setChatHistory([...newHistory, { role: 'assistant', content: data.reply }]);
-        // Update opportunities panel if the agent returned fresh ones
-        if (Array.isArray(data.opportunities) && data.opportunities.length > 0) {
-          setOpportunities(data.opportunities);
+        const contentType = res.headers.get('content-type');
+        if (contentType?.includes('application/json')) {
+          const data = await res.json();
+          setChatHistory(prev => {
+            const updated = [...prev];
+            updated[assistantMsgIndex] = { role: 'assistant', content: data.message || 'Something went wrong. Please try again.' };
+            return updated;
+          });
+        } else {
+          setChatHistory(prev => {
+            const updated = [...prev];
+            updated[assistantMsgIndex] = { role: 'assistant', content: `Error: ${res.status} ${res.statusText}` };
+            return updated;
+          });
+        }
+        return;
+      }
+
+      // Consume SSE stream
+      const reader = res.body?.getReader();
+      if (!reader) {
+        setChatHistory(prev => {
+          const updated = [...prev];
+          updated[assistantMsgIndex] = { role: 'assistant', content: 'No response stream received.' };
+          return updated;
+        });
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let fullContent = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process complete SSE events (split by double newline)
+        const events = buffer.split('\n\n');
+        buffer = events.pop() || ''; // Keep incomplete event in buffer
+
+        for (const event of events) {
+          const lines = event.split('\n');
+          let eventData = '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              eventData = line.slice(6);
+            }
+          }
+
+          if (!eventData || eventData === '[DONE]') continue;
+
+          try {
+            const json = JSON.parse(eventData);
+
+            // Handle opportunities event (from Scout Agent)
+            if (json.type === 'opportunities' && Array.isArray(json.opportunities)) {
+              setOpportunities(json.opportunities);
+            }
+
+            // Handle chunk events
+            if (json.type === 'chunk' && json.content) {
+              fullContent += json.content;
+              setChatHistory(prev => {
+                const updated = [...prev];
+                if (updated[assistantMsgIndex]) {
+                  updated[assistantMsgIndex] = { role: 'assistant', content: fullContent };
+                }
+                return updated;
+              });
+            }
+
+            // Handle done event
+            if (json.type === 'done' || json.durationMs) {
+              triggerSentient(0.8);
+            }
+
+            // Handle error event
+            if (json.type === 'error') {
+              setChatHistory(prev => {
+                const updated = [...prev];
+                updated[assistantMsgIndex] = { role: 'assistant', content: json.message || 'An error occurred.' };
+                return updated;
+              });
+            }
+          } catch {
+            // Malformed JSON — skip silently
+          }
         }
       }
-      triggerSentient(0.8);
+
+      // Final update if content was streamed
+      if (fullContent) {
+        setChatHistory(prev => {
+          const updated = [...prev];
+          updated[assistantMsgIndex] = { role: 'assistant', content: fullContent };
+          return updated;
+        });
+      }
     } catch (error) {
       console.error('AI Agent error:', error);
-      setChatHistory([...newHistory, { role: 'assistant', content: 'Connection error. Please try again.' }]);
+      setChatHistory(prev => {
+        const updated = [...prev];
+        updated[assistantMsgIndex] = { role: 'assistant', content: 'Connection error. Please try again.' };
+        return updated;
+      });
     } finally {
       setAgentLoading(false);
     }
-  };
+  }, [aiMessage, agentLoading, chatHistory, triggerSentient]);
 
   /**
-   * Investigates a news article by pre-filling the AI chat with a research prompt.
+   * Investigates a news article by auto-submitting a research prompt to the AI.
    *
-   * Scrolls the chat panel into view, sets a structured research prompt,
-   * and focuses the input field for immediate user interaction.
+   * Scrolls the chat panel into view and immediately sends a structured
+   * research prompt to the Intelligent Engine for AI analysis.
    *
    * @param articleTitle - The title of the news article to investigate
    */
   const investigateNews = useCallback((articleTitle: string) => {
     triggerSentient(0.6);
     const researchPrompt = `Research the following news topic and explain its relevance to South African digital income opportunities:\n\n"${articleTitle}"\n\nProvide: 1) Key insights, 2) Potential opportunities, 3) Actionable next steps.`;
-    setAiMessage(researchPrompt);
+    
     // Scroll chat panel into view
     chatPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    // Focus the input field
-    const inputEl = document.getElementById('ai-chat-input') as HTMLInputElement | null;
-    inputEl?.focus();
-  }, [triggerSentient]);
+    
+    // Directly send the research prompt (auto-submit)
+    sendToAIAssistant(researchPrompt);
+  }, [triggerSentient, sendToAIAssistant]);
 
   /**
    * Handles user registration form submission.

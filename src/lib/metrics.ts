@@ -113,16 +113,55 @@ export const scoutOpportunitiesCounter = meter.createCounter('apex_scout_opportu
 
 /**
  * Counter for tracking AI agent queries via /api/ai-agent.
- * Tagged with status: 'success' | 'timeout' | 'error'.
+ * Tagged with status: 'success' | 'timeout' | 'error' and tier: 'simple' | 'complex' | 'research'.
  * Used to monitor the health and reliability of the intelligent engine.
  *
  * Metric name: `apex_agent_query_total`
  *
  * @example
- * agentQueryCounter.add(1, { status: 'success' });
- * agentQueryCounter.add(1, { status: 'timeout' });
- * agentQueryCounter.add(1, { status: 'error' });
+ * agentQueryCounter.add(1, { status: 'success', tier: 'simple' });
+ * agentQueryCounter.add(1, { status: 'timeout', tier: 'complex' });
  */
 export const agentQueryCounter = meter.createCounter('apex_agent_query_total', {
-  description: 'Total AI agent queries by status',
+  description: 'Total AI agent queries by status and tier',
+});
+
+/**
+ * Histogram for tracking AI agent query latency in milliseconds.
+ * Buckets optimized for API response times (50ms to 30s).
+ * Tagged with tier: 'simple' | 'complex' | 'research'.
+ *
+ * Metric name: `apex_agent_query_duration_ms`
+ *
+ * @example
+ * agentQueryHistogram.record(1250, { tier: 'simple', provider: 'groq' });
+ */
+export const agentQueryHistogram = meter.createHistogram('apex_agent_query_duration_ms', {
+  description: 'AI agent query latency in milliseconds',
+});
+
+/**
+ * Histogram for tracking Scout agent run latency in milliseconds.
+ * Buckets optimized for background job times (100ms to 30s).
+ *
+ * Metric name: `apex_scout_run_duration_ms`
+ *
+ * @example
+ * scoutRunHistogram.record(3500);
+ */
+export const scoutRunHistogram = meter.createHistogram('apex_scout_run_duration_ms', {
+  description: 'Scout agent run latency in milliseconds',
+});
+
+/**
+ * Counter for tracking estimated cost in USD per query.
+ * Tagged with tier and model for cost attribution.
+ *
+ * Metric name: `apex_agent_estimated_cost_usd`
+ *
+ * @example
+ * agentCostCounter.add(0.000145, { tier: 'simple', model: 'llama-3.1-8b-instant' });
+ */
+export const agentCostCounter = meter.createCounter('apex_agent_estimated_cost_usd', {
+  description: 'Estimated cost in USD per AI agent query',
 });
