@@ -6,8 +6,6 @@
  * fallback for reliability.
  *
  * @module api/news
- *
- * @see https://docs.perplexity.ai/api-reference/search
  */
 
 import { NextResponse } from 'next/server';
@@ -17,32 +15,18 @@ import dns from 'dns/promises';
 const SERVICE = 'news';
 const PERPLEXITY_TIMEOUT_MS = envTimeoutMs(process.env.PERPLEXITY_TIMEOUT_MS, 14_000);
 const IMAGE_FETCH_TIMEOUT_MS = 4_000;
-const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
-const MAX_IMAGE_RESPONSE_BYTES = 2 * 1024 * 1024; // 2 MB cap for OG images
+const CACHE_TTL_MS = 10 * 60 * 1000;
+const MAX_IMAGE_RESPONSE_BYTES = 2 * 1024 * 1024;
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-/**
- * A news article with metadata and image.
- */
 export interface NewsArticle {
-  /** Article headline */
   title: string;
-  /** Article URL */
   url: string;
-  /** Article snippet/summary */
   snippet: string;
-  /** Publication date (ISO string or null) */
   date: string | null;
-  /** Source domain name */
   source: string;
-  /** Article image URL or gradient placeholder */
   imageUrl: string;
 }
 
-/**
- * Raw result from Perplexity Search API.
- */
 interface PerplexityResult {
   title: string;
   url: string;
@@ -51,19 +35,8 @@ interface PerplexityResult {
   last_updated?: string;
 }
 
-// ─── Cache ────────────────────────────────────────────────────────────────────
-
-/** Cached news articles with timestamp */
 let newsCache: { articles: NewsArticle[]; cachedAt: number } | null = null;
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/**
- * Extracts the source domain from a URL.
- *
- * @param url - The article URL
- * @returns The hostname without www prefix, or 'Unknown' on parse failure
- */
 function sourceFromUrl(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, '');
@@ -72,11 +45,6 @@ function sourceFromUrl(url: string): string {
   }
 }
 
-/**
- * Private/reserved IP ranges that must never be fetched (SSRF protection).
- * Covers: loopback, RFC-1918 private, link-local, unique-local, CGNAT,
- * benchmark, documentation, multicast, reserved, and IPv6 equivalents.
- */
 const PRIVATE_IP_PATTERNS = [
   /^127\./,
   /^10\./,
@@ -141,11 +109,6 @@ async function assertSafeUrl(rawUrl: string): Promise<void> {
   }
 }
 
-/**
- * Reads a response body as text while enforcing the MAX_IMAGE_RESPONSE_BYTES cap.
- * Uses the existing content-length fast path when available. Otherwise it streams
- * the response body and stops once the accumulated bytes would exceed the limit.
- */
 async function readHtmlWithinLimit(res: Response): Promise<string | null> {
   const contentLength = res.headers.get('content-length');
   if (contentLength) {
@@ -186,6 +149,16 @@ async function readHtmlWithinLimit(res: Response): Promise<string | null> {
   return new TextDecoder().decode(merged);
 }
 
+async function resolveSafeImageUrl(value: string, articleUrl: string): Promise<string | null> {
+  try {
+    const absoluteUrl = new URL(value, articleUrl).toString();
+    await assertSafeUrl(absoluteUrl);
+    return absoluteUrl;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchOgImage(articleUrl: string, title: string): Promise<string> {
   try {
     await assertSafeUrl(articleUrl);
@@ -209,25 +182,17 @@ async function fetchOgImage(articleUrl: string, title: string): Promise<string> 
     const html = await readHtmlWithinLimit(res);
     if (html === null) return gradientPlaceholder(title);
 
-    const toAbsolute = (value: string): string | null => {
-      try {
-        return new URL(value, articleUrl).toString();
-      } catch {
-        return null;
-      }
-    };
-
     const ogMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
       ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
     if (ogMatch?.[1]) {
-      const abs = toAbsolute(ogMatch[1]);
+      const abs = await resolveSafeImageUrl(ogMatch[1], articleUrl);
       if (abs) return abs;
     }
 
     const twMatch = html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i)
       ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i);
     if (twMatch?.[1]) {
-      const abs = toAbsolute(twMatch[1]);
+      const abs = await resolveSafeImageUrl(twMatch[1], articleUrl);
       if (abs) return abs;
     }
 
@@ -294,9 +259,17 @@ export async function GET(): Promise<Response> {
     );
 
     if (!response.ok) {
-      const errText = await response.text().catch(() => '');
-      log({ level: 'warn', service: SERVICE, message: `Perplexity HTTP ${response.status}`, requestId, error: errText });
-      if (newsCache) return NextResponse.json({ articles: newsCache.articles, cached: true, stale: true, requestId });
+      log({
+        level: 'warn',
+        service: SERVICE,
+        message: `Perplexity HTTP ${response.status}`,
+        requestId,
+      });
+
+      if (newsCache) {
+        return NextResponse.json({ articles: newsCache.articles, cached: true, stale: true, requestId });
+      }
+
       return NextResponse.json(
         { error: 'UPSTREAM_ERROR', message: 'News service temporarily unavailable.', requestId },
         { status: 502, headers: { 'X-Request-Id': requestId } },

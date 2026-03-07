@@ -2,18 +2,6 @@
  * Sentient Interface - Main Landing Page (Phase 2)
  *
  * A full-functional landing page implementing Phase 2 of the Apex platform.
- * Features include:
- *
- * - Liquid Glass UI effects with responsive glassmorphism
- * - Haptic feedback and spatial audio for sentient interactions
- * - Real-time GitHub repository metrics via API
- * - Platform usage metrics with deterministic variation
- * - AI-powered Intelligent Engine with Scout Agent backend
- * - Scout Agent for live digital income opportunities
- * - Live news from Perplexity Search API with Research Context
- * - User registration with PII-safe logging
- * - OpenTelemetry metrics for Grafana Cloud
- * - GEO-optimized content for search and AI crawlers
  *
  * @module app/page
  */
@@ -25,9 +13,6 @@ import { Heart, Search, User, BarChart3, MessageSquare, Github, Star, GitFork, E
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 
-/**
- * GitHub repository metrics from the GitHub API.
- */
 interface GitHubMetrics {
   stars: number;
   forks: number;
@@ -40,27 +25,18 @@ interface GitHubMetrics {
   language: string;
 }
 
-/**
- * Platform-specific metrics (users, impact, courses).
- */
 interface PlatformMetrics {
   users: number;
   impact: number;
   courses: number;
 }
 
-/**
- * Combined metrics response from /api/metrics endpoint.
- */
 interface CombinedMetrics {
   github: GitHubMetrics;
   platform: PlatformMetrics;
   timestamp: number;
 }
 
-/**
- * Digital income opportunity from the Scout Agent.
- */
 interface Opportunity {
   title: string;
   province: string;
@@ -70,9 +46,6 @@ interface Opportunity {
   category: string;
 }
 
-/**
- * Live news article from /api/news (Perplexity Search).
- */
 interface NewsArticle {
   title: string;
   url: string;
@@ -82,19 +55,6 @@ interface NewsArticle {
   imageUrl: string;
 }
 
-/**
- * Main Sentient Interface component for the Apex platform.
- *
- * Features:
- * - Liquid Glass UI design with haptic and spatial audio feedback
- * - Real-time GitHub metrics integration
- * - AI-powered Intelligent Engine with Scout Agent
- * - Live digital income opportunities for South Africans
- * - Live news from Perplexity Search API with Research Context
- * - User registration with PII-safe logging
- *
- * @returns The Sentient Interface React component
- */
 export default function SentientInterface() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showRegister, setShowRegister] = useState(false);
@@ -111,28 +71,11 @@ export default function SentientInterface() {
   const [news, setNews] = useState<NewsArticle[]>([]);
   const [newsLoading, setNewsLoading] = useState(true);
   const [newsError, setNewsError] = useState(false);
-  /**
-   * Tracks article URLs whose remote images failed to load.
-   * When an image load fails, its article URL is added here and the image
-   * slot falls back to the server-generated SVG gradient data URI.
-   * Using a Set keyed by article URL avoids index-based issues when the
-   * news array changes between renders.
-   */
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
-  /** Currently expanded insight card key, or null if none is expanded */
   const [expandedInsight, setExpandedInsight] = useState<string | null>(null);
 
-  // Ref for the chat panel to enable scrolling into view
   const chatPanelRef = useRef<HTMLDivElement>(null);
 
-  /**
-   * Triggers sentient feedback: haptic vibration and spatial audio pulse.
-   *
-   * On mobile devices, triggers vibration patterns. Creates spatial audio
-   * using Web Audio API with random panning. Updates heartbeat visual intensity.
-   *
-   * @param intensity - Feedback intensity multiplier (default: 1)
-   */
   const triggerSentient = useCallback((intensity: number = 1) => {
     if (navigator.vibrate) {
       navigator.vibrate([60 * intensity, 30, 60 * intensity]);
@@ -160,22 +103,15 @@ export default function SentientInterface() {
     setTimeout(() => setHeartbeatIntensity(1), 300);
   }, []);
 
-  /**
-   * Initialize page view tracking and metrics refresh on mount.
-   */
   useEffect(() => {
     fetch('/api/analytics', { method: 'POST' }).catch(() => {});
-    refreshMetrics();
-    fetchNews();
-    const interval = setInterval(refreshMetrics, 5 * 60 * 1000);
-    // Refresh news every 10 minutes
-    const newsInterval = setInterval(fetchNews, 10 * 60 * 1000);
+    void refreshMetrics();
+    void fetchNews();
+    const interval = setInterval(() => { void refreshMetrics(); }, 5 * 60 * 1000);
+    const newsInterval = setInterval(() => { void fetchNews(); }, 10 * 60 * 1000);
     return () => { clearInterval(interval); clearInterval(newsInterval); };
   }, []);
 
-  /**
-   * Fetches fresh metrics from the /api/metrics endpoint.
-   */
   const refreshMetrics = async () => {
     setIsLoading(true);
     try {
@@ -190,9 +126,6 @@ export default function SentientInterface() {
     }
   };
 
-  /**
-   * Fetches live news articles from /api/news (Perplexity Search).
-   */
   const fetchNews = async () => {
     setNewsLoading(true);
     setNewsError(false);
@@ -211,27 +144,38 @@ export default function SentientInterface() {
     }
   };
 
-  /**
-   * Sends a message to the Intelligent Engine (/api/ai-agent).
-   *
-   * Includes live Scout Agent data in the response. Updates chat history
-   * and opportunities panel when new opportunities are returned.
-   */
-  const sendToAIAssistant = async () => {
-    if (!aiMessage.trim() || agentLoading) return;
+  const sendToAIAssistant = useCallback(async (promptOverride?: string) => {
+    const outgoingMessage = (promptOverride ?? aiMessage).trim();
+    if (!outgoingMessage || agentLoading) return;
 
     triggerSentient(1.2);
 
-    const userMsg = { role: 'user', content: aiMessage };
+    const userMsg = { role: 'user', content: outgoingMessage };
     const newHistory = [...chatHistory, userMsg];
+
     setChatHistory(newHistory);
     setAiMessage('');
     setAgentLoading(true);
 
-    // Build messages array for the agent (exclude system messages from history)
+    const setAssistantContent = (content: string) => {
+      setChatHistory((prev) => {
+        if (prev.length === 0) return prev;
+        const next = [...prev];
+        const last = next[next.length - 1];
+
+        if (!last || last.role !== 'assistant') {
+          next.push({ role: 'assistant', content });
+          return next;
+        }
+
+        next[next.length - 1] = { ...last, content };
+        return next;
+      });
+    };
+
     const agentMessages = newHistory
-      .filter(m => m.role === 'user' || m.role === 'assistant')
-      .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
 
     try {
       const res = await fetch('/api/ai-agent', {
@@ -240,48 +184,101 @@ export default function SentientInterface() {
         body: JSON.stringify({ messages: agentMessages }),
       });
 
-      const data = await res.json();
-
       if (!res.ok) {
-        setChatHistory([...newHistory, { role: 'assistant', content: data.message || 'Something went wrong. Please try again.' }]);
-      } else {
-        setChatHistory([...newHistory, { role: 'assistant', content: data.reply }]);
-        // Update opportunities panel if the agent returned fresh ones
-        if (Array.isArray(data.opportunities) && data.opportunities.length > 0) {
-          setOpportunities(data.opportunities);
+        let message = 'Something went wrong. Please try again.';
+        try {
+          const data = await res.json();
+          if (typeof data?.message === 'string' && data.message.trim()) {
+            message = data.message;
+          }
+        } catch {
+          // ignore json parse failures on error payloads
+        }
+        setAssistantContent(message);
+        return;
+      }
+
+      if (!res.body) {
+        setAssistantContent('AI engine returned no stream.');
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let assistantReply = '';
+
+      const processLine = (line: string) => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+
+        let event: { type?: string; data?: unknown };
+        try {
+          event = JSON.parse(trimmed);
+        } catch {
+          return;
+        }
+
+        if (event.type === 'opportunities' && Array.isArray(event.data) && event.data.length > 0) {
+          setOpportunities(event.data as Opportunity[]);
+          return;
+        }
+
+        if (event.type === 'chunk' && typeof event.data === 'string') {
+          assistantReply += event.data;
+          setAssistantContent(assistantReply);
+          return;
+        }
+
+        if (event.type === 'error' && typeof event.data === 'string') {
+          assistantReply = event.data;
+          setAssistantContent(event.data);
+        }
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!value) continue;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          processLine(line);
         }
       }
+
+      const finalLine = buffer.trim();
+      if (finalLine) processLine(finalLine);
+
+      if (!assistantReply.trim()) {
+        setAssistantContent('AI engine returned an empty response.');
+      }
+
       triggerSentient(0.8);
     } catch (error) {
       console.error('AI Agent error:', error);
-      setChatHistory([...newHistory, { role: 'assistant', content: 'Connection error. Please try again.' }]);
+      setAssistantContent('Connection error. Please try again.');
     } finally {
       setAgentLoading(false);
     }
-  };
+  }, [aiMessage, agentLoading, chatHistory, triggerSentient]);
 
-  /**
-   * Investigates a news article by pre-filling the AI chat with a research prompt.
-   *
-   * Scrolls the chat panel into view, sets a structured research prompt,
-   * and focuses the input field for immediate user interaction.
-   *
-   * @param articleTitle - The title of the news article to investigate
-   */
   const investigateNews = useCallback((articleTitle: string) => {
+    if (agentLoading) return;
+
     triggerSentient(0.6);
     const researchPrompt = `Research the following news topic and explain its relevance to South African digital income opportunities:\n\n"${articleTitle}"\n\nProvide: 1) Key insights, 2) Potential opportunities, 3) Actionable next steps.`;
-    setAiMessage(researchPrompt);
-    // Scroll chat panel into view
+
     chatPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    // Focus the input field
     const inputEl = document.getElementById('ai-chat-input') as HTMLInputElement | null;
     inputEl?.focus();
-  }, [triggerSentient]);
 
-  /**
-   * Handles user registration form submission.
-   */
+    void sendToAIAssistant(researchPrompt);
+  }, [agentLoading, sendToAIAssistant, triggerSentient]);
+
   const handleRegister = async () => {
     triggerSentient(1.5);
     try {
@@ -296,33 +293,24 @@ export default function SentientInterface() {
         setShowRegister(false);
         triggerSentient(1);
       } else {
-        // Server returned a structured error — show it and keep modal open so
-        // the user can correct their input and retry without re-opening.
         alert(data.message || 'Registration failed. Please check your email and try again.');
       }
     } catch (error) {
-      // Network failure or unparseable response — keep modal open for retry.
       console.error('Registration error:', error);
       alert('Registration failed: ' + (error instanceof Error ? error.message : 'Please try again.'));
     }
   };
 
-  /**
-   * Formats large numbers with K/M suffixes.
-   *
-   * @param num - Number to format
-   * @returns Formatted string (e.g., "1.5K", "2.3M")
-   */
   const formatNumber = (num: number): string => {
     if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + 'M';
     if (num >= 1_000) return (num / 1_000).toFixed(1) + 'K';
     return num.toString();
   };
 
+  const lastMessage = chatHistory[chatHistory.length - 1];
+
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
-
-      {/* Hero */}
       <div className="glass mx-auto max-w-5xl mt-16 rounded-3xl p-16 relative overflow-hidden">
         <div className="liquid-reflection" />
         <div className="flex items-center gap-4 mb-6">
@@ -346,7 +334,6 @@ export default function SentientInterface() {
         </div>
       </div>
 
-      {/* GEO Answer-First Block — human-readable + AI-crawler-readable summary */}
       <div className="glass mx-auto max-w-5xl mt-8 p-8 rounded-3xl border border-white/10">
         <div className="flex items-center gap-3 mb-4">
           <Zap className="w-6 h-6 text-yellow-400" />
@@ -374,7 +361,6 @@ export default function SentientInterface() {
         </div>
       </div>
 
-      {/* Navigation + Search */}
       <nav className="glass sticky top-8 mx-auto max-w-5xl rounded-3xl px-8 py-4 flex items-center justify-between z-50">
         <div className="flex items-center gap-8">
           <span className="font-semibold">Apex</span>
@@ -408,7 +394,6 @@ export default function SentientInterface() {
         </div>
       </nav>
 
-      {/* Live Opportunities Section */}
       <section id="opportunities" className="max-w-5xl mx-auto px-8 py-20">
         <h2 className="text-4xl font-semibold mb-4 flex items-center gap-3">
           <Zap className="w-9 h-9 text-yellow-400" /> Live Digital Income Opportunities
@@ -452,7 +437,6 @@ export default function SentientInterface() {
         )}
       </section>
 
-      {/* GitHub Metrics Section */}
       <section id="github" className="max-w-5xl mx-auto px-8 py-20 border-t border-white/10">
         <h2 className="text-4xl font-semibold mb-4 flex items-center gap-3">
           <Github className="w-9 h-9" /> GitHub Repository Metrics
@@ -506,7 +490,7 @@ export default function SentientInterface() {
         </AnimatePresence>
 
         <div className="mt-8 flex items-center gap-4">
-          <button onClick={() => { refreshMetrics(); triggerSentient(0.6); }} className="text-sm text-zinc-400 hover:text-white flex items-center gap-2 transition">
+          <button onClick={() => { void refreshMetrics(); triggerSentient(0.6); }} className="text-sm text-zinc-400 hover:text-white flex items-center gap-2 transition">
             <TrendingUp className="w-4 h-4" /> Refresh Metrics
           </button>
           {githubMetrics && (
@@ -517,7 +501,6 @@ export default function SentientInterface() {
         </div>
       </section>
 
-      {/* Market Insights Section — Sentient Intelligence Surface */}
       <section id="insights" className="max-w-5xl mx-auto px-8 py-20 border-t border-white/10">
         <div className="flex items-start justify-between mb-4">
           <div>
@@ -535,10 +518,6 @@ export default function SentientInterface() {
         </div>
 
         {(() => {
-          /**
-           * Generates deterministic 7-day historical data points for sparklines.
-           * Uses sine-based variation seeded by day offset for consistent rendering.
-           */
           const generateHistory = (baseValue: number, volatility: number = 0.08): number[] => {
             const now = Date.now();
             const dayMs = 86400000;
@@ -547,14 +526,11 @@ export default function SentientInterface() {
               const seed = Math.floor((now - dayOffset * dayMs) / dayMs);
               const wave1 = Math.sin(seed * 0.7) * volatility;
               const wave2 = Math.cos(seed * 1.3) * (volatility * 0.5);
-              const trend = (i / 6) * 0.02; // slight upward trend
+              const trend = (i / 6) * 0.02;
               return Math.round(baseValue * (1 + wave1 + wave2 + trend));
             });
           };
 
-          /**
-           * Renders an inline SVG sparkline from data points.
-           */
           const Sparkline = ({ data, color, height = 40, width = 120 }: { data: number[]; color: string; height?: number; width?: number }) => {
             const min = Math.min(...data);
             const max = Math.max(...data);
@@ -576,7 +552,6 @@ export default function SentientInterface() {
                 </defs>
                 <polygon points={areaPoints} fill={`url(#sparkGrad-${color.replace('#', '')})`} />
                 <polyline points={points} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                {/* Current value dot */}
                 {data.length > 0 && (() => {
                   const lastX = padding + ((data.length - 1) / (data.length - 1)) * (width - padding * 2);
                   const lastY = height - padding - ((data[data.length - 1] - min) / range) * (height - padding * 2);
@@ -594,32 +569,22 @@ export default function SentientInterface() {
           const usersHistory = generateHistory(usersValue, 0.10);
           const impactHistory = generateHistory(impactValue, 0.12);
 
-          /**
-           * Computes delta percentage between the first and last data point.
-           */
           const getDelta = (history: number[]): number => {
             if (history.length < 2 || history[0] === 0) return 0;
             return ((history[history.length - 1] - history[0]) / history[0]) * 100;
           };
 
-          /**
-           * Determines confidence level based on data freshness.
-           */
           const getConfidence = (lastUpdated?: string): 'high' | 'medium' | 'low' => {
             if (!lastUpdated) return 'low';
             const age = Date.now() - new Date(lastUpdated).getTime();
-            if (age < 600000) return 'high';    // < 10 min
-            if (age < 3600000) return 'medium';  // < 1 hour
+            if (age < 600000) return 'high';
+            if (age < 3600000) return 'medium';
             return 'low';
           };
 
           const confidenceColors = { high: 'text-emerald-400', medium: 'text-yellow-400', low: 'text-red-400' };
           const confidenceLabels = { high: 'High Confidence', medium: 'Moderate', low: 'Stale Data' };
           const confidenceIcons = { high: Shield, medium: Info, low: AlertCircle };
-
-          /**
-           * Determines if a metric shows an anomaly (delta exceeds threshold).
-           */
           const isAnomaly = (delta: number, threshold: number = 5): boolean => Math.abs(delta) > threshold;
 
           const insights = [
@@ -694,7 +659,6 @@ export default function SentientInterface() {
                         }}
                         layout
                       >
-                        {/* Header row: icon, label, confidence, anomaly */}
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center gap-2">
                             {insight.icon}
@@ -712,7 +676,6 @@ export default function SentientInterface() {
                           </div>
                         </div>
 
-                        {/* Value + Delta row */}
                         <div className="flex items-end justify-between mb-3">
                           <div>
                             <div className="text-4xl font-mono font-bold leading-none">
@@ -736,7 +699,6 @@ export default function SentientInterface() {
                           )}
                         </div>
 
-                        {/* Sparkline */}
                         <div className="mb-3">
                           <Sparkline data={insight.history} color={insight.color} width={280} height={36} />
                           <div className="flex justify-between text-[10px] text-zinc-600 mt-1">
@@ -745,18 +707,15 @@ export default function SentientInterface() {
                           </div>
                         </div>
 
-                        {/* Why this moved — always visible summary */}
                         <p className="text-xs text-zinc-500 leading-relaxed line-clamp-2">
                           {insight.whyMoved}
                         </p>
 
-                        {/* Expand indicator */}
                         <div className="flex items-center justify-center mt-3 text-zinc-600">
                           {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                         </div>
                       </motion.div>
 
-                      {/* Expanded Drill-Down Panel */}
                       <AnimatePresence>
                         {isExpanded && (
                           <motion.div
@@ -767,18 +726,16 @@ export default function SentientInterface() {
                             className="overflow-hidden"
                           >
                             <div className="glass rounded-2xl p-5 mt-2 border border-white/5 space-y-4">
-                              {/* Detailed sparkline */}
                               <div>
                                 <div className="text-xs text-zinc-400 font-medium mb-2">7-Day Trend</div>
                                 <Sparkline data={insight.history} color={insight.color} width={300} height={60} />
                                 <div className="flex justify-between text-[10px] text-zinc-600 mt-1 px-0.5">
-                                  {insight.history.map((v, i) => (
+                                  {insight.history.map((_, i) => (
                                     <span key={i}>{i === 0 ? '7d' : i === 6 ? 'Now' : `${6 - i}d`}</span>
                                   ))}
                                 </div>
                               </div>
 
-                              {/* Stats breakdown */}
                               <div className="grid grid-cols-3 gap-3">
                                 <div className="bg-white/5 rounded-xl p-3 text-center">
                                   <div className="text-xs text-zinc-500 mb-1">7d High</div>
@@ -796,7 +753,6 @@ export default function SentientInterface() {
                                 </div>
                               </div>
 
-                              {/* Full "Why this moved" explanation */}
                               <div className="bg-white/5 rounded-xl p-3">
                                 <div className="flex items-center gap-1.5 text-xs text-zinc-400 font-medium mb-1.5">
                                   <Info className="w-3 h-3" /> Why this moved
@@ -804,7 +760,6 @@ export default function SentientInterface() {
                                 <p className="text-xs text-zinc-300 leading-relaxed">{insight.whyMoved}</p>
                               </div>
 
-                              {/* Confidence detail */}
                               <div className="flex items-center gap-2 text-xs">
                                 <ConfidenceIcon className={`w-3.5 h-3.5 ${confidenceColors[insight.confidence]}`} />
                                 <span className={confidenceColors[insight.confidence]}>{confidenceLabels[insight.confidence]}</span>
@@ -813,7 +768,6 @@ export default function SentientInterface() {
                                 )}
                               </div>
 
-                              {/* Action buttons */}
                               <div className="flex items-center gap-3 pt-1">
                                 <a
                                   href={`#${insight.relatedSection}`}
@@ -849,7 +803,6 @@ export default function SentientInterface() {
                 })}
               </div>
 
-              {/* Section footer — data freshness */}
               <div className="flex items-center justify-between text-xs text-zinc-600 pt-2">
                 <div className="flex items-center gap-4">
                   <span className="flex items-center gap-1.5">
@@ -858,7 +811,7 @@ export default function SentientInterface() {
                   </span>
                 </div>
                 <button
-                  onClick={() => { refreshMetrics(); triggerSentient(0.4); }}
+                  onClick={() => { void refreshMetrics(); triggerSentient(0.4); }}
                   className="flex items-center gap-1.5 text-zinc-500 hover:text-white transition"
                 >
                   <RefreshCw className={`w-3 h-3 ${isLoading ? 'animate-spin' : ''}`} />
@@ -870,14 +823,13 @@ export default function SentientInterface() {
         })()}
       </section>
 
-      {/* Live News Section — powered by Perplexity Search API */}
       <section id="news" className="max-w-5xl mx-auto px-8 py-20 border-t border-white/10">
         <div className="flex items-center justify-between mb-12">
           <h2 className="text-4xl font-semibold flex items-center gap-3">
             <Newspaper className="w-9 h-9 text-blue-400" /> Live News
           </h2>
           <button
-            onClick={() => { fetchNews(); triggerSentient(0.4); }}
+            onClick={() => { void fetchNews(); triggerSentient(0.4); }}
             disabled={newsLoading}
             className="flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition disabled:opacity-40"
           >
@@ -886,7 +838,6 @@ export default function SentientInterface() {
           </button>
         </div>
 
-        {/* Loading skeleton */}
         {newsLoading && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[...Array(6)].map((_, i) => (
@@ -907,14 +858,13 @@ export default function SentientInterface() {
           </div>
         )}
 
-        {/* Error state */}
         {!newsLoading && newsError && (
           <div className="glass p-10 rounded-3xl text-center text-zinc-500">
             <Newspaper className="w-10 h-10 mx-auto mb-4 text-zinc-600" />
             <p className="text-lg mb-2">News unavailable</p>
             <p className="text-sm mb-6">Add PERPLEXITY_API_KEY to your environment variables to enable live news.</p>
             <button
-              onClick={() => { fetchNews(); triggerSentient(0.5); }}
+              onClick={() => { void fetchNews(); triggerSentient(0.5); }}
               className="glass px-6 py-2 rounded-2xl text-sm hover:bg-white/10 transition"
             >
               Try again
@@ -922,10 +872,8 @@ export default function SentientInterface() {
           </div>
         )}
 
-        {/* Live news grid */}
         {!newsLoading && !newsError && news.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* Featured article — spans full width on first card */}
             {news.slice(0, 1).map((article) => (
               <motion.div
                 key={article.url}
@@ -936,12 +884,6 @@ export default function SentientInterface() {
               >
                 <div className="relative w-full h-56 overflow-hidden">
                   {article.imageUrl.startsWith('data:') || failedImages.has(article.url) ? (
-                    // Data URIs (server-generated SVG gradients) and failed remote
-                    // images both render via raw <img>. Next.js Image does not support
-                    // data: URIs, and mutating target.src inside onError is an
-                    // anti-pattern that Next.js may override. React state is the
-                    // correct mechanism for switching render paths on load failure.
-                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={article.imageUrl}
                       alt={article.title}
@@ -955,8 +897,6 @@ export default function SentientInterface() {
                       sizes="(max-width: 768px) 100vw, 66vw"
                       className="object-cover group-hover:scale-105 transition-transform duration-500"
                       onError={() => {
-                        // Mark this article's image as failed so the next render
-                        // switches to the server-generated SVG gradient placeholder.
                         setFailedImages((prev) => new Set(prev).add(article.url));
                       }}
                     />
@@ -1002,7 +942,6 @@ export default function SentientInterface() {
               </motion.div>
             ))}
 
-            {/* Remaining articles */}
             {news.slice(1).map((article) => (
               <motion.div
                 key={article.url}
@@ -1013,9 +952,6 @@ export default function SentientInterface() {
               >
                 <div className="relative w-full h-44 overflow-hidden flex-shrink-0">
                   {article.imageUrl.startsWith('data:') || failedImages.has(article.url) ? (
-                    // Data URIs (server-generated SVG gradients) and failed remote
-                    // images both render via raw <img>. See featured card comment.
-                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={article.imageUrl}
                       alt={article.title}
@@ -1072,10 +1008,8 @@ export default function SentientInterface() {
             ))}
           </div>
         )}
-
       </section>
 
-      {/* AI Assistant — powered by /api/ai-agent (Intelligent Engine) */}
       <div ref={chatPanelRef} className="fixed bottom-8 right-8 w-96">
         <div className="glass rounded-3xl overflow-hidden">
           <div className="p-4 border-b border-white/10 flex items-center gap-3 cursor-pointer" onClick={() => triggerSentient(0.3)}>
@@ -1097,7 +1031,7 @@ export default function SentientInterface() {
                 </div>
               </motion.div>
             ))}
-            {agentLoading && (
+            {agentLoading && (!lastMessage || lastMessage.role !== 'assistant' || !lastMessage.content) && (
               <motion.div className="text-left" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                 <div className="inline-block px-4 py-2 rounded-2xl bg-white/5 text-zinc-500">
                   Thinking...
@@ -1111,13 +1045,18 @@ export default function SentientInterface() {
               type="text"
               value={aiMessage}
               onChange={(e) => setAiMessage(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendToAIAssistant()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  void sendToAIAssistant();
+                }
+              }}
               placeholder="Ask about opportunities..."
               className="flex-1 bg-transparent focus:outline-none"
               disabled={agentLoading}
             />
             <button
-              onClick={sendToAIAssistant}
+              onClick={() => { void sendToAIAssistant(); }}
               disabled={agentLoading || !aiMessage.trim()}
               className="px-6 py-2 glass rounded-2xl hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed"
             >
@@ -1127,7 +1066,6 @@ export default function SentientInterface() {
         </div>
       </div>
 
-      {/* Register Modal */}
       <AnimatePresence>
         {showRegister && (
           <motion.div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>

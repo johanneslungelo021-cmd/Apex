@@ -2,22 +2,10 @@
  * AI Agent API Endpoint
  *
  * Provides a conversational AI interface powered by Groq's Llama model.
- * Includes rate limiting, input validation, and integration with the Scout Agent
- * for live opportunity data in responses.
+ * Includes rate limiting, input validation, streaming responses, and integration
+ * with the Scout Agent for live opportunity data in responses.
  *
  * @module app/api/ai-agent
- *
- * @example
- * // GET /api/ai-agent - Returns capability manifest
- * // POST /api/ai-agent - Handles chat queries
- *
- * fetch('/api/ai-agent', {
- *   method: 'POST',
- *   headers: { 'Content-Type': 'application/json' },
- *   body: JSON.stringify({
- *     messages: [{ role: 'user', content: 'Find opportunities in Gauteng' }]
- *   })
- * });
  */
 
 import { NextResponse } from 'next/server';
@@ -26,104 +14,34 @@ import { generateRequestId, log, fetchWithTimeout, envTimeoutMs, checkRateLimit 
 import { agentQueryCounter } from '@/lib/metrics';
 import crypto from 'crypto';
 
-/**
- * Service identifier for log entries from this endpoint.
- */
 const SERVICE = 'ai-agent';
-
-/**
- * Groq API timeout in milliseconds, configurable via environment variable.
- * Defaults to 15 seconds if GROQ_TIMEOUT_MS is not set.
- */
 const GROQ_TIMEOUT_MS = envTimeoutMs(process.env.GROQ_TIMEOUT_MS, 15_000);
-
-/**
- * Rate limit: maximum requests per window per IP.
- */
 const RATE_LIMIT = 20;
-
-/**
- * Rate limit window duration in milliseconds (1 minute).
- */
 const RATE_WINDOW_MS = 60_000;
-
-/**
- * Maximum request body size in bytes (5 MB ceiling).
- * Guards against memory exhaustion from oversized payloads.
- */
 const MAX_REQUEST_BODY_BYTES = 5 * 1024 * 1024;
+const MAX_MESSAGES = 20;
+const MAX_CONTENT_LENGTH = 4000;
+const MAX_TOTAL_PAYLOAD_BYTES = 50_000;
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-/**
- * Represents a single chat message accepted from clients.
- * 'system' is intentionally excluded — the server is the sole injector of system prompts.
- */
 interface ChatMessage {
-  /** Message role: only 'user' or 'assistant' accepted from clients */
   role: 'user' | 'assistant';
-  /** Message content text */
   content: string;
 }
 
-/**
- * Set of valid message roles accepted from client requests.
- * 'system' is excluded: only the server may inject system messages.
- */
-const VALID_ROLES = new Set(['user', 'assistant']);
-
-/**
- * Server-only message type that allows the 'system' role.
- * Never accepted from clients — only used internally to build the Groq request.
- */
 interface ServerMessage {
   role: 'system';
   content: string;
 }
 
-/**
- * Maximum number of messages allowed in a single request.
- */
-const MAX_MESSAGES = 20;
+const VALID_ROLES = new Set(['user', 'assistant']);
 
-/**
- * Maximum length of a single message content string in characters.
- */
-const MAX_CONTENT_LENGTH = 4000;
+class PayloadTooLargeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PayloadTooLargeError';
+  }
+}
 
-/**
- * Maximum aggregate byte size of all message content in a single request.
- * Guards against crafted payloads that individually pass per-message limits
- * but inflate the total context sent to Groq. Set conservatively below
- * the theoretical maximum (MAX_MESSAGES × MAX_CONTENT_LENGTH = 80 000 chars)
- * to leave headroom for the server-side system prompt and JSON serialization overhead.
- */
-const MAX_TOTAL_PAYLOAD_BYTES = 50_000;
-
-// ─── Validation ───────────────────────────────────────────────────────────────
-
-/**
- * Validates an array of chat messages from the request body.
- *
- * Performs comprehensive validation including:
- * - Array type and length checks
- * - Object structure validation for each message
- * - Role enumeration validation
- * - Content type and length validation
- *
- * @param raw - The raw messages value from the request body
- * @returns Array of validated ChatMessage objects on success, or error message string on failure
- *
- * @example
- * const result = validateMessages([
- *   { role: 'user', content: 'Hello' }
- * ]);
- * // Returns [{ role: 'user', content: 'Hello' }]
- *
- * @example
- * const result = validateMessages([]);
- * // Returns 'messages array must not be empty.'
- */
 function validateMessages(raw: unknown): ChatMessage[] | string {
   if (!Array.isArray(raw)) return 'messages must be a non-empty array.';
   if (raw.length === 0) return 'messages array must not be empty.';
@@ -149,8 +67,6 @@ function validateMessages(raw: unknown): ChatMessage[] | string {
     totalBytes += Buffer.byteLength(content, 'utf8');
   }
 
-  // Aggregate payload guard — runs after per-message checks so we have an accurate byte sum.
-  // Prevents payloads that pass individually but exceed safe Groq context limits in aggregate.
   if (totalBytes > MAX_TOTAL_PAYLOAD_BYTES) {
     return `messages total payload must be under ${MAX_TOTAL_PAYLOAD_BYTES} bytes.`;
   }
@@ -158,33 +74,78 @@ function validateMessages(raw: unknown): ChatMessage[] | string {
   return raw as ChatMessage[];
 }
 
-// ─── GET — Capability Manifest ────────────────────────────────────────────────
+async function readJsonBodyWithinLimit(req: Request, maxBytes: number): Promise<unknown> {
+  const contentLength = req.headers.get('content-length');
+  if (contentLength) {
+    const declaredLength = parseInt(contentLength, 10);
+    if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+      throw new PayloadTooLargeError('Request body exceeds 5 MB limit.');
+    }
+  }
 
-/**
- * Returns a machine-readable capability manifest for the AI Agent endpoint.
- *
- * This GET handler provides a self-describing API manifest that allows
- * external AI agents and crawlers to discover what this endpoint does
- * without making a POST request first. Includes schema.org markup for SEO.
- *
- * @returns JSON response with capability manifest and 1-hour cache header
- *
- * @example
- * // GET /api/ai-agent
- * // Response:
- * {
- *   "name": "Apex Intelligent Engine",
- *   "version": "2.0.0",
- *   "description": "...",
- *   "endpoint": "/api/ai-agent",
- *   "method": "POST",
- *   ...
- * }
- */
+  const reader = req.body?.getReader();
+  if (!reader) return null;
+
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+
+    totalBytes += value.byteLength;
+    if (totalBytes > maxBytes) {
+      await reader.cancel().catch(() => {});
+      throw new PayloadTooLargeError('Request body exceeds 5 MB limit.');
+    }
+
+    chunks.push(value);
+  }
+
+  if (totalBytes === 0) return null;
+
+  const merged = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return JSON.parse(new TextDecoder().decode(merged));
+}
+
+function encodeStreamEvent(payload: Record<string, unknown>): Uint8Array {
+  return new TextEncoder().encode(`${JSON.stringify(payload)}\n`);
+}
+
+function extractContentChunk(dataLine: string): string {
+  try {
+    const parsed = JSON.parse(dataLine);
+    const deltaContent = parsed?.choices?.[0]?.delta?.content;
+    if (typeof deltaContent === 'string') return deltaContent;
+
+    const messageContent = parsed?.choices?.[0]?.message?.content;
+    if (typeof messageContent === 'string') return messageContent;
+  } catch {
+    return '';
+  }
+
+  return '';
+}
+
+function parseSseBuffer(buffer: string): { events: string[]; rest: string } {
+  const events = buffer.split('\n\n');
+  return {
+    events: events.slice(0, -1),
+    rest: events.at(-1) ?? '',
+  };
+}
+
 export async function GET(): Promise<Response> {
   const manifest = {
     name: 'Apex Intelligent Engine',
-    version: '2.0.0',
+    version: '2.1.0',
     description:
       'Conversational AI agent for South African digital income opportunities. ' +
       'Provides Answer-First responses grounded in live opportunity data (≤ R2000 cost).',
@@ -202,8 +163,7 @@ export async function GET(): Promise<Response> {
       },
     },
     output: {
-      reply: 'string — Answer-First AI response with structured breakdown',
-      opportunities: 'array — Live digital income opportunities (refreshed every 5 min)',
+      stream: 'application/x-ndjson — events of type opportunities, chunk, done, error',
       requestId: 'string — Use for log correlation',
       durationMs: 'number — End-to-end latency',
     },
@@ -227,55 +187,16 @@ export async function GET(): Promise<Response> {
   });
 }
 
-// ─── POST — Agent Query ───────────────────────────────────────────────────────
-
-/**
- * Handles a conversational query to the Apex Intelligent Engine.
- *
- * Processing flow:
- * 1. Rate limit check (20 requests per minute per IP)
- * 2. Validate request body and messages array
- * 3. Run Scout Agent (cached — no Groq call if cache is warm)
- * 4. Call Groq with system prompt + live opportunities + user messages
- * 5. Return reply, opportunities, requestId, durationMs with X-Request-Id header
- *
- * All responses include a unique X-Request-Id header for log correlation.
- * Errors are returned with appropriate HTTP status codes and descriptive messages.
- *
- * @param req - The incoming HTTP request
- * @returns JSON response with AI reply, opportunities, and metadata
- *
- * @example
- * // Success response
- * {
- *   "reply": "Here are 3 opportunities in Gauteng...",
- *   "opportunities": [...],
- *   "requestId": "a1b2c3d4e5f6",
- *   "durationMs": 1234
- * }
- *
- * @example
- * // Error response (rate limited)
- * {
- *   "error": "RATE_LIMITED",
- *   "message": "Too many requests. Please wait before retrying.",
- *   "requestId": "a1b2c3d4e5f6"
- * }
- */
 export async function POST(req: Request): Promise<Response> {
   const requestId = generateRequestId();
   const startMs = Date.now();
 
-  // ── Rate limiting ──────────────────────────────────────────────────────────
   const ip =
     req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
     req.headers.get('x-real-ip') ??
     'unknown';
 
   if (!checkRateLimit(ip, RATE_LIMIT, RATE_WINDOW_MS)) {
-    // Use HMAC-SHA256 for PII-safe IP logging — rainbow-table resistant.
-    // Only include hashedIp when IP_LOG_SALT is configured; omit entirely
-    // rather than using a hardcoded fallback that gives a false sense of protection.
     const ipLogSalt = process.env.IP_LOG_SALT;
     const hashedIp = ipLogSalt
       ? crypto.createHmac('sha256', ipLogSalt).update(ip).digest('hex').slice(0, 16)
@@ -285,8 +206,6 @@ export async function POST(req: Request): Promise<Response> {
       service: SERVICE,
       message: 'Rate limit exceeded',
       requestId,
-      // Spread only when defined — LogEntry's index signature accepts extra fields,
-      // but we avoid always passing `hashedIp: undefined` to keep log lines clean.
       ...(hashedIp !== undefined ? { hashedIp } : {}),
     });
     return NextResponse.json(
@@ -301,20 +220,17 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  // ── Request size guard ─────────────────────────────────────────────────────
-  const contentLength = req.headers.get('content-length');
-  if (contentLength && parseInt(contentLength, 10) > MAX_REQUEST_BODY_BYTES) {
-    return NextResponse.json(
-      { error: 'PAYLOAD_TOO_LARGE', message: 'Request body exceeds 5 MB limit.', requestId },
-      { status: 413, headers: { 'X-Request-Id': requestId } },
-    );
-  }
-
-  // ── Parse body ────────────────────────────────────────────────────────────
   let body: unknown;
   try {
-    body = await req.json();
-  } catch {
+    body = await readJsonBodyWithinLimit(req, MAX_REQUEST_BODY_BYTES);
+  } catch (err: unknown) {
+    if (err instanceof PayloadTooLargeError) {
+      return NextResponse.json(
+        { error: 'PAYLOAD_TOO_LARGE', message: err.message, requestId },
+        { status: 413, headers: { 'X-Request-Id': requestId } },
+      );
+    }
+
     return NextResponse.json(
       { error: 'VALIDATION_ERROR', message: 'Invalid JSON body.', requestId },
       { status: 400, headers: { 'X-Request-Id': requestId } },
@@ -328,7 +244,6 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  // ── Validate messages ─────────────────────────────────────────────────────
   const { messages: rawMessages } = body as Record<string, unknown>;
   const validated = validateMessages(rawMessages);
   if (typeof validated === 'string') {
@@ -339,7 +254,6 @@ export async function POST(req: Request): Promise<Response> {
   }
   const messages = validated;
 
-  // ── Guard: GROQ_API_KEY ───────────────────────────────────────────────────
   const groqApiKey = process.env.GROQ_API_KEY;
   if (!groqApiKey) {
     log({ level: 'error', service: SERVICE, message: 'GROQ_API_KEY not configured', requestId });
@@ -352,11 +266,7 @@ export async function POST(req: Request): Promise<Response> {
   log({ level: 'info', service: SERVICE, message: 'Agent query received', requestId, messageCount: messages.length });
 
   try {
-    // ── Scout Agent — returns from cache if warm, one Groq call if not ──────
     const opportunities = await runScoutAgent();
-
-    // ── Compact opportunity context to minimise token usage ──────────────────
-    // Summarise to title + cost + category + link only — saves ~200 tokens vs full JSON
     const opportunitySummary = opportunities.map(o =>
       `${o.title} (${o.category}, R${o.cost}, ${o.province}) — ${o.link}`
     ).join('\n');
@@ -370,7 +280,6 @@ export async function POST(req: Request): Promise<Response> {
         `\n\nLive opportunities (refreshed every 5 minutes):\n${opportunitySummary || 'None available right now.'}`,
     };
 
-    // ── Groq call ─────────────────────────────────────────────────────────────
     const response = await fetchWithTimeout(
       'https://api.groq.com/openai/v1/chat/completions',
       {
@@ -383,6 +292,7 @@ export async function POST(req: Request): Promise<Response> {
           model: 'llama-3.3-70b-versatile',
           max_tokens: 1024,
           temperature: 0.7,
+          stream: true,
           messages: [systemPrompt, ...messages],
         }),
       },
@@ -390,12 +300,12 @@ export async function POST(req: Request): Promise<Response> {
     );
 
     if (!response.ok) {
-      // Log Groq error status only, not the raw response body.
-      // The body may echo user prompts back and must not appear in structured logs.
       log({
-        level: 'warn', service: SERVICE,
+        level: 'warn',
+        service: SERVICE,
         message: `Groq returned HTTP ${response.status}`,
-        requestId, durationMs: Date.now() - startMs,
+        requestId,
+        durationMs: Date.now() - startMs,
       });
       agentQueryCounter.add(1, { status: 'error' });
       return NextResponse.json(
@@ -404,31 +314,121 @@ export async function POST(req: Request): Promise<Response> {
       );
     }
 
-    const data = await response.json();
-    const reply: string = data?.choices?.[0]?.message?.content?.trim() ?? '';
-
-    if (!reply) {
-      log({ level: 'warn', service: SERVICE, message: 'Groq returned empty content', requestId });
+    if (!response.body) {
+      log({ level: 'warn', service: SERVICE, message: 'Groq returned no response body', requestId });
       agentQueryCounter.add(1, { status: 'error' });
       return NextResponse.json(
-        { error: 'UPSTREAM_ERROR', message: 'AI engine returned an empty response.', requestId },
+        { error: 'UPSTREAM_ERROR', message: 'AI engine returned no stream.', requestId },
         { status: 502, headers: { 'X-Request-Id': requestId } },
       );
     }
 
-    agentQueryCounter.add(1, { status: 'success' });
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let reply = '';
 
-    log({
-      level: 'info', service: SERVICE,
-      message: 'Agent query completed',
-      requestId, durationMs: Date.now() - startMs,
+        controller.enqueue(encodeStreamEvent({ type: 'opportunities', data: opportunities }));
+
+        if (!reader) {
+          controller.enqueue(encodeStreamEvent({ type: 'error', data: 'AI engine returned no stream.' }));
+          controller.enqueue(encodeStreamEvent({ type: 'done', requestId, durationMs: Date.now() - startMs }));
+          controller.close();
+          return;
+        }
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (!value) continue;
+
+            buffer += decoder.decode(value, { stream: true });
+            const parsed = parseSseBuffer(buffer);
+            buffer = parsed.rest;
+
+            for (const eventBlock of parsed.events) {
+              for (const line of eventBlock.split('\n')) {
+                const trimmed = line.trim();
+                if (!trimmed.startsWith('data:')) continue;
+
+                const dataLine = trimmed.slice(5).trim();
+                if (!dataLine || dataLine === '[DONE]') continue;
+
+                const chunk = extractContentChunk(dataLine);
+                if (!chunk) continue;
+
+                reply += chunk;
+                controller.enqueue(encodeStreamEvent({ type: 'chunk', data: chunk }));
+              }
+            }
+          }
+
+          buffer += decoder.decode();
+          const trailing = parseSseBuffer(`${buffer}\n\n`).events;
+          for (const eventBlock of trailing) {
+            for (const line of eventBlock.split('\n')) {
+              const trimmed = line.trim();
+              if (!trimmed.startsWith('data:')) continue;
+
+              const dataLine = trimmed.slice(5).trim();
+              if (!dataLine || dataLine === '[DONE]') continue;
+
+              const chunk = extractContentChunk(dataLine);
+              if (!chunk) continue;
+
+              reply += chunk;
+              controller.enqueue(encodeStreamEvent({ type: 'chunk', data: chunk }));
+            }
+          }
+
+          if (!reply.trim()) {
+            log({ level: 'warn', service: SERVICE, message: 'Groq returned empty content', requestId });
+            agentQueryCounter.add(1, { status: 'error' });
+            controller.enqueue(encodeStreamEvent({ type: 'error', data: 'AI engine returned an empty response.' }));
+          } else {
+            agentQueryCounter.add(1, { status: 'success' });
+            log({
+              level: 'info',
+              service: SERVICE,
+              message: 'Agent query completed',
+              requestId,
+              durationMs: Date.now() - startMs,
+            });
+          }
+        } catch (err: unknown) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          const isTimeout = err instanceof Error && err.name === 'AbortError';
+
+          agentQueryCounter.add(1, { status: isTimeout ? 'timeout' : 'error' });
+          log({
+            level: 'error',
+            service: SERVICE,
+            message: isTimeout ? 'Groq stream timed out' : 'Agent stream failed',
+            requestId,
+            error: errMsg,
+            durationMs: Date.now() - startMs,
+          });
+          controller.enqueue(encodeStreamEvent({
+            type: 'error',
+            data: isTimeout ? 'Request timed out. Please try again.' : 'An unexpected error occurred.',
+          }));
+        } finally {
+          controller.enqueue(encodeStreamEvent({ type: 'done', requestId, durationMs: Date.now() - startMs }));
+          controller.close();
+        }
+      },
     });
 
-    return NextResponse.json(
-      { reply, opportunities, requestId, durationMs: Date.now() - startMs },
-      { headers: { 'X-Request-Id': requestId } },
-    );
-
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'application/x-ndjson; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'X-Request-Id': requestId,
+      },
+    });
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
     const isTimeout = err instanceof Error && err.name === 'AbortError';
@@ -436,9 +436,12 @@ export async function POST(req: Request): Promise<Response> {
     agentQueryCounter.add(1, { status: isTimeout ? 'timeout' : 'error' });
 
     log({
-      level: 'error', service: SERVICE,
+      level: 'error',
+      service: SERVICE,
       message: isTimeout ? 'Groq call timed out' : 'Agent query failed',
-      requestId, error: errMsg, durationMs: Date.now() - startMs,
+      requestId,
+      error: errMsg,
+      durationMs: Date.now() - startMs,
     });
 
     return NextResponse.json(
