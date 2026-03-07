@@ -113,16 +113,46 @@ export const scoutOpportunitiesCounter = meter.createCounter('apex_scout_opportu
 
 /**
  * Counter for tracking AI agent queries via /api/ai-agent.
- * Tagged with status: 'success' | 'timeout' | 'error'.
+ * Tagged with status: 'success' | 'timeout' | 'error' and tier: 'simple' | 'complex' | 'research'.
  * Used to monitor the health and reliability of the intelligent engine.
  *
  * Metric name: `apex_agent_query_total`
  *
  * @example
- * agentQueryCounter.add(1, { status: 'success' });
- * agentQueryCounter.add(1, { status: 'timeout' });
- * agentQueryCounter.add(1, { status: 'error' });
+ * agentQueryCounter.add(1, { status: 'success', tier: 'simple' });
+ * agentQueryCounter.add(1, { status: 'timeout', tier: 'complex' });
  */
 export const agentQueryCounter = meter.createCounter('apex_agent_query_total', {
-  description: 'Total AI agent queries by status',
+  description: 'Total AI agent queries by status and tier',
+});
+
+// ══════════════════════════════════════════════════════════════
+// Phase 2+ Histograms & Cost Tracking
+// ══════════════════════════════════════════════════════════════
+
+/**
+ * Histogram for tracking AI inference latency in milliseconds.
+ * Tagged with tier, provider, and model for observability.
+ *
+ * Metric name: `apex_inference_latency_ms`
+ *
+ * @example
+ * inferenceLatencyHistogram.record(1250, { tier: 'simple', provider: 'groq', model: 'llama-3.1-8b-instant' });
+ */
+export const inferenceLatencyHistogram = meter.createHistogram('apex_inference_latency_ms', {
+  description: 'AI inference latency in milliseconds by provider and tier',
+  unit: 'ms',
+});
+
+/**
+ * Counter for tracking estimated cost in USD per query.
+ * Tagged with tier and model for cost attribution.
+ *
+ * Metric name: `apex_estimated_cost_usd`
+ *
+ * @example
+ * costAccumulator.add(0.000145, { tier: 'simple', model: 'llama-3.1-8b-instant' });
+ */
+export const costAccumulator = meter.createCounter('apex_estimated_cost_usd', {
+  description: 'Accumulated estimated inference cost in USD',
 });
