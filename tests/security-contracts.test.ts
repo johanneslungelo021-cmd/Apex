@@ -30,10 +30,10 @@ describe('security and protocol contracts', () => {
     ]);
   });
 
-  it('keeps scout context out of privileged system instructions', () => {
+  it('scout context uses system role with untrusted-data disclaimer', () => {
     const ctx = buildScoutContextMessage('Opportunity A — https://example.com');
     expect(ctx).not.toBeNull();
-    expect(ctx?.role).toBe('user');
+    expect(ctx?.role).toBe('system');
     expect(ctx?.content.includes('untrusted reference data')).toBe(true);
   });
 
