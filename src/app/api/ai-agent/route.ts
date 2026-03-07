@@ -268,7 +268,7 @@ function parseSseBuffer(buffer: string): { events: string[]; rest: string } {
   };
 }
 
-// ─── GET — Capability Manifest ────────────────────────────────────────────────
+// ─── GET Endpoint — API Manifest ──────────────────────────────────────────────
 
 export async function GET(): Promise<Response> {
   const manifest = {
@@ -301,6 +301,23 @@ export async function GET(): Promise<Response> {
         },
       },
       required: ['messages'],
+    },
+    output: {
+      stream: 'application/x-ndjson — events of type opportunities, chunk, done, error',
+      requestId: 'string — Use for log correlation',
+      durationMs: 'number — End-to-end latency',
+    },
+    exampleQuery: {
+      messages: [
+        { role: 'user', content: 'Find me a digital income opportunity in Gauteng under R2000' },
+      ],
+    },
+    schema: {
+      '@context': 'https://schema.org',
+      '@type': 'WebAPI',
+      name: 'Apex Intelligent Engine API',
+      description: 'AI agent for South African digital income opportunities',
+      url: 'https://apex-coral-zeta.vercel.app/api/ai-agent',
     },
   };
 
@@ -352,6 +369,7 @@ export async function POST(req: Request): Promise<Response> {
         { status: 413, headers: { 'X-Request-Id': requestId } },
       );
     }
+
     return NextResponse.json(
       { error: 'VALIDATION_ERROR', message: 'Invalid JSON body.', requestId },
       { status: 400, headers: { 'X-Request-Id': requestId } },
