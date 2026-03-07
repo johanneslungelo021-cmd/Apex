@@ -126,3 +126,37 @@ export const scoutOpportunitiesCounter = meter.createCounter('apex_scout_opportu
 export const agentQueryCounter = meter.createCounter('apex_agent_query_total', {
   description: 'Total AI agent queries by status',
 });
+
+// ─── Phase 2 News Metrics ─────────────────────────────────────────────────────
+
+/**
+ * Counter for tracking news fetch requests by category and source.
+ * Tagged with:
+ *   category: 'Latest' | 'Tech & AI' | 'Finance & Crypto' | 'Startups'
+ *   source:   'notion' | 'perplexity' | 'cache'
+ *
+ * Metric name: `apex_news_fetch_total`
+ *
+ * @example
+ * newsFetchCounter.add(1, { category: 'Tech & AI', source: 'perplexity' });
+ * newsFetchCounter.add(1, { category: 'Latest', source: 'notion' });
+ * newsFetchCounter.add(1, { category: 'Startups', source: 'cache' });
+ */
+export const newsFetchCounter = meter.createCounter('apex_news_fetch_total', {
+  description: 'Total news fetches by category and source (notion|perplexity|cache)',
+});
+
+/**
+ * Counter for tracking Notion ingest webhook calls by status.
+ * Tagged with:
+ *   status:   'success' | 'auth_failed' | 'validation_error' | 'error'
+ *   category: the news category ingested
+ *
+ * Metric name: `apex_notion_ingest_total`
+ *
+ * @example
+ * notionIngestCounter.add(1, { status: 'success', category: 'Tech & AI' });
+ */
+export const notionIngestCounter = meter.createCounter('apex_notion_ingest_total', {
+  description: 'Total Notion news ingest webhook calls by status and category',
+});

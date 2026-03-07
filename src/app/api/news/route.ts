@@ -2,47 +2,37 @@
  * News API Route
  *
  * Fetches live digital economy news for South African creators using
- * the Perplexity Search API. Implements 10-minute caching with stale
- * fallback for reliability.
+ * the Perplexity Search API. Supports category filtering via ?category= query
+ * parameter. Implements per-category 10-minute caching with stale fallback.
+ *
+ * Supported categories:
+ *   Latest          — General SA digital economy & income opportunities
+ *   Tech & AI       — AI, software development, tech innovation in SA
+ *   Finance & Crypto — Fintech, cryptocurrency, digital finance in SA
+ *   Startups        — Startup funding, venture capital, SA entrepreneurship
  *
  * @module api/news
- *
- * @see https://docs.perplexity.ai/api-reference/search
  */
 
 import { NextResponse } from 'next/server';
 import { generateRequestId, log, fetchWithTimeout, envTimeoutMs } from '@/lib/api-utils';
-import dns from 'dns/promises';
+import dns, { type LookupAddress } from 'dns/promises';
 
 const SERVICE = 'news';
 const PERPLEXITY_TIMEOUT_MS = envTimeoutMs(process.env.PERPLEXITY_TIMEOUT_MS, 14_000);
 const IMAGE_FETCH_TIMEOUT_MS = 4_000;
-const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
-const MAX_IMAGE_RESPONSE_BYTES = 2 * 1024 * 1024; // 2 MB cap for OG images
+const CACHE_TTL_MS = 10 * 60 * 1000;
+const MAX_IMAGE_RESPONSE_BYTES = 2 * 1024 * 1024;
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-/**
- * A news article with metadata and image.
- */
 export interface NewsArticle {
-  /** Article headline */
   title: string;
-  /** Article URL */
   url: string;
-  /** Article snippet/summary */
   snippet: string;
-  /** Publication date (ISO string or null) */
   date: string | null;
-  /** Source domain name */
   source: string;
-  /** Article image URL or gradient placeholder */
   imageUrl: string;
 }
 
-/**
- * Raw result from Perplexity Search API.
- */
 interface PerplexityResult {
   title: string;
   url: string;
@@ -51,19 +41,30 @@ interface PerplexityResult {
   last_updated?: string;
 }
 
-// ─── Cache ────────────────────────────────────────────────────────────────────
+const VALID_CATEGORIES = new Set(['Latest', 'Tech & AI', 'Finance & Crypto', 'Startups']);
 
-/** Cached news articles with timestamp */
-let newsCache: { articles: NewsArticle[]; cachedAt: number } | null = null;
+const CATEGORY_QUERIES: Record<string, [string, string]> = {
+  'Latest': [
+    `South Africa digital economy freelancing online income opportunities ${new Date().getFullYear()}`,
+    `AI tools digital income South Africa entrepreneurs creators ${new Date().getFullYear()}`,
+  ],
+  'Tech & AI': [
+    `artificial intelligence machine learning tech innovation South Africa ${new Date().getFullYear()}`,
+    `software development SA tech startups digital transformation ${new Date().getFullYear()}`,
+  ],
+  'Finance & Crypto': [
+    `cryptocurrency fintech digital finance South Africa ${new Date().getFullYear()}`,
+    `blockchain digital banking investment SA rand ${new Date().getFullYear()}`,
+  ],
+  'Startups': [
+    `startup funding venture capital entrepreneurship South Africa ${new Date().getFullYear()}`,
+    `SA tech founders small business digital innovation ${new Date().getFullYear()}`,
+  ],
+};
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+/** Per-category in-memory cache. Keyed by category name. */
+const newsCache = new Map<string, { articles: NewsArticle[]; cachedAt: number }>();
 
-/**
- * Extracts the source domain from a URL.
- *
- * @param url - The article URL
- * @returns The hostname without www prefix, or 'Unknown' on parse failure
- */
 function sourceFromUrl(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, '');
@@ -72,169 +73,88 @@ function sourceFromUrl(url: string): string {
   }
 }
 
-/**
- * Private/reserved IP ranges that must never be fetched (SSRF protection).
- * Covers: loopback, RFC-1918 private, link-local, unique-local, CGNAT,
- * benchmark, documentation, multicast, reserved, and IPv6 equivalents.
- */
-const PRIVATE_IP_PATTERNS = [
-  /^127\./,
-  /^10\./,
-  /^172\.(1[6-9]|2\d|3[01])\./,
-  /^192\.168\./,
-  /^169\.254\./,
-  /^0\./,
-  /^255\./,
-  /^100\.(6[4-9]|[7-9]\d|10[0-3])\./,
-  /^198\.(1[89]|19)\./,
-  /^192\.0\.2\./,
-  /^198\.51\.100\./,
-  /^203\.0\.113\./,
-  /^(22[4-9]|23\d)\./,
-  /^(24\d|25[0-5])\./,
-  /^::1$/,
-  /^[Ff][CcDd]/,
-  /^[Ff][Ee][89aAbB]/,
-  /^2001:[Dd][Bb]8:/,
-  /^[Ff][Ff]/,
-  /^::[Ff][Ff][Ff][Ff]:(10\.|127\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|0\.|255\.)/,
+const PRIVATE_IP_PATTERNS: RegExp[] = [
+  /^127\./, /^10\./, /^172\.(1[6-9]|2\d|3[01])\./, /^192\.168\./,
+  /^169\.254\./, /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./, /^198\.1[89]\./,
+  /^192\.0\.2\./, /^198\.51\.100\./, /^203\.0\.113\./, /^0\./, /^255\./,
+  /^(22[4-9]|23\d)\./, /^(24\d|25[0-5])\./, /^::1$/, /^[Ff][CcDd]/,
+  /^[Ff][Ee][89aAbB]/, /^::$/, /^2001:db8:/i, /^[Ff][Ff][0-9a-fA-F]{2}:/,
+  /^::ffff:(?:127|10)\./i, /^::ffff:172\.(1[6-9]|2\d|3[01])\./i,
+  /^::ffff:192\.168\./i, /^::ffff:169\.254\./i,
 ];
-
-function stripIpv6Brackets(hostname: string): string {
-  if (hostname.startsWith('[') && hostname.endsWith(']')) {
-    return hostname.slice(1, -1);
-  }
-  return hostname;
-}
 
 async function assertSafeUrl(rawUrl: string): Promise<void> {
   let parsed: URL;
-  try {
-    parsed = new URL(rawUrl);
-  } catch {
-    throw new Error(`Invalid URL: ${rawUrl}`);
-  }
+  try { parsed = new URL(rawUrl); } catch { throw new Error(`Invalid URL: ${rawUrl}`); }
 
   if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
     throw new Error(`Rejected non-HTTP(S) scheme: ${parsed.protocol}`);
   }
 
-  const hostname = stripIpv6Brackets(parsed.hostname);
-  for (const pattern of PRIVATE_IP_PATTERNS) {
-    if (pattern.test(hostname)) {
-      throw new Error(`Blocked private/reserved host: ${hostname}`);
-    }
+  const hostname = parsed.hostname.replace(/^\[|\]$/g, '');
+  for (const p of PRIVATE_IP_PATTERNS) {
+    if (p.test(hostname)) throw new Error(`Blocked private/reserved host: ${hostname}`);
   }
 
-  try {
-    const addresses = await dns.lookup(hostname, { all: true, verbatim: true });
-    for (const { address } of addresses) {
-      for (const pattern of PRIVATE_IP_PATTERNS) {
-        if (pattern.test(address)) {
-          throw new Error(`Hostname ${hostname} resolves to private IP: ${address}`);
-        }
-      }
-    }
-  } catch (err: unknown) {
-    if (err instanceof Error && err.message.startsWith('Hostname')) throw err;
+  const addresses: LookupAddress[] = await dns.lookup(hostname, { all: true, verbatim: true }).catch((err) => {
     throw new Error(`DNS resolution failed for ${hostname}: ${err instanceof Error ? err.message : String(err)}`);
+  });
+
+  if (addresses.length === 0) throw new Error(`No DNS records found for ${hostname}`);
+
+  for (const { address } of addresses) {
+    for (const p of PRIVATE_IP_PATTERNS) {
+      if (p.test(address)) throw new Error(`Hostname ${hostname} resolves to private IP: ${address}`);
+    }
   }
 }
 
-/**
- * Reads a response body as text while enforcing the MAX_IMAGE_RESPONSE_BYTES cap.
- * Uses the existing content-length fast path when available. Otherwise it streams
- * the response body and stops once the accumulated bytes would exceed the limit.
- */
 async function readHtmlWithinLimit(res: Response): Promise<string | null> {
-  const contentLength = res.headers.get('content-length');
-  if (contentLength) {
-    const declaredLength = parseInt(contentLength, 10);
-    if (Number.isFinite(declaredLength) && declaredLength > MAX_IMAGE_RESPONSE_BYTES) {
-      return null;
-    }
+  const cl = res.headers.get('content-length');
+  if (cl) {
+    const n = parseInt(cl, 10);
+    if (Number.isFinite(n) && n > MAX_IMAGE_RESPONSE_BYTES) return null;
     return res.text();
   }
-
   const reader = res.body?.getReader();
   if (!reader) return '';
-
   const chunks: Uint8Array[] = [];
-  let totalBytes = 0;
-
+  let total = 0;
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
     if (!value) continue;
-
-    totalBytes += value.byteLength;
-    if (totalBytes > MAX_IMAGE_RESPONSE_BYTES) {
-      await reader.cancel().catch(() => {});
-      return null;
-    }
-
+    total += value.byteLength;
+    if (total > MAX_IMAGE_RESPONSE_BYTES) { await reader.cancel().catch(() => {}); return null; }
     chunks.push(value);
   }
-
-  const merged = new Uint8Array(totalBytes);
+  const merged = new Uint8Array(total);
   let offset = 0;
-  for (const chunk of chunks) {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-
+  for (const c of chunks) { merged.set(c, offset); offset += c.byteLength; }
   return new TextDecoder().decode(merged);
 }
 
 async function fetchOgImage(articleUrl: string, title: string): Promise<string> {
-  try {
-    await assertSafeUrl(articleUrl);
-  } catch {
-    return gradientPlaceholder(title);
-  }
-
+  try { await assertSafeUrl(articleUrl); } catch { return gradientPlaceholder(title); }
   try {
     const res = await fetchWithTimeout(
       articleUrl,
-      {
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ApexNewsBot/1.0; +https://apex-coral-zeta.vercel.app)' },
-        redirect: 'manual',
-      },
+      { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ApexNewsBot/1.0)' }, redirect: 'manual' },
       IMAGE_FETCH_TIMEOUT_MS,
     );
-
     if (res.status >= 300 && res.status < 400) return gradientPlaceholder(title);
     if (!res.ok) return gradientPlaceholder(title);
-
     const html = await readHtmlWithinLimit(res);
-    if (html === null) return gradientPlaceholder(title);
-
-    const toAbsolute = (value: string): string | null => {
-      try {
-        return new URL(value, articleUrl).toString();
-      } catch {
-        return null;
-      }
-    };
-
-    const ogMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
+    if (!html) return gradientPlaceholder(title);
+    const toAbs = (v: string) => { try { return new URL(v, articleUrl).toString(); } catch { return null; } };
+    const og = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
       ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
-    if (ogMatch?.[1]) {
-      const abs = toAbsolute(ogMatch[1]);
-      if (abs) return abs;
-    }
-
-    const twMatch = html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i)
+    if (og?.[1]) { const a = toAbs(og[1]); if (a) return a; }
+    const tw = html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i)
       ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i);
-    if (twMatch?.[1]) {
-      const abs = toAbsolute(twMatch[1]);
-      if (abs) return abs;
-    }
-
+    if (tw?.[1]) { const a = toAbs(tw[1]); if (a) return a; }
     return gradientPlaceholder(title);
-  } catch {
-    return gradientPlaceholder(title);
-  }
+  } catch { return gradientPlaceholder(title); }
 }
 
 function gradientPlaceholder(title: string): string {
@@ -246,11 +166,16 @@ function gradientPlaceholder(title: string): string {
   return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
 }
 
-export async function GET(): Promise<Response> {
+export async function GET(req: Request): Promise<Response> {
   const requestId = generateRequestId();
+  const { searchParams } = new URL(req.url);
+  const raw = searchParams.get('category') ?? 'Latest';
+  const category = VALID_CATEGORIES.has(raw) ? raw : 'Latest';
+  const queries = CATEGORY_QUERIES[category];
 
-  if (newsCache && Date.now() - newsCache.cachedAt < CACHE_TTL_MS) {
-    return NextResponse.json({ articles: newsCache.articles, cached: true, requestId });
+  const cached = newsCache.get(category);
+  if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+    return NextResponse.json({ articles: cached.articles, cached: true, category, requestId });
   }
 
   const apiKey = process.env.PERPLEXITY_API_KEY;
@@ -263,40 +188,31 @@ export async function GET(): Promise<Response> {
   }
 
   const startMs = Date.now();
-  log({ level: 'info', service: SERVICE, message: 'Fetching live news', requestId });
+  log({ level: 'info', service: SERVICE, message: `Fetching news for category: ${category}`, requestId });
 
   try {
-    const currentYear = new Date().getFullYear();
-    const body = {
-      query: [
-        `South Africa digital economy freelancing online income opportunities ${currentYear}`,
-        `AI tools digital income South Africa entrepreneurs creators ${currentYear}`,
-      ],
-      max_results: 5,
-      max_tokens_per_page: 512,
-      max_tokens: 8000,
-      country: 'ZA',
-      search_language_filter: ['en'],
-      search_domain_filter: ['-pinterest.com', '-reddit.com', '-quora.com'],
-    };
-
     const response = await fetchWithTimeout(
       'https://api.perplexity.ai/search',
       {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: queries,
+          max_results: 5,
+          max_tokens_per_page: 512,
+          max_tokens: 8000,
+          country: 'ZA',
+          search_language_filter: ['en'],
+          search_domain_filter: ['-pinterest.com', '-reddit.com', '-quora.com'],
+        }),
       },
       PERPLEXITY_TIMEOUT_MS,
     );
 
     if (!response.ok) {
       const errText = await response.text().catch(() => '');
-      log({ level: 'warn', service: SERVICE, message: `Perplexity HTTP ${response.status}`, requestId, error: errText });
-      if (newsCache) return NextResponse.json({ articles: newsCache.articles, cached: true, stale: true, requestId });
+      log({ level: 'warn', service: SERVICE, message: `Perplexity HTTP ${response.status} for ${category}`, requestId, error: errText });
+      if (cached) return NextResponse.json({ articles: cached.articles, cached: true, stale: true, category, requestId });
       return NextResponse.json(
         { error: 'UPSTREAM_ERROR', message: 'News service temporarily unavailable.', requestId },
         { status: 502, headers: { 'X-Request-Id': requestId } },
@@ -304,21 +220,17 @@ export async function GET(): Promise<Response> {
     }
 
     const data = await response.json() as { results: PerplexityResult[][] | PerplexityResult[] };
-
     let flat: PerplexityResult[] = [];
     if (Array.isArray(data.results)) {
-      if (data.results.length > 0 && Array.isArray(data.results[0])) {
-        flat = (data.results as PerplexityResult[][]).flat();
-      } else {
-        flat = data.results as PerplexityResult[];
-      }
+      flat = data.results.length > 0 && Array.isArray(data.results[0])
+        ? (data.results as PerplexityResult[][]).flat()
+        : data.results as PerplexityResult[];
     }
 
     const seen = new Set<string>();
     const unique = flat.filter(r => {
       if (!r?.url || seen.has(r.url)) return false;
-      seen.add(r.url);
-      return true;
+      seen.add(r.url); return true;
     }).slice(0, 8);
 
     const articles: NewsArticle[] = await Promise.all(
@@ -332,15 +244,14 @@ export async function GET(): Promise<Response> {
       })),
     );
 
-    newsCache = { articles, cachedAt: Date.now() };
+    newsCache.set(category, { articles, cachedAt: Date.now() });
+    log({ level: 'info', service: SERVICE, message: `News ready — ${articles.length} articles for ${category}`, requestId, durationMs: Date.now() - startMs });
+    return NextResponse.json({ articles, cached: false, category, requestId }, { headers: { 'X-Request-Id': requestId } });
 
-    log({ level: 'info', service: SERVICE, message: `News ready — ${articles.length} articles`, requestId, durationMs: Date.now() - startMs });
-
-    return NextResponse.json({ articles, cached: false, requestId }, { headers: { 'X-Request-Id': requestId } });
   } catch (err: unknown) {
     const isTimeout = err instanceof Error && err.name === 'AbortError';
-    log({ level: 'error', service: SERVICE, message: isTimeout ? 'Perplexity timed out' : 'News fetch failed', requestId, error: String(err), durationMs: Date.now() - startMs });
-    if (newsCache) return NextResponse.json({ articles: newsCache.articles, cached: true, stale: true, requestId });
+    log({ level: 'error', service: SERVICE, message: isTimeout ? `Timeout for ${category}` : `News fetch failed for ${category}`, requestId, error: String(err), durationMs: Date.now() - startMs });
+    if (cached) return NextResponse.json({ articles: cached.articles, cached: true, stale: true, category, requestId });
     return NextResponse.json(
       { error: isTimeout ? 'TIMEOUT' : 'INTERNAL_ERROR', message: 'Failed to fetch news.', requestId },
       { status: isTimeout ? 504 : 500, headers: { 'X-Request-Id': requestId } },

@@ -63,7 +63,7 @@ export async function GET(req: Request): Promise<Response> {
     status: 'ok',
     timestamp: new Date().toISOString(),
     environment: process.env.VERCEL_ENV || process.env.NODE_ENV || 'unknown',
-    version: '1.0.0-phase1',
+    version: '2.0.0-phase2',
     // Only show detailed service status with a valid, configured internal token
     ...(isInternal && {
       services: {
