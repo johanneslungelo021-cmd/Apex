@@ -529,15 +529,17 @@ export default function SentientInterface() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {opportunities.map((opp) => (
-              <motion.a
+              <motion.div
                 key={opp.link}
-                href={opp.link}
-                target="_blank"
-                rel="noopener noreferrer"
                 className="glass p-6 rounded-3xl cursor-pointer hover:border-white/20 border border-transparent transition"
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => triggerSentient(0.6)}
+                onClick={() => {
+                  triggerSentient(0.6);
+                  window.open(opp.link, '_blank', 'noopener,noreferrer');
+                }}
+                role="article"
+                aria-label={`Opportunity: ${opp.title}`}
               >
                 <div className="flex items-start justify-between mb-3">
                   <span className="text-xs glass px-3 py-1 rounded-full text-zinc-400">{opp.category}</span>
@@ -549,7 +551,7 @@ export default function SentientInterface() {
                   <span className="text-emerald-400 font-mono">R{opp.cost} cost</span>
                   <span className="text-zinc-300">{opp.incomePotential}</span>
                 </div>
-              </motion.a>
+              </motion.div>
             ))}
           </div>
         )}

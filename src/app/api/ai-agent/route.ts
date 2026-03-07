@@ -21,7 +21,7 @@ import {
   checkRateLimit,
 } from '@/lib/api-utils';
 import { runScoutAgent } from '@/lib/agents/scout-agent';
-import { agentQueryCounter } from '@/lib/metrics';
+import { agentQueryCounter, inferenceLatencyHistogram, costAccumulator } from '@/lib/metrics';
 
 const SERVICE = 'ai-agent';
 const GROQ_TIMEOUT_MS = envTimeoutMs(process.env.GROQ_TIMEOUT_MS, 15_000);
@@ -67,18 +67,21 @@ async function readJsonBodyWithinLimit(req: Request): Promise<unknown> {
   const chunks: Uint8Array[] = [];
   let totalBytes = 0;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (!value) continue;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
 
-    totalBytes += value.byteLength;
-    if (totalBytes > MAX_REQUEST_BODY_BYTES) {
-      await reader.cancel().catch(() => {});
-      throw new PayloadTooLargeError();
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_REQUEST_BODY_BYTES) {
+        await reader.cancel().catch(() => {});
+        throw new PayloadTooLargeError();
+      }
+      chunks.push(value);
     }
-
-    chunks.push(value);
+  } finally {
+    reader.releaseLock();
   }
 
   const merged = new Uint8Array(totalBytes);
@@ -228,7 +231,7 @@ function classifyQuery(messages: ValidatedMessage[]): TierConfig {
 }
 
 // ══════════════════════════════════════════════════════════════
-// 6. System prompt
+// 6. System prompt builder
 // ══════════════════════════════════════════════════════════════
 
 function buildSystemPrompt(opportunitySummary: string): string {
@@ -249,7 +252,24 @@ ${opportunitySummary || 'None available right now.'}`;
 }
 
 // ══════════════════════════════════════════════════════════════
-// 7. SSE Stream Helpers
+// 7. Cost estimation for observability
+// ══════════════════════════════════════════════════════════════
+
+function estimateCost(tier: TierConfig, outputTokens: number): string {
+  const pricing: Record<string, { input: number; output: number }> = {
+    'llama-3.1-8b-instant': { input: 0.05, output: 0.08 },
+    'llama-3.3-70b-versatile': { input: 0.59, output: 0.79 },
+    sonar: { input: 1.0, output: 1.0 },
+  };
+
+  const p = pricing[tier.model] || { input: 0, output: 0 };
+  const inputCost = (500 / 1_000_000) * p.input;
+  const outputCost = (outputTokens / 1_000_000) * p.output;
+  return (inputCost + outputCost).toFixed(6);
+}
+
+// ══════════════════════════════════════════════════════════════
+// 8. SSE Stream Helpers
 // ══════════════════════════════════════════════════════════════
 
 function encodeSSE(data: object): string {
@@ -261,7 +281,7 @@ function encodeStreamEvent(event: string, data: object): string {
 }
 
 // ══════════════════════════════════════════════════════════════
-// 8. Streaming Groq call
+// 9. Streaming Groq call
 // ══════════════════════════════════════════════════════════════
 
 async function streamGroqResponse(
@@ -350,6 +370,21 @@ async function streamGroqResponse(
     const durationMs = Date.now() - startMs;
     const costEstimate = estimateCost(tierConfig, totalOutputTokens);
 
+    // Record metrics
+    inferenceLatencyHistogram.record(durationMs, {
+      tier: tierConfig.tier,
+      provider: tierConfig.provider,
+      model: tierConfig.model,
+    });
+
+    const costFloat = parseFloat(costEstimate);
+    if (costFloat > 0) {
+      costAccumulator.add(costFloat, {
+        tier: tierConfig.tier,
+        model: tierConfig.model,
+      });
+    }
+
     log({
       level: 'info',
       service: SERVICE,
@@ -374,7 +409,7 @@ async function streamGroqResponse(
 }
 
 // ══════════════════════════════════════════════════════════════
-// 9. Streaming Perplexity call (for research tier)
+// 10. Streaming Perplexity call (for research tier)
 // ══════════════════════════════════════════════════════════════
 
 async function streamPerplexityResponse(
@@ -463,6 +498,21 @@ async function streamPerplexityResponse(
     const durationMs = Date.now() - startMs;
     const costEstimate = estimateCost(tierConfig, totalOutputTokens);
 
+    // Record metrics
+    inferenceLatencyHistogram.record(durationMs, {
+      tier: tierConfig.tier,
+      provider: tierConfig.provider,
+      model: tierConfig.model,
+    });
+
+    const costFloat = parseFloat(costEstimate);
+    if (costFloat > 0) {
+      costAccumulator.add(costFloat, {
+        tier: tierConfig.tier,
+        model: tierConfig.model,
+      });
+    }
+
     log({
       level: 'info',
       service: SERVICE,
@@ -486,39 +536,22 @@ async function streamPerplexityResponse(
 }
 
 // ══════════════════════════════════════════════════════════════
-// 10. Cost estimation for observability
-// ══════════════════════════════════════════════════════════════
-
-function estimateCost(tier: TierConfig, outputTokens: number): string {
-  const pricing: Record<string, { input: number; output: number }> = {
-    'llama-3.1-8b-instant': { input: 0.05, output: 0.08 },
-    'llama-3.3-70b-versatile': { input: 0.59, output: 0.79 },
-    sonar: { input: 1.0, output: 1.0 },
-  };
-
-  const p = pricing[tier.model] || { input: 0, output: 0 };
-  const inputCost = (500 / 1_000_000) * p.input;
-  const outputCost = (outputTokens / 1_000_000) * p.output;
-  return (inputCost + outputCost).toFixed(6);
-}
-
-// ══════════════════════════════════════════════════════════════
 // 11. GET — Capability Manifest
 // ══════════════════════════════════════════════════════════════
 
 export async function GET(): Promise<Response> {
   const manifest = {
     name: 'Apex Intelligent Engine',
-    version: '2.1.0',
+    version: '3.0.0',
     description:
-      'Streaming conversational AI agent with tiered model routing for South African digital income opportunities.',
+      'Streaming AI assistant with tiered model routing for South African digital income opportunities.',
     endpoint: '/api/ai-agent',
     method: 'POST',
     streaming: true,
-    tiers: {
-      simple: { model: 'llama-3.1-8b-instant', costPerMillion: '$0.05/$0.08' },
-      complex: { model: 'llama-3.3-70b-versatile', costPerMillion: '$0.59/$0.79' },
-      research: { model: 'sonar', costPerMillion: '$1.00/$1.00' },
+    models: {
+      simple: 'llama-3.1-8b-instant (Groq, $0.05/$0.08 per M tokens)',
+      complex: 'llama-3.3-70b-versatile (Groq, $0.59/$0.79 per M tokens)',
+      research: 'sonar (Perplexity, $1/$1 per M tokens)',
     },
     input: {
       messages: {
@@ -561,8 +594,9 @@ export async function POST(req: Request): Promise<Response> {
     req.headers.get('x-real-ip') ??
     'unknown';
 
+  const hashedIp = hashIp(ip);
+
   if (!checkRateLimit(ip, RATE_LIMIT, RATE_WINDOW_MS)) {
-    const hashedIp = hashIp(ip);
     log({
       level: 'warn',
       service: SERVICE,
@@ -619,7 +653,6 @@ export async function POST(req: Request): Promise<Response> {
 
   // Classify query tier
   const tierConfig = classifyQuery(messages);
-  const hashedIp = hashIp(ip);
 
   log({
     level: 'info',
@@ -643,7 +676,7 @@ export async function POST(req: Request): Promise<Response> {
 
     // Create streaming response
     const encoder = new TextEncoder();
-    const opportunitiesRef = opportunities; // Capture for closure
+    const opportunitiesRef = opportunities;
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         try {
@@ -715,20 +748,25 @@ export async function POST(req: Request): Promise<Response> {
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
         'X-Request-Id': requestId,
-        'X-Tier': tierConfig.tier,
+        'X-Model-Tier': tierConfig.tier,
         'X-Model': tierConfig.model,
       },
     });
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
+    const durationMs = Date.now() - startMs;
+
     log({
       level: 'error',
       service: SERVICE,
       message: 'Agent initialization failed',
       requestId,
       error: errMsg,
-      durationMs: Date.now() - startMs,
+      durationMs,
+      ...(hashedIp !== undefined ? { hashedIp } : {}),
     });
+
+    agentQueryCounter.add(1, { status: 'error', tier: 'unknown' });
 
     return NextResponse.json(
       { error: 'INTERNAL_ERROR', message: 'Failed to initialize agent.', requestId },
