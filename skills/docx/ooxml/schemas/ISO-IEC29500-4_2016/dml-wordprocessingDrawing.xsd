@@ -4,9 +4,6 @@
   xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
   xmlns:dpct="http://schemas.openxmlformats.org/drawingml/2006/picture"
   xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-  xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"
-  xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup"
-  xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas"
   xmlns="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
   targetNamespace="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
   elementFormDefault="qualified">
@@ -259,7 +256,7 @@
         maxOccurs="1"/>
       <xsd:element name="grpSpPr" type="a:CT_GroupShapeProperties" minOccurs="1" maxOccurs="1"/>
       <xsd:choice minOccurs="0" maxOccurs="unbounded">
-        <xsd:element ref="wps:wsp"/>
+        <xsd:element ref="wsp"/>
         <xsd:element name="grpSp" type="CT_WordprocessingGroup"/>
         <xsd:element name="graphicFrame" type="CT_GraphicFrame"/>
         <xsd:element ref="dpct:pic"/>
@@ -273,10 +270,10 @@
       <xsd:element name="bg" type="a:CT_BackgroundFormatting" minOccurs="0" maxOccurs="1"/>
       <xsd:element name="whole" type="a:CT_WholeE2oFormatting" minOccurs="0" maxOccurs="1"/>
       <xsd:choice minOccurs="0" maxOccurs="unbounded">
-        <xsd:element ref="wps:wsp"/>
+        <xsd:element ref="wsp"/>
         <xsd:element ref="dpct:pic"/>
         <xsd:element name="contentPart" type="CT_WordprocessingContentPart"/>
-        <xsd:element ref="wpg:wgp"/>
+        <xsd:element ref="wgp"/>
         <xsd:element name="graphicFrame" type="CT_GraphicFrame"/>
       </xsd:choice>
       <xsd:element name="extLst" type="a:CT_OfficeArtExtensionList" minOccurs="0" maxOccurs="1"/>

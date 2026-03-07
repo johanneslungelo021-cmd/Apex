@@ -69,13 +69,14 @@ jobs:
           echo "Checking for nested interactive elements in page.tsx..."
 
           # Check for the problematic pattern: motion.a with nested button
-          if grep -Pzo '(?s)<motion\.a[^>]*>.*?<button' src/app/page.tsx 2>/dev/null; then
+          # Scope to full element (opening to closing tag) to avoid false positives from siblings
+          if grep -Pzo '(?s)<motion\.a[^>]*>.*?</motion\.a>' src/app/page.tsx 2>/dev/null | grep -q '<button'; then
             echo "❌ FAIL: Found <button> nested inside <motion.a> — accessibility violation"
             exit 1
           fi
 
-          # Also check for motion.a with onClick that could conflict
-          if grep -Pzo '(?s)<motion\.a[^>]*onClick[^>]*>' src/app/page.tsx 2>/dev/null | grep -q 'button'; then
+          # Also check for motion.a with onClick that has nested button
+          if grep -Pzo '(?s)<motion\.a[^>]*onClick[^>]*>.*?</motion\.a>' src/app/page.tsx 2>/dev/null | grep -q '<button'; then
             echo "❌ FAIL: Found interactive elements nested inside <motion.a>"
             exit 1
           fi

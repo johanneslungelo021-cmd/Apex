@@ -1,14 +1,17 @@
 // src/app/api/health/route.ts
 import { NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { APP_VERSION } from '@/lib/version';
 
 function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let mismatch = 0;
-  for (let i = 0; i < a.length; i++) {
-    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return mismatch === 0;
+  // Pad both buffers to the same length to avoid leaking expected token length
+  const maxLen = Math.max(a.length, b.length, 1);
+  const bufA = Buffer.alloc(maxLen);
+  const bufB = Buffer.alloc(maxLen);
+  Buffer.from(a).copy(bufA);
+  Buffer.from(b).copy(bufB);
+  // Use Node.js built-in timing-safe comparison
+  return a.length === b.length && crypto.timingSafeEqual(bufA, bufB);
 }
 
 export async function GET(req: Request) {

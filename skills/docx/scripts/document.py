@@ -815,11 +815,11 @@ class Document:
             parent_start_elem, self._comment_range_start_xml(comment_id)
         )
         parent_ref_run = parent_ref_elem.parentNode
-        self._document.insert_after(
+        end_marker_nodes = self._document.insert_after(
             parent_ref_run, f'<w:commentRangeEnd w:id="{comment_id}"/>'
         )
         self._document.insert_after(
-            parent_ref_run, self._comment_ref_run_xml(comment_id)
+            end_marker_nodes[0], self._comment_ref_run_xml(comment_id)
         )
 
         # Add to comments.xml immediately
@@ -856,6 +856,10 @@ class Document:
         Raises:
             ValueError: If validation fails.
         """
+        # Flush in-memory edits to disk so validators see current state
+        for editor in self._editors.values():
+            editor.save()
+
         # Create validators with current state
         schema_validator = DOCXSchemaValidator(
             self.unpacked_path, self.original_docx, verbose=False
@@ -1244,15 +1248,12 @@ class Document:
         """Ensure word/_rels/document.xml.rels has comment relationships."""
         editor = self["word/_rels/document.xml.rels"]
 
-        if self._has_relationship(editor, "comments.xml"):
-            return
-
         root = editor.dom.documentElement
         root_tag = root.tagName  # type: ignore
         prefix = root_tag.split(":")[0] + ":" if ":" in root_tag else ""
         next_rid_num = int(editor.get_next_rid()[3:])
 
-        # Add relationship elements
+        # Add relationship elements (skip any that already exist)
         rels = [
             (
                 next_rid_num,
@@ -1277,6 +1278,8 @@ class Document:
         ]
 
         for rel_id, rel_type, target in rels:
+            if self._has_relationship(editor, target):
+                continue
             rel_xml = f'<{prefix}Relationship Id="rId{rel_id}" Type="{rel_type}" Target="{target}"/>'
             editor.append_to(root, rel_xml)
 
@@ -1284,12 +1287,9 @@ class Document:
         """Ensure [Content_Types].xml has comment content types."""
         editor = self["[Content_Types].xml"]
 
-        if self._has_override(editor, "/word/comments.xml"):
-            return
-
         root = editor.dom.documentElement
 
-        # Add Override elements
+        # Add Override elements (skip any that already exist)
         overrides = [
             (
                 "/word/comments.xml",
@@ -1310,6 +1310,8 @@ class Document:
         ]
 
         for part_name, content_type in overrides:
+            if self._has_override(editor, part_name):
+                continue
             override_xml = (
                 f'<Override PartName="{part_name}" ContentType="{content_type}"/>'
             )

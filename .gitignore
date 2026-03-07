@@ -50,5 +50,11 @@ dev.log
 # Database files
 db/*.db
 
-# Skills directory
-/skills/
+# Skills directory (generated artifacts only)
+/skills/**/output/
+/skills/**/logs/
+/skills/**/*.log
+/skills/**/node_modules/
+/skills/**/__pycache__/
+/skills/**/dist/
+/skills/**/build/
