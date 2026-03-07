@@ -1,11 +1,19 @@
 /**
- * News API Route
+ * News API Route — Phase 2 · Category-Aware
  *
- * Fetches live digital economy news for South African creators using
- * the Perplexity Search API. Implements 10-minute caching with stale
- * fallback for reliability.
+ * Fetches live digital economy news for South African creators using the
+ * Perplexity Search API. Supports four categories via a ?category= query
+ * parameter, each with its own independent 10-minute cache and two
+ * complementary SA-focused search queries.
  *
- * @module api/news
+ * SSRF protections:
+ *   - assertSafeUrl: DNS + private-IP block with full IPv4+IPv6 coverage
+ *   - dns.lookup({ all: true }) — covers all address families
+ *   - resolveSafeImageUrl: resolves relative OG paths, re-validates resolved URL
+ *   - redirect: 'manual' — blocks redirect-based SSRF
+ *   - 2 MB response cap on image metadata fetches
+ *
+ * @module app/api/news
  */
 
 import { NextResponse } from 'next/server';
@@ -17,6 +25,8 @@ const PERPLEXITY_TIMEOUT_MS = envTimeoutMs(process.env.PERPLEXITY_TIMEOUT_MS, 14
 const IMAGE_FETCH_TIMEOUT_MS = 4_000;
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const MAX_IMAGE_RESPONSE_BYTES = 2 * 1024 * 1024;
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface NewsArticle {
   title: string;
@@ -35,14 +45,31 @@ interface PerplexityResult {
   last_updated?: string;
 }
 
-let newsCache: { articles: NewsArticle[]; cachedAt: number } | null = null;
+// ─── Category routing ─────────────────────────────────────────────────────────
+
+/** Whitelist of accepted category values. */
+export const VALID_CATEGORIES = new Set(['Latest', 'Tech & AI', 'Finance & Crypto', 'Startups']);
+
+/**
+ * Two complementary SA-focused queries per category — run in parallel
+ * so both signals feed the merged article list.
+ */
+const CATEGORY_QUERIES: Record<string, [string, string]> = {
+  'Latest':            ['South Africa digital economy news 2026',                    'South Africa tech startups news March 2026'],
+  'Tech & AI':         ['South Africa artificial intelligence technology news 2026',  'SA AI machine learning fintech latest 2026'],
+  'Finance & Crypto':  ['South Africa cryptocurrency blockchain finance news 2026',   'SA rand digital payments crypto March 2026'],
+  'Startups':          ['South Africa startup funding investment news 2026',          'Cape Town Johannesburg startup ecosystem 2026'],
+};
+
+// ─── Per-category in-memory cache ─────────────────────────────────────────────
+
+const newsCache = new Map<string, { articles: NewsArticle[]; cachedAt: number }>();
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function sourceFromUrl(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '');
-  } catch {
-    return 'Unknown';
-  }
+  try { return new URL(url).hostname.replace(/^www\./, ''); }
+  catch { return 'Unknown'; }
 }
 
 const PRIVATE_IP_PATTERNS = [
@@ -69,153 +96,133 @@ const PRIVATE_IP_PATTERNS = [
 ];
 
 function stripIpv6Brackets(hostname: string): string {
-  if (hostname.startsWith('[') && hostname.endsWith(']')) {
-    return hostname.slice(1, -1);
-  }
-  return hostname;
+  return (hostname.startsWith('[') && hostname.endsWith(']'))
+    ? hostname.slice(1, -1) : hostname;
 }
 
 async function assertSafeUrl(rawUrl: string): Promise<void> {
   let parsed: URL;
-  try {
-    parsed = new URL(rawUrl);
-  } catch {
-    throw new Error(`Invalid URL: ${rawUrl}`);
-  }
+  try { parsed = new URL(rawUrl); }
+  catch { throw new Error(`Invalid URL: ${rawUrl}`); }
 
   if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-    throw new Error(`Rejected non-HTTP(S) scheme: ${parsed.protocol}`);
+    throw new Error(`Disallowed protocol: ${parsed.protocol}`);
   }
 
   const hostname = stripIpv6Brackets(parsed.hostname);
-  for (const pattern of PRIVATE_IP_PATTERNS) {
-    if (pattern.test(hostname)) {
-      throw new Error(`Blocked private/reserved host: ${hostname}`);
+
+  // Reject bare IP literals before DNS
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) || /^[0-9a-fA-F:]+$/.test(hostname)) {
+    if (PRIVATE_IP_PATTERNS.some((re) => re.test(hostname))) {
+      throw new Error(`SSRF: private IP literal ${hostname}`);
     }
+    return;
   }
 
-  try {
-    const addresses = await dns.lookup(hostname, { all: true, verbatim: true });
-    for (const { address } of addresses) {
-      for (const pattern of PRIVATE_IP_PATTERNS) {
-        if (pattern.test(address)) {
-          throw new Error(`Hostname ${hostname} resolves to private IP: ${address}`);
-        }
-      }
+  // DNS resolution — { all: true } covers all address families including IPv6
+  const addresses = await dns.lookup(hostname, { all: true, verbatim: true });
+  for (const { address } of addresses as { address: string }[]) {
+    if (PRIVATE_IP_PATTERNS.some((re) => re.test(address))) {
+      throw new Error(`SSRF: ${hostname} resolved to private IP ${address}`);
     }
-  } catch (err: unknown) {
-    if (err instanceof Error && err.message.startsWith('Hostname')) throw err;
-    throw new Error(`DNS resolution failed for ${hostname}: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
-async function readHtmlWithinLimit(res: Response): Promise<string | null> {
-  const contentLength = res.headers.get('content-length');
-  if (contentLength) {
-    const declaredLength = parseInt(contentLength, 10);
-    if (Number.isFinite(declaredLength) && declaredLength > MAX_IMAGE_RESPONSE_BYTES) {
-      return null;
-    }
-    return res.text();
-  }
-
-  const reader = res.body?.getReader();
-  if (!reader) return '';
-
-  const chunks: Uint8Array[] = [];
-  let totalBytes = 0;
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (!value) continue;
-
-    totalBytes += value.byteLength;
-    if (totalBytes > MAX_IMAGE_RESPONSE_BYTES) {
-      await reader.cancel().catch(() => {});
-      return null;
-    }
-
-    chunks.push(value);
-  }
-
-  const merged = new Uint8Array(totalBytes);
-  let offset = 0;
-  for (const chunk of chunks) {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-
-  return new TextDecoder().decode(merged);
-}
-
+/**
+ * Resolves a potentially relative OG/Twitter image URL to absolute form
+ * and re-validates the resolved URL against SSRF rules.
+ */
 async function resolveSafeImageUrl(value: string, articleUrl: string): Promise<string | null> {
   try {
-    const absoluteUrl = new URL(value, articleUrl).toString();
-    await assertSafeUrl(absoluteUrl);
+    const absoluteUrl = new URL(value, articleUrl).href;
+    await assertSafeUrl(absoluteUrl); // re-validat resolved URL
     return absoluteUrl;
   } catch {
     return null;
   }
 }
 
-async function fetchOgImage(articleUrl: string, title: string): Promise<string> {
+const GRADIENT_PLACEHOLDER =
+  'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjQ1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjEwMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiMxZTFiNGIiLz48c3RvcCBvZmZzZXQ9IjUwJSIgc3RvcC1jb2xvcj0iIzBmMTcyYSIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzBjMWExMCIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPSI4MDAiIGhlaWdodD0iNDUwIiBmaWxsPSJ1cmwoI2cpIi8+PC9zdmc+';
+
+async function fetchOgImage(articleUrl: string): Promise<string> {
   try {
     await assertSafeUrl(articleUrl);
-  } catch {
-    return gradientPlaceholder(title);
-  }
 
-  try {
     const res = await fetchWithTimeout(
       articleUrl,
       {
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ApexNewsBot/1.0; +https://apex-coral-zeta.vercel.app)' },
-        redirect: 'manual',
+        headers: { 'User-Agent': 'Mozilla/5.0 Apexbot/1.0 (+https://apex-sentient.vercel.app)' },
+        redirect: 'manual', // block redirect-based SSRF — 3xx responses are rejected below
       },
       IMAGE_FETCH_TIMEOUT_MS,
     );
 
-    if (res.status >= 300 && res.status < 400) return gradientPlaceholder(title);
-    if (!res.ok) return gradientPlaceholder(title);
+    // Reject any 3xx redirect — prevents redirect to private IPs
+    if (res.status >= 300 && res.status < 400) return GRADIENT_PLACEHOLDER;
+    if (!res.ok) return GRADIENT_PLACEHOLDER;
 
-    const html = await readHtmlWithinLimit(res);
-    if (html === null) return gradientPlaceholder(title);
+    const reader = res.body?.getReader();
+    if (!reader) return GRADIENT_PLACEHOLDER;
 
-    const ogMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
-      ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_IMAGE_RESPONSE_BYTES) {
+        await reader.cancel().catch(() => {});
+        return GRADIENT_PLACEHOLDER;
+      }
+      chunks.push(value);
+    }
+
+    const html = new TextDecoder().decode(
+      chunks.reduce((acc, c) => {
+        const m = new Uint8Array(acc.byteLength + c.byteLength);
+        m.set(acc, 0); m.set(c, acc.byteLength); return m;
+      }, new Uint8Array(0)),
+    );
+
+    const ogMatch =
+      html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ??
+      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
     if (ogMatch?.[1]) {
       const abs = await resolveSafeImageUrl(ogMatch[1], articleUrl);
       if (abs) return abs;
     }
 
-    const twMatch = html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i)
-      ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i);
+    const twMatch =
+      html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i) ??
+      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i);
     if (twMatch?.[1]) {
       const abs = await resolveSafeImageUrl(twMatch[1], articleUrl);
       if (abs) return abs;
     }
 
-    return gradientPlaceholder(title);
+    return GRADIENT_PLACEHOLDER;
   } catch {
-    return gradientPlaceholder(title);
+    return GRADIENT_PLACEHOLDER;
   }
 }
 
-function gradientPlaceholder(title: string): string {
-  let hash = 0;
-  for (let i = 0; i < title.length; i++) hash = title.charCodeAt(i) + ((hash << 5) - hash);
-  const h1 = Math.abs(hash) % 360;
-  const h2 = (h1 + 55) % 360;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="420"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:hsl(${h1},55%,12%)"/><stop offset="100%" style="stop-color:hsl(${h2},45%,7%)"/></linearGradient></defs><rect width="800" height="420" fill="url(#g)"/><text x="400" y="210" font-family="system-ui,sans-serif" font-size="16" fill="rgba(255,255,255,0.25)" text-anchor="middle" dominant-baseline="middle">${title.slice(0, 60).replace(/[<>&"]/g, '')}</text></svg>`;
-  return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
-}
+// ─── GET handler ──────────────────────────────────────────────────────────────
 
-export async function GET(): Promise<Response> {
+export async function GET(req: Request): Promise<Response> {
   const requestId = generateRequestId();
+  const url = new URL(req.url);
 
-  if (newsCache && Date.now() - newsCache.cachedAt < CACHE_TTL_MS) {
-    return NextResponse.json({ articles: newsCache.articles, cached: true, requestId });
+  // Validate and normalise category — unknown values fall back to 'Latest'
+  const rawCategory = decodeURIComponent(url.searchParams.get('category') ?? 'Latest');
+  const category = VALID_CATEGORIES.has(rawCategory) ? rawCategory : 'Latest';
+  const [query1, query2] = CATEGORY_QUERIES[category];
+
+  // Serve from per-category in-memory cache when still fresh
+  const cached = newsCache.get(category);
+  if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+    return NextResponse.json({ articles: cached.articles, cached: true, category, requestId });
   }
 
   const apiKey = process.env.PERPLEXITY_API_KEY;
@@ -228,95 +235,71 @@ export async function GET(): Promise<Response> {
   }
 
   const startMs = Date.now();
-  log({ level: 'info', service: SERVICE, message: 'Fetching live news', requestId });
+  log({ level: 'info', service: SERVICE, message: `Fetching news — category: ${category}`, requestId });
 
   try {
-    const currentYear = new Date().getFullYear();
-    const body = {
-      query: [
-        `South Africa digital economy freelancing online income opportunities ${currentYear}`,
-        `AI tools digital income South Africa entrepreneurs creators ${currentYear}`,
-      ],
-      max_results: 5,
-      max_tokens_per_page: 512,
-      max_tokens: 8000,
-      country: 'ZA',
-      search_language_filter: ['en'],
-      search_domain_filter: ['-pinterest.com', '-reddit.com', '-quora.com'],
+    // Fire both queries in parallel for better recall
+    const fetchQuery = async (query: string): Promise<PerplexityResult[]> => {
+      const res = await fetchWithTimeout(
+        'https://api.perplexity.ai/search',
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, search_recency_filter: 'week', return_related_questions: false }),
+        },
+        PERPLEXITY_TIMEOUT_MS,
+      );
+      if (!res.ok) return [];
+      const data = await res.json();
+      return (data.results ?? data.web_search_results ?? []) as PerplexityResult[];
     };
 
-    const response = await fetchWithTimeout(
-      'https://api.perplexity.ai/search',
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      },
-      PERPLEXITY_TIMEOUT_MS,
-    );
+    const [results1, results2] = await Promise.all([fetchQuery(query1), fetchQuery(query2)]);
 
-    if (!response.ok) {
-      log({
-        level: 'warn',
-        service: SERVICE,
-        message: `Perplexity HTTP ${response.status}`,
-        requestId,
-      });
-
-      if (newsCache) {
-        return NextResponse.json({ articles: newsCache.articles, cached: true, stale: true, requestId });
-      }
-
-      return NextResponse.json(
-        { error: 'UPSTREAM_ERROR', message: 'News service temporarily unavailable.', requestId },
-        { status: 502, headers: { 'X-Request-Id': requestId } },
-      );
-    }
-
-    const data = await response.json() as { results: PerplexityResult[][] | PerplexityResult[] };
-
-    let flat: PerplexityResult[] = [];
-    if (Array.isArray(data.results)) {
-      if (data.results.length > 0 && Array.isArray(data.results[0])) {
-        flat = (data.results as PerplexityResult[][]).flat();
-      } else {
-        flat = data.results as PerplexityResult[];
-      }
-    }
-
+    // Merge and deduplicate by URL
     const seen = new Set<string>();
-    const unique = flat.filter(r => {
-      if (!r?.url || seen.has(r.url)) return false;
-      seen.add(r.url);
-      return true;
-    }).slice(0, 8);
+    const merged: PerplexityResult[] = [];
+    for (const r of [...results1, ...results2]) {
+      if (!seen.has(r.url)) { seen.add(r.url); merged.push(r); }
+    }
 
+    // Enrich with OG images (up to 12 articles, all in parallel)
     const articles: NewsArticle[] = await Promise.all(
-      unique.map(async (r): Promise<NewsArticle> => ({
-        title: r.title ?? 'Untitled',
+      merged.slice(0, 12).map(async (r) => ({
+        title: r.title,
         url: r.url,
-        snippet: (r.snippet ?? '').replace(/#+\s/g, '').slice(0, 220).trim(),
+        snippet: r.snippet,
         date: r.date ?? r.last_updated ?? null,
         source: sourceFromUrl(r.url),
-        imageUrl: await fetchOgImage(r.url, r.title ?? ''),
+        imageUrl: await fetchOgImage(r.url),
       })),
     );
 
-    newsCache = { articles, cachedAt: Date.now() };
+    newsCache.set(category, { articles, cachedAt: Date.now() });
 
-    log({ level: 'info', service: SERVICE, message: `News ready — ${articles.length} articles`, requestId, durationMs: Date.now() - startMs });
+    log({
+      level: 'info', service: SERVICE,
+      message: `News ready — ${articles.length} articles for "${category}"`,
+      requestId, durationMs: Date.now() - startMs,
+    });
 
-    return NextResponse.json({ articles, cached: false, requestId }, { headers: { 'X-Request-Id': requestId } });
-  } catch (err: unknown) {
-    const isTimeout = err instanceof Error && err.name === 'AbortError';
-    log({ level: 'error', service: SERVICE, message: isTimeout ? 'Perplexity timed out' : 'News fetch failed', requestId, error: String(err), durationMs: Date.now() - startMs });
-    if (newsCache) return NextResponse.json({ articles: newsCache.articles, cached: true, stale: true, requestId });
     return NextResponse.json(
-      { error: isTimeout ? 'TIMEOUT' : 'INTERNAL_ERROR', message: 'Failed to fetch news.', requestId },
-      { status: isTimeout ? 504 : 500, headers: { 'X-Request-Id': requestId } },
+      { articles, cached: false, category, requestId },
+      { headers: { 'X-Request-Id': requestId } },
+    );
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : 'Unknown error';
+    log({ level: 'error', service: SERVICE, message: 'News fetch failed', requestId, error: errMsg });
+
+    // Stale-on-error: return cached data even if expired
+    const stale = newsCache.get(category);
+    if (stale) {
+      return NextResponse.json({ articles: stale.articles, cached: true, stale: true, category, requestId });
+    }
+
+    return NextResponse.json(
+      { error: 'FETCH_FAILED', message: 'News temporarily unavailable.', requestId },
+      { status: 503, headers: { 'X-Request-Id': requestId } },
     );
   }
 }
