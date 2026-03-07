@@ -15,7 +15,7 @@
 import { NextResponse } from 'next/server';
 import { runScoutAgent } from '@/lib/agents/scout-agent';
 import { generateRequestId, log, fetchWithTimeout, envTimeoutMs, checkRateLimit } from '@/lib/api-utils';
-import { agentQueryCounter, inferenceLatencyHistogram, costAccumulator } from '@/lib/metrics';
+import { agentQueryCounter, inferenceLatencyHistogram, costAccumulator, rateLimitCounter, payloadRejectCounter } from '@/lib/metrics';
 import crypto from 'crypto';
 
 const SERVICE = 'ai-agent';
@@ -340,6 +340,7 @@ export async function POST(req: Request): Promise<Response> {
   const hashedIp = hashIp(ip);
 
   if (!checkRateLimit(ip, RATE_LIMIT, RATE_WINDOW_MS)) {
+    rateLimitCounter.add(1, { route: 'ai-agent' });
     log({
       level: 'warn',
       service: SERVICE,
@@ -364,6 +365,7 @@ export async function POST(req: Request): Promise<Response> {
     body = await readJsonBodyWithinLimit(req, MAX_REQUEST_BODY_BYTES);
   } catch (err: unknown) {
     if (err instanceof PayloadTooLargeError) {
+      payloadRejectCounter.add(1, { route: 'ai-agent' });
       return NextResponse.json(
         { error: 'PAYLOAD_TOO_LARGE', message: err.message, requestId },
         { status: 413, headers: { 'X-Request-Id': requestId } },
@@ -438,11 +440,14 @@ export async function POST(req: Request): Promise<Response> {
       ? 'https://api.perplexity.ai/chat/completions'
       : 'https://api.groq.com/openai/v1/chat/completions';
 
+    // CR-3: Create abort controller that responds to BOTH timeout AND client disconnect
+    const abortController = new AbortController();
     const timeoutMs = tierConfig.provider === 'perplexity' ? PERPLEXITY_TIMEOUT_MS : GROQ_TIMEOUT_MS;
+    const timeoutId = setTimeout(() => abortController.abort('timeout'), timeoutMs);
 
-    const response = await fetchWithTimeout(
-      apiEndpoint,
-      {
+    let response: Response;
+    try {
+      response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -455,9 +460,28 @@ export async function POST(req: Request): Promise<Response> {
           temperature: tierConfig.temperature,
           stream: true,
         }),
-      },
-      timeoutMs,
-    );
+        signal: abortController.signal,
+      });
+    } catch (err) {
+      clearTimeout(timeoutId);
+      const isTimeout = err instanceof Error && (err.name === 'AbortError' || err.message.includes('timeout'));
+      log({
+        level: 'warn',
+        service: SERVICE,
+        requestId,
+        message: isTimeout ? 'Upstream timeout' : 'Upstream fetch failed',
+        durationMs: Date.now() - startMs,
+        tier: tierConfig.tier,
+        provider: tierConfig.provider,
+      });
+      agentQueryCounter.add(1, { status: isTimeout ? 'timeout' : 'error', tier: tierConfig.tier });
+      return NextResponse.json(
+        { error: 'UPSTREAM_ERROR', message: 'The AI engine took too long. Please try again.', requestId },
+        { status: 504, headers: { 'X-Request-Id': requestId } },
+      );
+    }
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       log({
@@ -483,26 +507,22 @@ export async function POST(req: Request): Promise<Response> {
       );
     }
 
+    // CR-3: Store reader for cancellation in cancel() callback
+    const upstreamReader = response.body.getReader();
+    const decoder = new TextDecoder();
+
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
-        const reader = response.body?.getReader();
-        const decoder = new TextDecoder();
         let buffer = '';
         let reply = '';
-        let outputTokens = 0;
+        // CR-2: Track actual text length for token estimation
+        let outputText = '';
 
         controller.enqueue(encodeStreamEvent({ type: 'opportunities', data: opportunities }));
 
-        if (!reader) {
-          controller.enqueue(encodeStreamEvent({ type: 'error', data: 'AI engine returned no stream.' }));
-          controller.enqueue(encodeStreamEvent({ type: 'done', requestId, durationMs: Date.now() - startMs }));
-          controller.close();
-          return;
-        }
-
         try {
           while (true) {
-            const { done, value } = await reader.read();
+            const { done, value } = await upstreamReader.read();
             if (done) break;
             if (!value) continue;
 
@@ -522,7 +542,7 @@ export async function POST(req: Request): Promise<Response> {
                 if (!chunk) continue;
 
                 reply += chunk;
-                outputTokens++;
+                outputText += chunk;
                 controller.enqueue(encodeStreamEvent({ type: 'chunk', data: chunk }));
               }
             }
@@ -542,21 +562,26 @@ export async function POST(req: Request): Promise<Response> {
               if (!chunk) continue;
 
               reply += chunk;
-              outputTokens++;
+              outputText += chunk;
               controller.enqueue(encodeStreamEvent({ type: 'chunk', data: chunk }));
             }
           }
 
+          // CR-1: Record ALL metrics in success path
           const durationMs = Date.now() - startMs;
-          const costEstimate = estimateCost(tierConfig, outputTokens);
 
-          // Record metrics
+          // CR-2: Estimate tokens from actual text length (~4 chars per token for English)
+          const estimatedOutputTokens = Math.ceil(outputText.length / 4);
+          const costEstimate = estimateCost(tierConfig, estimatedOutputTokens);
+
+          // Record histogram
           inferenceLatencyHistogram.record(durationMs, {
             tier: tierConfig.tier,
             provider: tierConfig.provider,
             model: tierConfig.model,
           });
 
+          // Record cost counter
           const costFloat = parseFloat(costEstimate);
           if (costFloat > 0) {
             costAccumulator.add(costFloat, {
@@ -565,12 +590,14 @@ export async function POST(req: Request): Promise<Response> {
             });
           }
 
+          // Record query counter
+          agentQueryCounter.add(1, { status: 'success', tier: tierConfig.tier });
+
           if (!reply.trim()) {
             log({ level: 'warn', service: SERVICE, message: 'Empty content from upstream', requestId });
             agentQueryCounter.add(1, { status: 'error', tier: tierConfig.tier });
             controller.enqueue(encodeStreamEvent({ type: 'error', data: 'AI engine returned an empty response.' }));
           } else {
-            agentQueryCounter.add(1, { status: 'success', tier: tierConfig.tier });
             log({
               level: 'info',
               service: SERVICE,
@@ -579,30 +606,56 @@ export async function POST(req: Request): Promise<Response> {
               durationMs,
               tier: tierConfig.tier,
               model: tierConfig.model,
+              estimatedOutputTokens,
               estimatedCostUsd: costEstimate,
             });
           }
+
+          // Send done event with metadata
+          controller.enqueue(encodeStreamEvent({
+            type: 'done',
+            requestId,
+            durationMs,
+            tier: tierConfig.tier,
+            model: tierConfig.model,
+            estimatedOutputTokens,
+            estimatedCostUsd: costEstimate,
+          }));
         } catch (err: unknown) {
           const errMsg = err instanceof Error ? err.message : String(err);
+          const isClientDisconnect = err instanceof Error && err.message.includes('cancel');
           const isTimeout = err instanceof Error && err.name === 'AbortError';
 
-          agentQueryCounter.add(1, { status: isTimeout ? 'timeout' : 'error', tier: tierConfig.tier });
-          log({
-            level: 'error',
-            service: SERVICE,
-            message: isTimeout ? 'Stream timed out' : 'Stream failed',
-            requestId,
-            error: errMsg,
+          if (!isClientDisconnect) {
+            log({
+              level: 'warn',
+              service: SERVICE,
+              requestId,
+              message: 'Stream interrupted',
+              durationMs: Date.now() - startMs,
+              error: errMsg,
+            });
+          }
+
+          agentQueryCounter.add(1, {
+            status: isClientDisconnect ? 'client_disconnect' : isTimeout ? 'timeout' : 'error',
             tier: tierConfig.tier,
           });
+
           controller.enqueue(encodeStreamEvent({
             type: 'error',
-            data: isTimeout ? 'Request timed out. Please try again.' : 'An unexpected error occurred.',
+            data: 'Stream interrupted. Please try again.',
           }));
         } finally {
-          controller.enqueue(encodeStreamEvent({ type: 'done', requestId, durationMs: Date.now() - startMs }));
           controller.close();
+          upstreamReader.releaseLock();
         }
+      },
+
+      // CR-3: Abort upstream when client disconnects
+      cancel() {
+        abortController.abort('client_disconnect');
+        upstreamReader.cancel().catch(() => {});
       },
     });
 

@@ -293,6 +293,8 @@ jobs:
   summary:
     name: Security Checks Summary
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: always()
     needs:
       - lint-and-types
       - accessibility-check
@@ -305,21 +307,45 @@ jobs:
       - tiered-routing-check
       - og-image-ssrf-check
       - build-check
-    if: always()
     steps:
-      - name: Check all jobs passed
+      - name: Evaluate all security checks
         run: |
-          echo "============================================"
-          echo "✅ All security regression tests passed!"
-          echo "============================================"
+          echo "══════════════════════════════════════════"
+          echo "  Security Regression Tests Summary"
+          echo "══════════════════════════════════════════"
           echo ""
-          echo "Validated:"
-          echo "  - V2: No nested interactive elements (motion.a → motion.div)"
-          echo "  - V3: Chunked body size guards with streaming reader"
-          echo "  - V5: Resolved URL re-validation for SSRF"
-          echo "  - V6: IPv4+IPv6 DNS resolution (dns.lookup all:true)"
-          echo "  - V7: HMAC IP hashing without hardcoded fallback"
-          echo "  - V8: No raw error body in logs"
-          echo "  - V9: SSE streaming response from AI agent"
-          echo "  - NEW: Tiered model routing for cost optimization"
-          echo "  - SSRF: redirect:manual protection"
+
+          FAILED=0
+
+          check_job() {
+            local name="$1"
+            local result="$2"
+            if [ "$result" != "success" ]; then
+              echo "❌ FAIL: $name ($result)"
+              FAILED=$((FAILED + 1))
+            else
+              echo "✅ PASS: $name"
+            fi
+          }
+
+          check_job "Lint + Type Check"            "${{ needs.lint-and-types.result }}"
+          check_job "V2 — Nested Interactive"       "${{ needs.accessibility-check.result }}"
+          check_job "V3 — Chunked Body Guard"       "${{ needs.payload-guard-check.result }}"
+          check_job "V5 — OG Image SSRF"            "${{ needs.og-image-ssrf-check.result }}"
+          check_job "V6 — DNS IPv6 Coverage"        "${{ needs.ssrf-ipv6-check.result }}"
+          check_job "V7 — HMAC IP Hashing"          "${{ needs.ip-hashing-check.result }}"
+          check_job "V8 — No PII in Logs"           "${{ needs.error-log-pii-check.result }}"
+          check_job "V9 — Streaming Response"       "${{ needs.streaming-check.result }}"
+          check_job "SSRF — Redirect Manual"        "${{ needs.redirect-protection.result }}"
+          check_job "Tiered Model Routing"          "${{ needs.tiered-routing-check.result }}"
+          check_job "Production Build"              "${{ needs.build-check.result }}"
+
+          echo ""
+          echo "══════════════════════════════════════════"
+
+          if [ "$FAILED" -gt 0 ]; then
+            echo "❌ $FAILED security check(s) FAILED"
+            exit 1
+          else
+            echo "✅ All security regression tests passed!"
+          fi

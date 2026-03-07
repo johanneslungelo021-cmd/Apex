@@ -14,145 +14,93 @@
  * - apex_scout_opportunities_found_total: Valid opportunities found
  * - apex_agent_query_total: AI agent queries by status
  *
+ * Security Metrics:
+ * - apex_ssrf_block_total: SSRF attempts blocked
+ * - apex_payload_reject_total: Requests rejected for payload size
+ * - apex_rate_limit_total: Requests rejected by rate limiter
+ *
  * @module lib/metrics
- *
- * @example
- * import { pageViewCounter, scoutRunCounter } from './lib/metrics';
- *
- * // Record a page view
- * pageViewCounter.add(1);
- *
- * // Record a successful scout run
- * scoutRunCounter.add(1, { status: 'success' });
  */
 
 import { metrics } from '@opentelemetry/api';
 
-/**
- * OpenTelemetry meter instance for the Apex application.
- * Used to create metric instruments (counters, gauges, histograms).
- */
 const meter = metrics.getMeter('apex-sentient');
 
 // ─── Phase 1 Metrics ──────────────────────────────────────────────────────────
 
-/**
- * Counter for tracking total page views across the application.
- * Incremented on each page load via the /api/analytics endpoint.
- *
- * Metric name: `apex_page_view_total`
- *
- * @example
- * pageViewCounter.add(1);
- */
 export const pageViewCounter = meter.createCounter('apex_page_view_total', {
   description: 'Total page views',
 });
 
-/**
- * Counter for tracking successful user registrations.
- * Includes email domain as an attribute for segmentation analysis.
- * PII (email address) is never exposed - only the domain is recorded.
- *
- * Metric name: `apex_registration_total`
- *
- * @example
- * registrationCounter.add(1, {
- *   email_domain: 'gmail.com',
- *   environment: 'production'
- * });
- */
 export const registrationCounter = meter.createCounter('apex_registration_total', {
   description: 'Total successful registrations',
 });
 
-/**
- * Counter for tracking AI chat sessions.
- * Incremented after each successful response from the AI assistant.
- *
- * Metric name: `apex_chat_session_total`
- *
- * @example
- * chatSessionCounter.add(1);
- */
 export const chatSessionCounter = meter.createCounter('apex_chat_session_total', {
   description: 'Total AI chat sessions',
 });
 
 // ─── Phase 2 Metrics ──────────────────────────────────────────────────────────
 
-/**
- * Counter for tracking scout agent runs by status.
- * Tagged with status: 'success' | 'timeout' | 'error'.
- * Used to monitor the health and reliability of opportunity discovery.
- *
- * Metric name: `apex_scout_run_total`
- *
- * @example
- * scoutRunCounter.add(1, { status: 'success' });
- * scoutRunCounter.add(1, { status: 'timeout' });
- * scoutRunCounter.add(1, { status: 'error' });
- */
 export const scoutRunCounter = meter.createCounter('apex_scout_run_total', {
   description: 'Total scout agent runs by status',
 });
 
-/**
- * Counter for tracking total valid opportunities found per scout run.
- * Counter because the domain range is 0-10 with no meaningful percentile distribution.
- * Used to measure the yield of the scout agent's opportunity discovery.
- *
- * Metric name: `apex_scout_opportunities_found_total`
- *
- * @example
- * scoutOpportunitiesCounter.add(opportunities.length);
- */
-export const scoutOpportunitiesCounter = meter.createCounter('apex_scout_opportunities_found_total', {
-  description: 'Total valid opportunities found by the scout agent',
-});
+export const scoutOpportunitiesCounter = meter.createCounter(
+  'apex_scout_opportunities_found_total',
+  { description: 'Total valid opportunities found by the scout agent' }
+);
 
-/**
- * Counter for tracking AI agent queries via /api/ai-agent.
- * Tagged with status: 'success' | 'timeout' | 'error' and tier: 'simple' | 'complex' | 'research'.
- * Used to monitor the health and reliability of the intelligent engine.
- *
- * Metric name: `apex_agent_query_total`
- *
- * @example
- * agentQueryCounter.add(1, { status: 'success', tier: 'simple' });
- * agentQueryCounter.add(1, { status: 'timeout', tier: 'complex' });
- */
 export const agentQueryCounter = meter.createCounter('apex_agent_query_total', {
   description: 'Total AI agent queries by status and tier',
 });
 
-// ══════════════════════════════════════════════════════════════
-// Phase 2+ Histograms & Cost Tracking
-// ══════════════════════════════════════════════════════════════
+// ─── Phase 2+ latency histogram + cost tracking ──────────────────────────────
 
-/**
- * Histogram for tracking AI inference latency in milliseconds.
- * Tagged with tier, provider, and model for observability.
- *
- * Metric name: `apex_inference_latency_ms`
- *
- * @example
- * inferenceLatencyHistogram.record(1250, { tier: 'simple', provider: 'groq', model: 'llama-3.1-8b-instant' });
- */
-export const inferenceLatencyHistogram = meter.createHistogram('apex_inference_latency_ms', {
-  description: 'AI inference latency in milliseconds by provider and tier',
-  unit: 'ms',
-});
+export const inferenceLatencyHistogram = meter.createHistogram(
+  'apex_inference_latency_ms',
+  {
+    description: 'AI inference latency in milliseconds by provider and tier',
+    unit: 'ms',
+  }
+);
 
-/**
- * Counter for tracking estimated cost in USD per query.
- * Tagged with tier and model for cost attribution.
- *
- * Metric name: `apex_estimated_cost_usd`
- *
- * @example
- * costAccumulator.add(0.000145, { tier: 'simple', model: 'llama-3.1-8b-instant' });
- */
 export const costAccumulator = meter.createCounter('apex_estimated_cost_usd', {
   description: 'Accumulated estimated inference cost in USD',
 });
+
+// ─── Security metrics ─────────────────────────────────────────────────────────
+
+export const ssrfBlockCounter = meter.createCounter('apex_ssrf_block_total', {
+  description: 'SSRF attempts blocked by assertSafeUrl (IPv4 + IPv6)',
+});
+
+export const payloadRejectCounter = meter.createCounter(
+  'apex_payload_reject_total',
+  { description: 'Requests rejected for exceeding payload size limits' }
+);
+
+export const rateLimitCounter = meter.createCounter('apex_rate_limit_total', {
+  description: 'Requests rejected by rate limiter',
+});
+
+// ─── Cache metrics ────────────────────────────────────────────────────────────
+
+export const cacheHitCounter = meter.createCounter('apex_cache_hit_total', {
+  description: 'Cache hits by cache type (news, scout, response)',
+});
+
+export const cacheMissCounter = meter.createCounter('apex_cache_miss_total', {
+  description: 'Cache misses by cache type',
+});
+
+// ─── News route metrics ───────────────────────────────────────────────────────
+
+export const newsRefreshCounter = meter.createCounter('apex_news_refresh_total', {
+  description: 'News feed refresh attempts by status',
+});
+
+export const ogImageFetchCounter = meter.createCounter(
+  'apex_og_image_fetch_total',
+  { description: 'OG image extraction attempts by result (success, fallback, ssrf_blocked)' }
+);
