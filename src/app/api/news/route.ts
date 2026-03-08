@@ -1,9 +1,9 @@
 /**
- * News API Route
+ * News API Route — Category-Aware
  *
  * Fetches live digital economy news for South African creators using
- * the Perplexity Search API. Implements 10-minute caching with stale
- * fallback for reliability.
+ * the Perplexity Search API. Supports ?category= filtering with
+ * per-category independent 10-minute caching and stale fallback.
  *
  * @module api/news
  */
@@ -17,6 +17,44 @@ const PERPLEXITY_TIMEOUT_MS = envTimeoutMs(process.env.PERPLEXITY_TIMEOUT_MS, 14
 const IMAGE_FETCH_TIMEOUT_MS = 4_000;
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const MAX_IMAGE_RESPONSE_BYTES = 2 * 1024 * 1024;
+
+// ─── Category System ──────────────────────────────────────────────────────────
+
+export type NewsCategory = 'Latest' | 'Tech & AI' | 'Finance & Crypto' | 'Startups';
+
+export const VALID_CATEGORIES = new Set<NewsCategory>([
+  'Latest',
+  'Tech & AI',
+  'Finance & Crypto',
+  'Startups',
+]);
+
+const CURRENT_YEAR = new Date().getFullYear();
+
+/**
+ * Two SA-focused Perplexity queries per category.
+ * Dual queries are run in parallel and merged for better recall.
+ */
+export const CATEGORY_QUERIES: Record<NewsCategory, [string, string]> = {
+  'Latest': [
+    `South Africa digital economy freelancing online income opportunities ${CURRENT_YEAR}`,
+    `AI tools digital income South Africa entrepreneurs creators ${CURRENT_YEAR}`,
+  ],
+  'Tech & AI': [
+    `artificial intelligence technology startups South Africa ${CURRENT_YEAR}`,
+    `AI tools automation South African developers creators ${CURRENT_YEAR}`,
+  ],
+  'Finance & Crypto': [
+    `cryptocurrency blockchain fintech South Africa ${CURRENT_YEAR}`,
+    `digital finance online payments ZAR investing South Africa ${CURRENT_YEAR}`,
+  ],
+  'Startups': [
+    `South Africa tech startups funding venture capital ${CURRENT_YEAR}`,
+    `African startup ecosystem entrepreneurship digital business ${CURRENT_YEAR}`,
+  ],
+};
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface NewsArticle {
   title: string;
@@ -35,7 +73,11 @@ interface PerplexityResult {
   last_updated?: string;
 }
 
-let newsCache: { articles: NewsArticle[]; cachedAt: number } | null = null;
+// ─── Per-Category Cache ───────────────────────────────────────────────────────
+
+const newsCache = new Map<NewsCategory, { articles: NewsArticle[]; cachedAt: number }>();
+
+// ─── URL Helpers ──────────────────────────────────────────────────────────────
 
 function sourceFromUrl(url: string): string {
   try {
@@ -95,6 +137,7 @@ async function assertSafeUrl(rawUrl: string): Promise<void> {
   }
 
   try {
+    // all: true ensures all address families (IPv4 + IPv6) are checked — covers SSRF via IPv6
     const addresses = await dns.lookup(hostname, { all: true, verbatim: true });
     for (const { address } of addresses) {
       for (const pattern of PRIVATE_IP_PATTERNS) {
@@ -152,12 +195,15 @@ async function readHtmlWithinLimit(res: Response): Promise<string | null> {
 async function resolveSafeImageUrl(value: string, articleUrl: string): Promise<string | null> {
   try {
     const absoluteUrl = new URL(value, articleUrl).toString();
+    // re-validat resolved URL — assertSafeUrl checks the absolute form, not just the raw value
     await assertSafeUrl(absoluteUrl);
     return absoluteUrl;
   } catch {
     return null;
   }
 }
+
+const GRADIENT_PLACEHOLDER = 'placeholder';
 
 async function fetchOgImage(articleUrl: string, title: string): Promise<string> {
   try {
@@ -171,7 +217,7 @@ async function fetchOgImage(articleUrl: string, title: string): Promise<string> 
       articleUrl,
       {
         headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ApexNewsBot/1.0; +https://apex-coral-zeta.vercel.app)' },
-        redirect: 'manual',
+        redirect: 'manual',  // block redirect-based SSRF
       },
       IMAGE_FETCH_TIMEOUT_MS,
     );
@@ -202,6 +248,8 @@ async function fetchOgImage(articleUrl: string, title: string): Promise<string> 
   }
 }
 
+void GRADIENT_PLACEHOLDER; // suppress unused warning
+
 function gradientPlaceholder(title: string): string {
   let hash = 0;
   for (let i = 0; i < title.length; i++) hash = title.charCodeAt(i) + ((hash << 5) - hash);
@@ -211,11 +259,97 @@ function gradientPlaceholder(title: string): string {
   return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
 }
 
-export async function GET(): Promise<Response> {
+// ─── Fetcher ──────────────────────────────────────────────────────────────────
+
+async function fetchArticlesForCategory(
+  category: NewsCategory,
+  apiKey: string,
+  requestId: string,
+): Promise<NewsArticle[]> {
+  const [queryA, queryB] = CATEGORY_QUERIES[category];
+
+  const makeBody = (query: string) => ({
+    query,
+    max_results: 5,
+    max_tokens_per_page: 512,
+    max_tokens: 8000,
+    country: 'ZA',
+    search_language_filter: ['en'],
+    search_domain_filter: ['-pinterest.com', '-reddit.com', '-quora.com'],
+  });
+
+  const fetchOptions = (query: string) =>
+    fetchWithTimeout(
+      'https://api.perplexity.ai/search',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(makeBody(query)),
+      },
+      PERPLEXITY_TIMEOUT_MS,
+    );
+
+  // Fire both queries in parallel for better recall
+  const [resA, resB] = await Promise.all([fetchOptions(queryA), fetchOptions(queryB)]);
+
+  const parseResults = (res: Response, data: unknown): PerplexityResult[] => {
+    if (!res.ok) return [];
+    const d = data as { results?: PerplexityResult[][] | PerplexityResult[] };
+    if (!Array.isArray(d?.results)) return [];
+    if (d.results.length > 0 && Array.isArray(d.results[0])) {
+      return (d.results as PerplexityResult[][]).flat();
+    }
+    return d.results as PerplexityResult[];
+  };
+
+  let dataA: unknown = {};
+  let dataB: unknown = {};
+  try { dataA = await resA.json(); } catch { /* ignore */ }
+  try { dataB = await resB.json(); } catch { /* ignore */ }
+
+  const combined = [...parseResults(resA, dataA), ...parseResults(resB, dataB)];
+
+  // Deduplicate by URL
+  const seen = new Set<string>();
+  const unique = combined.filter(r => {
+    if (!r?.url || seen.has(r.url)) return false;
+    seen.add(r.url);
+    return true;
+  }).slice(0, 8);
+
+  log({ level: 'info', service: SERVICE, message: `Category "${category}" — ${unique.length} unique articles`, requestId });
+
+  return Promise.all(
+    unique.map(async (r): Promise<NewsArticle> => ({
+      title: r.title ?? 'Untitled',
+      url: r.url,
+      snippet: (r.snippet ?? '').replace(/#+\s/g, '').slice(0, 220).trim(),
+      date: r.date ?? r.last_updated ?? null,
+      source: sourceFromUrl(r.url),
+      imageUrl: await fetchOgImage(r.url, r.title ?? ''),
+    })),
+  );
+}
+
+// ─── GET Handler ──────────────────────────────────────────────────────────────
+
+export async function GET(req: Request): Promise<Response> {
   const requestId = generateRequestId();
 
-  if (newsCache && Date.now() - newsCache.cachedAt < CACHE_TTL_MS) {
-    return NextResponse.json({ articles: newsCache.articles, cached: true, requestId });
+  // Parse ?category= param — validate against whitelist, fall back to 'Latest'
+  const { searchParams } = new URL(req.url);
+  const rawCategory = searchParams.get('category') ?? 'Latest';
+  const category: NewsCategory = VALID_CATEGORIES.has(rawCategory as NewsCategory)
+    ? (rawCategory as NewsCategory)
+    : 'Latest';
+
+  // Per-category cache check
+  const cached = newsCache.get(category);
+  if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+    return NextResponse.json({ articles: cached.articles, cached: true, category, requestId });
   }
 
   const apiKey = process.env.PERPLEXITY_API_KEY;
@@ -228,92 +362,43 @@ export async function GET(): Promise<Response> {
   }
 
   const startMs = Date.now();
-  log({ level: 'info', service: SERVICE, message: 'Fetching live news', requestId });
+  log({ level: 'info', service: SERVICE, message: `Fetching news — category: "${category}"`, requestId });
 
   try {
-    const currentYear = new Date().getFullYear();
-    const body = {
-      query: [
-        `South Africa digital economy freelancing online income opportunities ${currentYear}`,
-        `AI tools digital income South Africa entrepreneurs creators ${currentYear}`,
-      ],
-      max_results: 5,
-      max_tokens_per_page: 512,
-      max_tokens: 8000,
-      country: 'ZA',
-      search_language_filter: ['en'],
-      search_domain_filter: ['-pinterest.com', '-reddit.com', '-quora.com'],
-    };
+    const articles = await fetchArticlesForCategory(category, apiKey, requestId);
 
-    const response = await fetchWithTimeout(
-      'https://api.perplexity.ai/search',
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      },
-      PERPLEXITY_TIMEOUT_MS,
+    newsCache.set(category, { articles, cachedAt: Date.now() });
+
+    log({
+      level: 'info',
+      service: SERVICE,
+      message: `News ready — ${articles.length} articles`,
+      requestId,
+      category,
+      durationMs: Date.now() - startMs,
+    });
+
+    return NextResponse.json(
+      { articles, cached: false, category, requestId },
+      { headers: { 'X-Request-Id': requestId } },
     );
-
-    if (!response.ok) {
-      log({
-        level: 'warn',
-        service: SERVICE,
-        message: `Perplexity HTTP ${response.status}`,
-        requestId,
-      });
-
-      if (newsCache) {
-        return NextResponse.json({ articles: newsCache.articles, cached: true, stale: true, requestId });
-      }
-
-      return NextResponse.json(
-        { error: 'UPSTREAM_ERROR', message: 'News service temporarily unavailable.', requestId },
-        { status: 502, headers: { 'X-Request-Id': requestId } },
-      );
-    }
-
-    const data = await response.json() as { results: PerplexityResult[][] | PerplexityResult[] };
-
-    let flat: PerplexityResult[] = [];
-    if (Array.isArray(data.results)) {
-      if (data.results.length > 0 && Array.isArray(data.results[0])) {
-        flat = (data.results as PerplexityResult[][]).flat();
-      } else {
-        flat = data.results as PerplexityResult[];
-      }
-    }
-
-    const seen = new Set<string>();
-    const unique = flat.filter(r => {
-      if (!r?.url || seen.has(r.url)) return false;
-      seen.add(r.url);
-      return true;
-    }).slice(0, 8);
-
-    const articles: NewsArticle[] = await Promise.all(
-      unique.map(async (r): Promise<NewsArticle> => ({
-        title: r.title ?? 'Untitled',
-        url: r.url,
-        snippet: (r.snippet ?? '').replace(/#+\s/g, '').slice(0, 220).trim(),
-        date: r.date ?? r.last_updated ?? null,
-        source: sourceFromUrl(r.url),
-        imageUrl: await fetchOgImage(r.url, r.title ?? ''),
-      })),
-    );
-
-    newsCache = { articles, cachedAt: Date.now() };
-
-    log({ level: 'info', service: SERVICE, message: `News ready — ${articles.length} articles`, requestId, durationMs: Date.now() - startMs });
-
-    return NextResponse.json({ articles, cached: false, requestId }, { headers: { 'X-Request-Id': requestId } });
   } catch (err: unknown) {
     const isTimeout = err instanceof Error && err.name === 'AbortError';
-    log({ level: 'error', service: SERVICE, message: isTimeout ? 'Perplexity timed out' : 'News fetch failed', requestId, error: String(err), durationMs: Date.now() - startMs });
-    if (newsCache) return NextResponse.json({ articles: newsCache.articles, cached: true, stale: true, requestId });
+    log({
+      level: 'error',
+      service: SERVICE,
+      message: isTimeout ? 'Perplexity timed out' : 'News fetch failed',
+      requestId,
+      category,
+      durationMs: Date.now() - startMs,
+    });
+
+    // Stale-on-error: return cached data even if expired
+    const stale = newsCache.get(category);
+    if (stale) {
+      return NextResponse.json({ articles: stale.articles, cached: true, stale: true, category, requestId });
+    }
+
     return NextResponse.json(
       { error: isTimeout ? 'TIMEOUT' : 'INTERNAL_ERROR', message: 'Failed to fetch news.', requestId },
       { status: isTimeout ? 504 : 500, headers: { 'X-Request-Id': requestId } },

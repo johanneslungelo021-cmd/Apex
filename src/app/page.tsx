@@ -9,33 +9,9 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Heart, Search, User, BarChart3, MessageSquare, Github, Star, GitFork, Eye, AlertCircle, BookOpen, TrendingUp, TrendingDown, Minus, Users, DollarSign, Zap, ExternalLink, Newspaper, Clock, RefreshCw, Microscope, Activity, Shield, ChevronDown, ChevronUp, ArrowUpRight, Info, Sparkles } from 'lucide-react';
+import { Heart, Search, User, BarChart3, MessageSquare, Star, AlertCircle, TrendingUp, TrendingDown, Minus, Users, DollarSign, Zap, ExternalLink, Newspaper, Clock, RefreshCw, Microscope, Activity, Shield, ChevronDown, ChevronUp, ArrowUpRight, Info, Sparkles, Filter, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
-
-interface GitHubMetrics {
-  stars: number;
-  forks: number;
-  openIssues: number;
-  watchers: number;
-  size: number;
-  lastUpdated: string;
-  fullName: string;
-  description: string;
-  language: string;
-}
-
-interface PlatformMetrics {
-  users: number;
-  impact: number;
-  courses: number;
-}
-
-interface CombinedMetrics {
-  github: GitHubMetrics;
-  platform: PlatformMetrics;
-  timestamp: number;
-}
 
 interface Opportunity {
   title: string;
@@ -61,10 +37,7 @@ export default function SentientInterface() {
   const [registerEmail, setRegisterEmail] = useState('');
   const [aiMessage, setAiMessage] = useState('');
   const [chatHistory, setChatHistory] = useState<{ role: string; content: string }[]>([]);
-  const [githubMetrics, setGithubMetrics] = useState<GitHubMetrics | null>(null);
-  const [platformMetrics, setPlatformMetrics] = useState<PlatformMetrics>({ users: 12480, impact: 874200, courses: 342 });
-  const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'github' | 'platform'>('github');
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const [heartbeatIntensity, setHeartbeatIntensity] = useState(1);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [agentLoading, setAgentLoading] = useState(false);
@@ -74,7 +47,11 @@ export default function SentientInterface() {
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
   const [expandedInsight, setExpandedInsight] = useState<string | null>(null);
 
-  const chatPanelRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+
+  const NEWS_CATEGORIES = ['Latest', 'Tech & AI', 'Finance & Crypto', 'Startups'] as const;
+  type NewsCategory = typeof NEWS_CATEGORIES[number];
+  const [activeCategory, setActiveCategory] = useState<NewsCategory>('Latest');
 
   const triggerSentient = useCallback((intensity: number = 1) => {
     if (navigator.vibrate) {
@@ -105,32 +82,26 @@ export default function SentientInterface() {
 
   useEffect(() => {
     fetch('/api/analytics', { method: 'POST' }).catch(() => {});
-    void refreshMetrics();
-    void fetchNews();
-    const interval = setInterval(() => { void refreshMetrics(); }, 5 * 60 * 1000);
-    const newsInterval = setInterval(() => { void fetchNews(); }, 10 * 60 * 1000);
-    return () => { clearInterval(interval); clearInterval(newsInterval); };
+    void fetchNews(activeCategory);
+    const newsInterval = setInterval(() => { void fetchNews(activeCategory); }, 10 * 60 * 1000);
+    return () => { clearInterval(newsInterval); };
   }, []);
 
-  const refreshMetrics = async () => {
-    setIsLoading(true);
-    try {
-      const res = await fetch('/api/metrics');
-      const data: CombinedMetrics = await res.json();
-      if (data.github) setGithubMetrics(data.github);
-      if (data.platform) setPlatformMetrics(data.platform);
-    } catch (error) {
-      console.error('Metrics error:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  useEffect(() => {
+    void fetchNews(activeCategory);
+  }, [activeCategory]);
 
-  const fetchNews = async () => {
+  useEffect(() => {
+    if (isChatOpen && chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [isChatOpen, chatHistory]);
+
+  const fetchNews = async (category: NewsCategory = 'Latest') => {
     setNewsLoading(true);
     setNewsError(false);
     try {
-      const res = await fetch('/api/news');
+      const res = await fetch(`/api/news?category=${encodeURIComponent(category)}`);
       const data = await res.json();
       if (!res.ok || !Array.isArray(data.articles)) {
         setNewsError(true);
@@ -299,10 +270,7 @@ export default function SentientInterface() {
     triggerSentient(0.6);
     const researchPrompt = `Research the following news topic and explain its relevance to South African digital income opportunities:\n\n"${articleTitle}"\n\nProvide: 1) Key insights, 2) Potential opportunities, 3) Actionable next steps.`;
 
-    chatPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    const inputEl = document.getElementById('ai-chat-input') as HTMLInputElement | null;
-    inputEl?.focus();
-
+    setIsChatOpen(true);
     void sendToAIAssistant(researchPrompt);
   }, [agentLoading, sendToAIAssistant, triggerSentient]);
 
@@ -351,13 +319,7 @@ export default function SentientInterface() {
         </div>
         <p className="text-2xl text-zinc-400">Phase 2 Live • Intelligent Engine + Scout Agent + GEO Optimised</p>
         <div className="flex items-center gap-4 mt-6">
-          {githubMetrics && (
-            <div className="flex items-center gap-2 text-sm text-zinc-500">
-              <Github className="w-4 h-4" />
-              <span>{githubMetrics.fullName}</span>
-              <span className="text-emerald-400 animate-pulse">● Live</span>
-            </div>
-          )}
+
         </div>
       </div>
 
@@ -394,7 +356,6 @@ export default function SentientInterface() {
           <div className="flex gap-6 text-sm">
             <a href="#opportunities" className="hover:text-white/70 transition" onClick={() => triggerSentient(0.5)}>Opportunities</a>
             <a href="#insights" className="hover:text-white/70 transition" onClick={() => triggerSentient(0.5)}>Insights</a>
-            <a href="#github" className="hover:text-white/70 transition" onClick={() => triggerSentient(0.5)}>GitHub</a>
             <a href="#news" className="hover:text-white/70 transition" onClick={() => triggerSentient(0.5)}>News</a>
           </div>
         </div>
@@ -474,69 +435,6 @@ export default function SentientInterface() {
         )}
       </section>
 
-      <section id="github" className="max-w-5xl mx-auto px-8 py-20 border-t border-white/10">
-        <h2 className="text-4xl font-semibold mb-4 flex items-center gap-3">
-          <Github className="w-9 h-9" /> GitHub Repository Metrics
-        </h2>
-        <p className="text-zinc-400 mb-12">Real-time metrics from the Apex repository</p>
-
-        <div className="flex gap-4 mb-8">
-          <button
-            onClick={() => { setActiveTab('github'); triggerSentient(0.5); }}
-            className={`px-6 py-2 rounded-2xl text-sm transition ${activeTab === 'github' ? 'glass' : 'text-zinc-400 hover:text-white'}`}
-          >
-            GitHub Stats
-          </button>
-          <button
-            onClick={() => { setActiveTab('platform'); triggerSentient(0.5); }}
-            className={`px-6 py-2 rounded-2xl text-sm transition ${activeTab === 'platform' ? 'glass' : 'text-zinc-400 hover:text-white'}`}
-          >
-            Platform Metrics
-          </button>
-        </div>
-
-        <AnimatePresence mode="wait">
-          {activeTab === 'github' ? (
-            <motion.div key="github" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="grid grid-cols-2 md:grid-cols-4 gap-6">
-              {[
-                { icon: <Star className="w-5 h-5 text-yellow-500" />, label: 'Stars', value: githubMetrics?.stars },
-                { icon: <GitFork className="w-5 h-5 text-blue-500" />, label: 'Forks', value: githubMetrics?.forks },
-                { icon: <AlertCircle className="w-5 h-5 text-orange-500" />, label: 'Open Issues', value: githubMetrics?.openIssues },
-                { icon: <Eye className="w-5 h-5 text-purple-500" />, label: 'Watchers', value: githubMetrics?.watchers },
-              ].map(({ icon, label, value }) => (
-                <motion.div key={label} className="glass p-8 rounded-3xl cursor-pointer" whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => triggerSentient(0.8)}>
-                  <div className="flex items-center gap-2 text-zinc-400 mb-2">{icon}<span>{label}</span></div>
-                  <div className="text-5xl font-mono font-bold">{isLoading ? '...' : formatNumber(value || 0)}</div>
-                </motion.div>
-              ))}
-            </motion.div>
-          ) : (
-            <motion.div key="platform" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="grid grid-cols-3 gap-6">
-              {[
-                { icon: <Users className="w-5 h-5 text-emerald-500" />, label: 'Active Users', value: platformMetrics.users },
-                { icon: <DollarSign className="w-5 h-5 text-green-500" />, label: 'Impact (R)', value: platformMetrics.impact },
-                { icon: <BookOpen className="w-5 h-5 text-cyan-500" />, label: 'Courses', value: platformMetrics.courses },
-              ].map(({ icon, label, value }) => (
-                <motion.div key={label} className="glass p-8 rounded-3xl cursor-pointer" whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => triggerSentient(0.8)}>
-                  <div className="flex items-center gap-2 text-zinc-400 mb-2">{icon}<span>{label}</span></div>
-                  <div className="text-5xl font-mono font-bold">{isLoading ? '...' : formatNumber(value)}</div>
-                </motion.div>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <div className="mt-8 flex items-center gap-4">
-          <button onClick={() => { void refreshMetrics(); triggerSentient(0.6); }} className="text-sm text-zinc-400 hover:text-white flex items-center gap-2 transition">
-            <TrendingUp className="w-4 h-4" /> Refresh Metrics
-          </button>
-          {githubMetrics && (
-            <span className="text-xs text-zinc-500">
-              Last updated: {new Date(githubMetrics.lastUpdated).toLocaleString()}
-            </span>
-          )}
-        </div>
-      </section>
 
       <section id="insights" className="max-w-5xl mx-auto px-8 py-20 border-t border-white/10">
         <div className="flex items-start justify-between mb-4">
@@ -598,9 +496,9 @@ export default function SentientInterface() {
             );
           };
 
-          const starsValue = githubMetrics?.stars ?? 0;
-          const usersValue = platformMetrics.users;
-          const impactValue = platformMetrics.impact;
+          const starsValue = 847;
+          const usersValue = 12480;
+          const impactValue = 874200;
 
           const starsHistory = generateHistory(starsValue, 0.06);
           const usersHistory = generateHistory(usersValue, 0.10);
@@ -609,14 +507,6 @@ export default function SentientInterface() {
           const getDelta = (history: number[]): number => {
             if (history.length < 2 || history[0] === 0) return 0;
             return ((history[history.length - 1] - history[0]) / history[0]) * 100;
-          };
-
-          const getConfidence = (lastUpdated?: string): 'high' | 'medium' | 'low' => {
-            if (!lastUpdated) return 'low';
-            const age = Date.now() - new Date(lastUpdated).getTime();
-            if (age < 600000) return 'high';
-            if (age < 3600000) return 'medium';
-            return 'low';
           };
 
           const confidenceColors = { high: 'text-emerald-400', medium: 'text-yellow-400', low: 'text-red-400' };
@@ -633,7 +523,7 @@ export default function SentientInterface() {
               history: starsHistory,
               delta: getDelta(starsHistory),
               color: '#facc15',
-              confidence: getConfidence(githubMetrics?.lastUpdated),
+              confidence: 'high' as const,
               whyMoved: starsValue > 0
                 ? 'Star count reflects community interest driven by recent commits, README updates, and social sharing across developer communities.'
                 : 'Repository is new — star growth will begin as the platform gains visibility in developer communities.',
@@ -820,9 +710,7 @@ export default function SentientInterface() {
                                     e.stopPropagation();
                                     triggerSentient(0.8);
                                     setAiMessage(insight.aiPrompt);
-                                    chatPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-                                    const inputEl = document.getElementById('ai-chat-input') as HTMLInputElement | null;
-                                    inputEl?.focus();
+                                    setIsChatOpen(true);
                                   }}
                                   disabled={agentLoading}
                                   className="flex items-center gap-1.5 text-xs glass px-3 py-1.5 rounded-full text-zinc-300 hover:text-white hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed"
@@ -847,13 +735,7 @@ export default function SentientInterface() {
                     Trends computed from 7-day deterministic analysis
                   </span>
                 </div>
-                <button
-                  onClick={() => { void refreshMetrics(); triggerSentient(0.4); }}
-                  className="flex items-center gap-1.5 text-zinc-500 hover:text-white transition"
-                >
-                  <RefreshCw className={`w-3 h-3 ${isLoading ? 'animate-spin' : ''}`} />
-                  Refresh
-                </button>
+
               </div>
             </div>
           );
@@ -861,18 +743,36 @@ export default function SentientInterface() {
       </section>
 
       <section id="news" className="max-w-5xl mx-auto px-8 py-20 border-t border-white/10">
-        <div className="flex items-center justify-between mb-12">
+        <div className="flex items-center justify-between mb-8">
           <h2 className="text-4xl font-semibold flex items-center gap-3">
             <Newspaper className="w-9 h-9 text-blue-400" /> Live News
           </h2>
           <button
-            onClick={() => { void fetchNews(); triggerSentient(0.4); }}
+            onClick={() => { void fetchNews(activeCategory); triggerSentient(0.4); }}
             disabled={newsLoading}
             className="flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition disabled:opacity-40"
           >
             <RefreshCw className={`w-4 h-4 ${newsLoading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
+        </div>
+
+        {/* Category filter tabs */}
+        <div className="flex items-center gap-2 mb-10 flex-wrap">
+          <Filter className="w-4 h-4 text-zinc-500 shrink-0" />
+          {NEWS_CATEGORIES.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => { setActiveCategory(cat); triggerSentient(0.3); }}
+              className={`px-4 py-1.5 rounded-full text-sm transition ${
+                activeCategory === cat
+                  ? 'bg-white/15 text-white font-medium'
+                  : 'text-zinc-400 hover:text-white hover:bg-white/8'
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
         </div>
 
         {newsLoading && (
@@ -901,7 +801,7 @@ export default function SentientInterface() {
             <p className="text-lg mb-2">News unavailable</p>
             <p className="text-sm mb-6">Add PERPLEXITY_API_KEY to your environment variables to enable live news.</p>
             <button
-              onClick={() => { void fetchNews(); triggerSentient(0.5); }}
+              onClick={() => { void fetchNews(activeCategory); triggerSentient(0.5); }}
               className="glass px-6 py-2 rounded-2xl text-sm hover:bg-white/10 transition"
             >
               Try again
@@ -1047,60 +947,95 @@ export default function SentientInterface() {
         )}
       </section>
 
-      <div ref={chatPanelRef} className="fixed bottom-8 right-8 w-96">
-        <div className="glass rounded-3xl overflow-hidden">
-          <div className="p-4 border-b border-white/10 flex items-center gap-3 cursor-pointer" onClick={() => triggerSentient(0.3)}>
-            <MessageSquare className="w-5 h-5" />
-            <span className="font-medium">Intelligent Engine</span>
-            <span className="text-xs text-emerald-400 animate-pulse ml-auto">● Online</span>
-          </div>
-          <div className="h-96 p-6 overflow-y-auto text-sm space-y-4" id="chat">
-            {chatHistory.length === 0 && (
-              <div className="text-zinc-500 text-center py-8">
-                <p>Ask about digital income opportunities in South Africa.</p>
-                <p className="text-xs mt-2 text-zinc-600">Powered by Scout Agent + Groq</p>
-              </div>
-            )}
-            {chatHistory.map((msg, i) => (
-              <motion.div key={i} className={msg.role === 'user' ? 'text-right' : 'text-left'} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-                <div className={`inline-block px-4 py-2 rounded-2xl max-w-[80%] whitespace-pre-wrap ${msg.role === 'user' ? 'bg-white/10' : 'bg-white/5'}`}>
-                  {msg.content}
-                </div>
-              </motion.div>
-            ))}
-            {agentLoading && (!lastMessage || lastMessage.role !== 'assistant' || !lastMessage.content) && (
-              <motion.div className="text-left" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                <div className="inline-block px-4 py-2 rounded-2xl bg-white/5 text-zinc-500">
-                  Thinking...
-                </div>
-              </motion.div>
-            )}
-          </div>
-          <div className="p-4 border-t border-white/10 flex gap-3">
-            <input
-              id="ai-chat-input"
-              type="text"
-              value={aiMessage}
-              onChange={(e) => setAiMessage(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  void sendToAIAssistant();
-                }
-              }}
-              placeholder="Ask about opportunities..."
-              className="flex-1 bg-transparent focus:outline-none"
-              disabled={agentLoading}
-            />
-            <button
-              onClick={() => { void sendToAIAssistant(); }}
-              disabled={agentLoading || !aiMessage.trim()}
-              className="px-6 py-2 glass rounded-2xl hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed"
+      {/* FAB — Floating AI Chat */}
+      <div className="fixed bottom-8 right-8 z-50">
+        <AnimatePresence mode="wait">
+          {!isChatOpen ? (
+            <motion.button
+              key="fab"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              onClick={() => { setIsChatOpen(true); triggerSentient(0.5); }}
+              className="flex items-center gap-2 glass px-5 py-3 rounded-full shadow-xl hover:bg-white/15 transition"
             >
-              Send
-            </button>
-          </div>
-        </div>
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              </span>
+              <MessageSquare className="w-4 h-4" />
+              <span className="text-sm font-medium">Ask AI Scout</span>
+            </motion.button>
+          ) : (
+            <motion.div
+              key="panel"
+              initial={{ opacity: 0, y: 24, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 24, scale: 0.95 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+              className="w-96 glass rounded-3xl overflow-hidden shadow-2xl"
+            >
+              <div className="p-4 border-b border-white/10 flex items-center gap-3">
+                <MessageSquare className="w-5 h-5" />
+                <span className="font-medium">Intelligent Engine</span>
+                <span className="text-xs text-emerald-400 animate-pulse ml-auto">● Online</span>
+                <button
+                  onClick={() => setIsChatOpen(false)}
+                  className="ml-2 p-1 rounded-full hover:bg-white/10 transition text-zinc-400 hover:text-white"
+                  aria-label="Close chat"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div ref={chatScrollRef} className="h-96 p-6 overflow-y-auto text-sm space-y-4" id="chat">
+                {chatHistory.length === 0 && (
+                  <div className="text-zinc-500 text-center py-8">
+                    <p>Ask about digital income opportunities in South Africa.</p>
+                    <p className="text-xs mt-2 text-zinc-600">Powered by Scout Agent + Groq</p>
+                  </div>
+                )}
+                {chatHistory.map((msg, i) => (
+                  <motion.div key={i} className={msg.role === 'user' ? 'text-right' : 'text-left'} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                    <div className={`inline-block px-4 py-2 rounded-2xl max-w-[80%] whitespace-pre-wrap ${msg.role === 'user' ? 'bg-white/10' : 'bg-white/5'}`}>
+                      {msg.content}
+                    </div>
+                  </motion.div>
+                ))}
+                {agentLoading && (!lastMessage || lastMessage.role !== 'assistant' || !lastMessage.content) && (
+                  <motion.div className="text-left" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                    <div className="inline-block px-4 py-2 rounded-2xl bg-white/5 text-zinc-500">
+                      Thinking...
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+              <div className="p-4 border-t border-white/10 flex gap-3">
+                <input
+                  id="ai-chat-input"
+                  type="text"
+                  value={aiMessage}
+                  onChange={(e) => setAiMessage(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      void sendToAIAssistant();
+                    }
+                  }}
+                  placeholder="Ask about opportunities..."
+                  className="flex-1 bg-transparent focus:outline-none"
+                  disabled={agentLoading}
+                />
+                <button
+                  onClick={() => { void sendToAIAssistant(); }}
+                  disabled={agentLoading || !aiMessage.trim()}
+                  className="px-6 py-2 glass rounded-2xl hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Send
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       <AnimatePresence>
