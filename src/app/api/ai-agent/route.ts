@@ -679,6 +679,15 @@ export async function POST(req: Request): Promise<Response> {
           controller.enqueue(
             encodeNdjsonEvent('error', 'Stream interrupted. Please try again.')
           );
+          controller.enqueue(
+            encodeNdjsonEvent('done', {
+              requestId,
+              durationMs: Date.now() - startMs,
+              tier: tierConfig.tier,
+              model: tierConfig.model,
+              error: true,
+            })
+          );
         } finally {
           controller.close();
           upstreamReader.releaseLock();
