@@ -606,13 +606,13 @@ export default function SentientInterface() {
                         <div className="flex items-end justify-between mb-3">
                           <div>
                             <div className="text-4xl font-mono font-bold leading-none">
-                              {isLoading ? '...' : formatNumber(insight.value)}
+                              {formatNumber(insight.value)}
                             </div>
                             {insight.suffix && (
                               <span className="text-xs text-zinc-500 font-mono">{insight.suffix}</span>
                             )}
                           </div>
-                          {!isLoading && (
+                          {(
                             <div className={`flex items-center gap-1 text-sm font-medium px-2 py-1 rounded-lg ${
                               trendUp ? 'text-emerald-400 bg-emerald-500/10' :
                               trendDown ? 'text-red-400 bg-red-500/10' :
