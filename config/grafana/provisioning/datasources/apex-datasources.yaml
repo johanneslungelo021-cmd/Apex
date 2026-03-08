@@ -1,0 +1,36 @@
+# Grafana Datasource Provisioning Configuration
+# Configure datasources for Apex monitoring
+
+apiVersion: 1
+
+datasources:
+  # Prometheus datasource for application metrics
+  - name: 'Prometheus'
+    type: 'prometheus'
+    access: 'proxy'
+    uid: 'grafanacloud-prom'
+    url: '${PROMETHEUS_URL}'
+    basicAuth: true
+    basicAuthUser: '${PROMETHEUS_USER}'
+    secureJsonData:
+      basicAuthPassword: '${PROMETHEUS_PASSWORD}'
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: 'POST'
+      manageAlerts: true
+      prometheusType: 'Mimir'
+
+  # Loki datasource for logs
+  - name: 'Loki'
+    type: 'loki'
+    access: 'proxy'
+    uid: 'grafanacloud-usage-insights'
+    url: '${LOKI_URL}'
+    basicAuth: true
+    basicAuthUser: '${LOKI_USER}'
+    secureJsonData:
+      basicAuthPassword: '${LOKI_PASSWORD}'
+    editable: false
+    jsonData:
+      maxLines: 1000
