@@ -173,10 +173,10 @@ export async function POST(request: NextRequest) {
     const intent = detectTransactionIntent(prompt);
     
     // Create SSE stream
-    const encoder = createSSEEncoder();
+    const sseEncoder = createSSEEncoder();
     const stream = new ReadableStream({
       async start(controller) {
-        const encoder = new TextEncoder();
+        const textEncoder = new TextEncoder();
         
         // Send initial response - AI is thinking
         const initialEvent: TransactionEvent = {
@@ -184,7 +184,7 @@ export async function POST(request: NextRequest) {
           intent: intent || undefined,
           timestamp: Date.now(),
         };
-        controller.enqueue(encoder.encode(encoder.encode(initialEvent)));
+        controller.enqueue(textEncoder.encode(sseEncoder.encode(initialEvent)));
         
         // If transaction detected, pre-build it
         let preSignedTx = null;
@@ -195,7 +195,7 @@ export async function POST(request: NextRequest) {
             message: 'Transaction intent detected. Pre-building transaction...',
             timestamp: Date.now(),
           };
-          controller.enqueue(encoder.encode(analyzingEvent));
+          controller.enqueue(textEncoder.encode(sseEncoder.encode(analyzingEvent)));
           
           try {
             preSignedTx = await preBuildTransaction(intent);
@@ -207,14 +207,14 @@ export async function POST(request: NextRequest) {
               message: 'Transaction pre-built and ready for confirmation',
               timestamp: Date.now(),
             };
-            controller.enqueue(encoder.encode(readyEvent));
+            controller.enqueue(textEncoder.encode(sseEncoder.encode(readyEvent)));
           } catch (error) {
             const errorEvent: TransactionEvent = {
               type: 'error',
               message: `Failed to pre-build transaction: ${error}`,
               timestamp: Date.now(),
             };
-            controller.enqueue(encoder.encode(errorEvent));
+            controller.enqueue(textEncoder.encode(sseEncoder.encode(errorEvent)));
           }
         }
         
@@ -225,24 +225,24 @@ export async function POST(request: NextRequest) {
           const confirmMessage = `I've detected you want to ${intent.type.replace(/_/g, ' ').toLowerCase()} ${intent.amount || ''} ${intent.currency || 'XRP'}. Click confirm to execute this transaction on the XRPL, which typically settles in 3-5 seconds.`;
           
           for (const char of confirmMessage) {
-            controller.enqueue(encoder.encode(
-              JSON.stringify({ type: 'text', content: char }) + '\n\n'
+            controller.enqueue(textEncoder.encode(
+              `data: ${JSON.stringify({ type: 'text', content: char })}\n\n`
             ));
             await new Promise(resolve => setTimeout(resolve, 20));
           }
         } else {
           const normalMessage = 'Processing your request...';
           for (const char of normalMessage) {
-            controller.enqueue(encoder.encode(
-              JSON.stringify({ type: 'text', content: char }) + '\n\n'
+            controller.enqueue(textEncoder.encode(
+              `data: ${JSON.stringify({ type: 'text', content: char })}\n\n`
             ));
             await new Promise(resolve => setTimeout(resolve, 30));
           }
         }
         
         // End of stream
-        controller.enqueue(encoder.encode(
-          JSON.stringify({ type: 'done' }) + '\n\n'
+        controller.enqueue(textEncoder.encode(
+          `data: ${JSON.stringify({ type: 'done' })}\n\n`
         ));
         
         controller.close();
