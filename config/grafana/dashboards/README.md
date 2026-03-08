@@ -45,6 +45,7 @@ Comprehensive AI agent performance monitoring:
 
 1. Copy the dashboard JSON files to your Grafana dashboards directory:
    ```bash
+   sudo mkdir -p /var/lib/grafana/dashboards/apex/
    sudo cp config/grafana/dashboards/*.json /var/lib/grafana/dashboards/apex/
    ```
 
@@ -54,20 +55,26 @@ Comprehensive AI agent performance monitoring:
    sudo cp config/grafana/provisioning/datasources/*.yaml /etc/grafana/provisioning/datasources/
    ```
 
-3. Set environment variables for datasource credentials:
+3. Configure environment variables for datasource credentials via systemd:
    ```bash
-   export PROMETHEUS_URL="https://prometheus-prod-XX-prod-us-central-0.grafana.net"
-   export PROMETHEUS_USER="XXXXXX"
-   export PROMETHEUS_PASSWORD="YOUR_API_KEY"
-   export LOKI_URL="https://logs-prod-XX-prod-us-central-0.grafana.net"
-   export LOKI_USER="XXXXXX"
-   export LOKI_PASSWORD="YOUR_API_KEY"
-   ```
-
-4. Restart Grafana:
-   ```bash
+   # Create a systemd drop-in override for Grafana
+   sudo mkdir -p /etc/systemd/system/grafana-server.service.d/
+   sudo tee /etc/systemd/system/grafana-server.service.d/environment.conf <<EOF
+   [Service]
+   Environment="PROMETHEUS_URL=https://prometheus-prod-XX-prod-us-central-0.grafana.net"
+   Environment="PROMETHEUS_USER=XXXXXX"
+   Environment="PROMETHEUS_PASSWORD=YOUR_API_KEY"
+   Environment="LOKI_URL=https://logs-prod-XX-prod-us-central-0.grafana.net"
+   Environment="LOKI_USER=XXXXXX"
+   Environment="LOKI_PASSWORD=YOUR_API_KEY"
+   EOF
+   
+   # Reload systemd and restart Grafana
+   sudo systemctl daemon-reload
    sudo systemctl restart grafana-server
    ```
+   
+   > **Note:** Shell `export` commands don't persist across `systemctl restart`. Use systemd `Environment=` directives or `/etc/default/grafana-server` as shown above.
 
 ## Metrics Reference
 
@@ -85,8 +92,8 @@ Comprehensive AI agent performance monitoring:
 
 | Query | Description |
 |-------|-------------|
-| `count_over_time({service_name="grafana"} |= "data-request" [$__auto])` | Query event count |
-| `avg_over_time({...} | unwrap duration [$__auto])` | Average query duration |
+| `count_over_time({service_name="grafana"} \|= "data-request" [$__auto])` | Query event count |
+| `avg_over_time({...} \| unwrap duration [$__auto])` | Average query duration |
 | `sum by(datasourceName) (count_over_time(...))` | Queries by datasource |
 
 ## Dashboard URLs

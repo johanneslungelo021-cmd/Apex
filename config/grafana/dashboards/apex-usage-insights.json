@@ -260,7 +260,7 @@
         "type": "loki",
         "uid": "grafanacloud-usage-insights"
       },
-      "description": "Real-time stream of Grafana dashboard query events from usage insights. Shows who queried what panel, which datasource, and how long it took.",
+      "description": "Real-time stream of Grafana dashboard query events from usage insights. Shows dashboard name, panel, datasource, and query duration.",
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -288,7 +288,7 @@
             "type": "loki",
             "uid": "grafanacloud-usage-insights"
           },
-          "expr": "{service_name=\"grafana\"} |= \"data-request\" | logfmt | line_format \"[{{.username}}] {{.dashboardName}} › {{.panelName}} via {{.datasourceName}} ({{.duration}}ms)\"",
+          "expr": "{service_name=\"grafana\"} |= \"data-request\" | logfmt | line_format \"{{.dashboardName}} › {{.panelName}} via {{.datasourceName}} ({{.duration}}ms)\"",
           "hide": false,
           "range": true,
           "refId": "A"
