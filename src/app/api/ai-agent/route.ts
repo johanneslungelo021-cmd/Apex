@@ -399,7 +399,7 @@ export async function POST(req: Request): Promise<Response> {
   }
   const messages = validated;
 
-  const tierConfig = classifyQuery(messages);
+  let tierConfig = classifyQuery(messages);
 
   log({
     level: 'info',
@@ -444,16 +444,27 @@ export async function POST(req: Request): Promise<Response> {
       : process.env.GROQ_API_KEY;
 
     if (!apiKey) {
-      log({
-        level: 'error',
-        service: SERVICE,
-        message: `${tierConfig.provider.toUpperCase()}_API_KEY not configured`,
-        requestId,
-      });
-      return NextResponse.json(
-        { error: 'SERVICE_UNAVAILABLE', message: 'AI engine not configured.', requestId },
-        { status: 503, headers: { 'X-Request-Id': requestId } },
-      );
+      // Graceful degradation: fall back to Groq 70b if Perplexity key missing
+      if (tierConfig.provider === 'perplexity') {
+        const groqKey = process.env.GROQ_API_KEY;
+        if (groqKey) {
+          log({ level: 'warn', service: SERVICE, message: 'PERPLEXITY_API_KEY missing — falling back to Groq 70b', requestId });
+          tierConfig = { tier: 'complex', provider: 'groq', model: 'llama-3.3-70b-versatile', maxTokens: 1024, temperature: 0.7 };
+          (tierConfig as { provider: string }).provider = 'groq';
+        } else {
+          log({ level: 'error', service: SERVICE, message: 'GROQ_API_KEY not configured', requestId });
+          return NextResponse.json(
+            { error: 'SERVICE_UNAVAILABLE', message: 'AI engine not configured.', requestId },
+            { status: 503, headers: { 'X-Request-Id': requestId } },
+          );
+        }
+      } else {
+        log({ level: 'error', service: SERVICE, message: 'GROQ_API_KEY not configured', requestId });
+        return NextResponse.json(
+          { error: 'SERVICE_UNAVAILABLE', message: 'AI engine not configured.', requestId },
+          { status: 503, headers: { 'X-Request-Id': requestId } },
+        );
+      }
     }
 
     const apiEndpoint = tierConfig.provider === 'perplexity'
