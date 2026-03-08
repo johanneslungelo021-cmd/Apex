@@ -677,7 +677,7 @@
         "type": "prometheus",
         "uid": "grafanacloud-prom"
       },
-      "description": "Average cost per query",
+      "description": "Average cost per query across all requests (includes success, error, timeout)",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -731,7 +731,7 @@
             "type": "prometheus",
             "uid": "grafanacloud-prom"
           },
-          "expr": "sum(increase(apex_cost_accumulator_usd_total[$__range])) / sum(increase(apex_ai_agent_queries_total{status=\"success\"}[$__range]))",
+          "expr": "sum(increase(apex_cost_accumulator_usd_total[$__range])) / clamp_min(sum(increase(apex_ai_agent_queries_total[$__range])), 1)",
           "legendFormat": "Avg/Query",
           "range": true,
           "refId": "A"
@@ -849,7 +849,7 @@
         "type": "prometheus",
         "uid": "grafanacloud-prom"
       },
-      "description": "Estimated token usage over time",
+      "description": "Average inference latency per model over time",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -893,10 +893,18 @@
               {
                 "color": "green",
                 "value": 0
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
               }
             ]
           },
-          "unit": "short"
+          "unit": "s"
         },
         "overrides": []
       },
@@ -909,8 +917,8 @@
       "options": {
         "legend": {
           "calcs": [
-            "sum",
-            "mean"
+            "mean",
+            "max"
           ],
           "displayMode": "table",
           "placement": "bottom",
@@ -927,13 +935,13 @@
             "type": "prometheus",
             "uid": "grafanacloud-prom"
           },
-          "expr": "sum(rate(apex_inference_latency_seconds_sum[$__rate_interval]) / rate(apex_inference_latency_seconds_count[$__rate_interval])) by (model) * 100",
-          "legendFormat": "{{model}} tokens/s",
+          "expr": "sum(rate(apex_inference_latency_seconds_sum[$__rate_interval])) by (model) / sum(rate(apex_inference_latency_seconds_count[$__rate_interval])) by (model)",
+          "legendFormat": "{{model}} avg latency",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "📝 Estimated Token Rate",
+      "title": "⏱ Avg Inference Latency by Model",
       "type": "timeseries"
     }
   ],
