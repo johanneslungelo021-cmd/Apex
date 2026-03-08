@@ -242,5 +242,5 @@ export async function GET(): Promise<Response> {
   return NextResponse.json(combinedMetrics);
 }
 
-/** Force dynamic rendering to ensure fresh data */
-export const dynamic = 'force-dynamic';
+/** Revalidate every 5 minutes via Next.js ISR — avoids cold-hit latency */
+export const revalidate = 300;

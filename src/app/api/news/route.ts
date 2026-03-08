@@ -13,7 +13,7 @@ import { generateRequestId, log, fetchWithTimeout, envTimeoutMs } from '@/lib/ap
 import dns from 'dns/promises';
 
 const SERVICE = 'news';
-const PERPLEXITY_TIMEOUT_MS = envTimeoutMs(process.env.PERPLEXITY_TIMEOUT_MS, 14_000);
+const PERPLEXITY_TIMEOUT_MS = envTimeoutMs(process.env.PERPLEXITY_TIMEOUT_MS, 8_000);
 const IMAGE_FETCH_TIMEOUT_MS = 4_000;
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const MAX_IMAGE_RESPONSE_BYTES = 2 * 1024 * 1024;
@@ -271,8 +271,8 @@ async function fetchArticlesForCategory(
   const makeBody = (query: string) => ({
     query,
     max_results: 5,
-    max_tokens_per_page: 512,
-    max_tokens: 8000,
+    max_tokens_per_page: 256,
+    max_tokens: 2000,
     country: 'ZA',
     search_language_filter: ['en'],
     search_domain_filter: ['-pinterest.com', '-reddit.com', '-quora.com'],
