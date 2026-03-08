@@ -10,8 +10,9 @@ function timingSafeEqual(a: string, b: string): boolean {
   const bufB = Buffer.alloc(maxLen);
   Buffer.from(a).copy(bufA);
   Buffer.from(b).copy(bufB);
-  // Use Node.js built-in timing-safe comparison
-  return a.length === b.length && crypto.timingSafeEqual(bufA, bufB);
+  // Always perform timing-safe comparison first, then check length
+  // This prevents leaking token length via timing side-channel
+  return crypto.timingSafeEqual(bufA, bufB) && a.length === b.length;
 }
 
 export async function GET(req: Request) {

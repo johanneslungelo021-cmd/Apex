@@ -30,10 +30,10 @@ describe('security and protocol contracts', () => {
     ]);
   });
 
-  it('scout context uses system role with untrusted-data disclaimer', () => {
+  it('scout context uses user role to treat external data as untrusted', () => {
     const ctx = buildScoutContextMessage('Opportunity A — https://example.com');
     expect(ctx).not.toBeNull();
-    expect(ctx?.role).toBe('system');
+    expect(ctx?.role).toBe('user');
     expect(ctx?.content.includes('untrusted reference data')).toBe(true);
   });
 
