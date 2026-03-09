@@ -36,6 +36,12 @@ import AgentReadableChunk from '@/components/geo/AgentReadableChunk';
 import JsonLdScript from '@/components/geo/JsonLdScript';
 import { buildTechArticleSchema } from '@/lib/geo/schema-builder';
 
+// Phase 2: Audio + Province Intelligence
+import { useVoiceInput } from '@/hooks/useVoiceInput';
+import ProvinceEconomicPanel from '@/components/chat/ProvinceEconomicPanel';
+import ChatSpeakButton from '@/components/chat/ChatSpeakButton';
+import { type ProvinceProfile } from '@/lib/sa-context/provinces';
+
 interface Opportunity {
   title: string;
   province: string;
@@ -73,6 +79,13 @@ function SentientInterfaceInner() {
   // Phase 1: Emotion Engine — replaces heartbeatIntensity + inline triggerSentient
   const emotion = useEmotionEngine();
   const { trigger: triggerAudio } = useMultiSensory();
+
+  // Phase 2: Voice input + Province Intelligence
+  const voiceInput = useVoiceInput((transcript) => {
+    setAiMessage(transcript);
+  });
+  const [selectedProvince, setSelectedProvince] = useState<ProvinceProfile | null>(null);
+  const [showProvincePanel, setShowProvincePanel] = useState(false);
 
   /**
    * triggerSentient — drop-in replacement for the old inline version.
@@ -122,24 +135,10 @@ function SentientInterfaceInner() {
 
   // Phase 1: transaction state for optimistic UI
 
-  useEffect(() => {
-    fetch('/api/analytics', { method: 'POST' }).catch(() => {});
-    void fetchNews(activeCategory);
-    const newsInterval = setInterval(() => { void fetchNews(activeCategory); }, 10 * 60 * 1000);
-    return () => { clearInterval(newsInterval); };
-  }, []);
-
-  useEffect(() => {
-    void fetchNews(activeCategory);
-  }, [activeCategory]);
-
-  useEffect(() => {
-    if (isChatOpen && chatScrollRef.current) {
-      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
-    }
-  }, [isChatOpen, chatHistory]);
-
-  const fetchNews = async (category: NewsCategory = 'Latest') => {
+  // ─── News Fetcher ──────────────────────────────────────────────────────────
+  // Defined before effects so it can be listed as a stable dependency.
+  // setState functions returned by useState are referentially stable — safe to omit.
+  const fetchNews = useCallback(async (category: NewsCategory = 'Latest') => {
     setNewsLoading(true);
     setNewsError(false);
     try {
@@ -155,7 +154,37 @@ function SentientInterfaceInner() {
     } finally {
       setNewsLoading(false);
     }
-  };
+  }, []); // useState setters are stable references — no deps needed
+
+  // Ref to always hold the latest activeCategory inside the polling interval,
+  // so the interval callback never captures a stale value.
+  const activeCategoryRef = useRef<NewsCategory>('Latest');
+  useEffect(() => {
+    activeCategoryRef.current = activeCategory;
+  }, [activeCategory]);
+
+  // On mount: fire analytics + start polling. Interval reads from the ref so it
+  // always uses the latest category without needing to re-register.
+  useEffect(() => {
+    fetch('/api/analytics', { method: 'POST' }).catch(() => {});
+    void fetchNews(activeCategoryRef.current);
+    const newsInterval = setInterval(
+      () => { void fetchNews(activeCategoryRef.current); },
+      10 * 60 * 1000
+    );
+    return () => { clearInterval(newsInterval); };
+  }, [fetchNews]); // fetchNews is stable (useCallback []); ref handles category
+
+  // Re-fetch immediately whenever the user switches categories.
+  useEffect(() => {
+    void fetchNews(activeCategory);
+  }, [activeCategory, fetchNews]);
+
+  useEffect(() => {
+    if (isChatOpen && chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [isChatOpen, chatHistory]);
 
   const sendToAIAssistant = useCallback(async (promptOverride?: string) => {
     const outgoingMessage = (promptOverride ?? aiMessage).trim();
@@ -189,6 +218,18 @@ function SentientInterfaceInner() {
     const agentMessages = newHistory
       .filter((m) => m.role === 'user' || m.role === 'assistant')
       .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+
+    // Prepend province context to the last user message if a province is selected
+    if (selectedProvince && agentMessages.length > 0) {
+      const lastIdx = agentMessages.length - 1;
+      const last = agentMessages[lastIdx];
+      if (last && last.role === 'user') {
+        agentMessages[lastIdx] = {
+          ...last,
+          content: `[User province: ${selectedProvince.name} — unemployment ${selectedProvince.unemploymentPercent}%, digital access ${selectedProvince.digitalAccessPercent}%]\n${last.content}`,
+        };
+      }
+    }
 
     try {
       const res = await fetch('/api/ai-agent', {
@@ -338,7 +379,17 @@ function SentientInterfaceInner() {
     } finally {
       setAgentLoading(false);
     }
-  }, [aiMessage, agentLoading, chatHistory, triggerSentient]);
+  }, [
+    aiMessage,
+    agentLoading,
+    chatHistory,
+    triggerSentient,
+    selectedProvince,
+    startTransaction,
+    markOptimisticSuccess,
+    confirmTransaction,
+    failTransaction,
+  ]);
 
   const investigateNews = useCallback((articleTitle: string) => {
     if (agentLoading) return;
@@ -972,6 +1023,7 @@ function SentientInterfaceInner() {
               >
                 <div className="relative w-full h-56 overflow-hidden">
                   {article.imageUrl.startsWith('data:') || failedImages.has(article.url) ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- next/image cannot handle data: URLs or already-failed external images
                     <img
                       src={article.imageUrl}
                       alt={article.title}
@@ -1040,6 +1092,7 @@ function SentientInterfaceInner() {
               >
                 <div className="relative w-full h-44 overflow-hidden flex-shrink-0">
                   {article.imageUrl.startsWith('data:') || failedImages.has(article.url) ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- next/image cannot handle data: URLs or already-failed external images
                     <img
                       src={article.imageUrl}
                       alt={article.title}
@@ -1131,14 +1184,43 @@ function SentientInterfaceInner() {
                 <MessageSquare className="w-5 h-5" />
                 <span className="font-medium">Intelligent Engine</span>
                 <span className="text-xs text-emerald-400 animate-pulse ml-auto">● Online</span>
+                {/* Phase 2: Province selector badge */}
+                <button
+                  onClick={() => setShowProvincePanel((p) => !p)}
+                  className={`text-xs px-2 py-1 rounded-lg transition ${selectedProvince ? 'bg-blue-500/20 text-blue-300' : 'bg-white/10 text-zinc-400 hover:text-white'}`}
+                  title="Select your province for personalised advice"
+                  aria-label={selectedProvince ? `Province: ${selectedProvince.name}. Click to change` : 'Select province'}
+                >
+                  {selectedProvince ? selectedProvince.code : '🌍 SA'}
+                </button>
                 <button
                   onClick={() => setIsChatOpen(false)}
-                  className="ml-2 p-1 rounded-full hover:bg-white/10 transition text-zinc-400 hover:text-white"
+                  className="ml-1 p-1 rounded-full hover:bg-white/10 transition text-zinc-400 hover:text-white"
                   aria-label="Close chat"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
+              {/* Phase 2: Province economic panel (collapsible) */}
+              <AnimatePresence>
+                {showProvincePanel && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden border-b border-white/10"
+                  >
+                    <ProvinceEconomicPanel
+                      selectedCode={selectedProvince?.code ?? null}
+                      onSelect={(p) => {
+                        setSelectedProvince(p);
+                        setShowProvincePanel(false);
+                      }}
+                      compact
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
               <div ref={chatScrollRef} className="h-96 p-6 overflow-y-auto text-sm space-y-4 relative" id="chat">
                 {chatHistory.length === 0 && (
                   <div className="text-zinc-500 text-center py-8">
@@ -1160,6 +1242,12 @@ function SentientInterfaceInner() {
                         <span className="whitespace-pre-wrap">{msg.content}</span>
                       )}
                     </div>
+                    {/* Phase 2: Speak button on completed assistant messages */}
+                    {msg.role === 'assistant' && msg.content && !agentLoading && (
+                      <div className="mt-1">
+                        <ChatSpeakButton text={msg.content} />
+                      </div>
+                    )}
                   </motion.div>
                 ))}
                 {agentLoading && (!lastMessage || lastMessage.role !== 'assistant' || !lastMessage.content) && (
@@ -1197,11 +1285,24 @@ function SentientInterfaceInner() {
                   )}
                 </AnimatePresence>
               </div>
-              <div className="p-4 border-t border-white/10 flex gap-3">
+              <div className="p-4 border-t border-white/10 flex gap-3 items-center">
+                {/* Phase 2: Voice input mic button */}
+                {voiceInput.isSupported && (
+                  <button
+                    onClick={voiceInput.isListening ? voiceInput.stopListening : voiceInput.startListening}
+                    aria-label={voiceInput.isListening ? 'Stop voice input' : 'Start voice input'}
+                    aria-pressed={voiceInput.isListening}
+                    className={`p-2 rounded-full transition ${voiceInput.isListening ? 'bg-red-500/30 text-red-400 animate-pulse' : 'hover:bg-white/10 text-zinc-500 hover:text-white'}`}
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                      <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd"/>
+                    </svg>
+                  </button>
+                )}
                 <input
                   id="ai-chat-input"
                   type="text"
-                  value={aiMessage}
+                  value={voiceInput.isListening && voiceInput.interimText ? voiceInput.interimText : aiMessage}
                   onChange={(e) => setAiMessage(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
@@ -1209,7 +1310,7 @@ function SentientInterfaceInner() {
                       void sendToAIAssistant();
                     }
                   }}
-                  placeholder="Ask about opportunities..."
+                  placeholder={voiceInput.isListening ? 'Listening...' : selectedProvince ? `Ask about ${selectedProvince.name}...` : 'Ask about opportunities...'}
                   className="flex-1 bg-transparent focus:outline-none"
                   disabled={agentLoading}
                 />
