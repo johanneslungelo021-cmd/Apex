@@ -1,0 +1,117 @@
+# Apex Central — Vaal AI Empire
+# https://apex-central.vercel.app/robots.txt
+#
+# Crawl policy for AI data scrapers, search crawlers, and AI assistants.
+# We welcome AI assistants and search crawlers to index our content.
+# Training data scrapers may access public content with a crawl delay.
+
+# ─── Traditional Search Engines ──────────────────────────────────────────────
+
+User-agent: Googlebot
+Allow: /
+Crawl-delay: 0
+
+User-agent: Bingbot
+Allow: /
+Crawl-delay: 0
+
+User-agent: DuckDuckBot
+Allow: /
+Crawl-delay: 0
+
+# ─── AI Search Crawlers (welcome — index our content) ─────────────────────────
+
+User-agent: PerplexityBot
+Allow: /
+Allow: /api/mx/
+Crawl-delay: 1
+
+User-agent: YouBot
+Allow: /
+Crawl-delay: 1
+
+User-agent: BraveSoftware
+Allow: /
+Crawl-delay: 1
+
+# ─── AI Assistants (welcome — serve users who query about us) ─────────────────
+
+User-agent: ChatGPT-User
+Allow: /
+Allow: /api/mx/
+
+User-agent: Claude-User
+Allow: /
+Allow: /api/mx/
+
+User-agent: Claude-SearchBot
+Allow: /
+Allow: /api/mx/
+
+User-agent: Perplexity-User
+Allow: /
+Allow: /api/mx/
+
+User-agent: Gemini-Deep-Research
+Allow: /
+Allow: /api/mx/
+
+User-agent: DuckAssistBot
+Allow: /
+Allow: /api/mx/
+
+# ─── AI Training Data Scrapers (allowed with crawl delay) ─────────────────────
+# We allow training access to public content.
+# Proprietary API keys and internal config are excluded.
+
+User-agent: GPTBot
+Allow: /
+Disallow: /api/ai-agent/
+Disallow: /api/register/
+Crawl-delay: 1
+
+User-agent: ClaudeBot
+Allow: /
+Disallow: /api/ai-agent/
+Disallow: /api/register/
+Crawl-delay: 1
+
+User-agent: Google-Extended
+Allow: /
+Crawl-delay: 1
+
+User-agent: Bytespider
+Allow: /
+Disallow: /api/
+Crawl-delay: 2
+
+User-agent: CCBot
+Allow: /
+Disallow: /api/
+Crawl-delay: 2
+
+User-agent: anthropic-ai
+Allow: /
+Crawl-delay: 1
+
+User-agent: cohere-training-data-crawler
+Allow: /
+Disallow: /api/
+Crawl-delay: 2
+
+# ─── Machine-Readable Content ────────────────────────────────────────────────
+# All agents: explicitly allow the GEO shadow-routes
+
+User-agent: *
+Allow: /api/mx/
+
+# ─── Default Policy ──────────────────────────────────────────────────────────
+
+User-agent: *
+Allow: /
+Disallow: /api/register/
+Crawl-delay: 1
+
+# ─── Sitemap ─────────────────────────────────────────────────────────────────
+
+Sitemap: https://apex-central.vercel.app/sitemap.xml

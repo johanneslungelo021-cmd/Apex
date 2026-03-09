@@ -31,6 +31,11 @@ import EmotionalGrid from '@/components/sentient/EmotionalGrid';
 import MagneticReticle from '@/components/sentient/MagneticReticle';
 import SensoryControls from '@/components/sentient/SensoryControls';
 
+// Pillar 2: GEO — Generative Engine Optimization
+import AgentReadableChunk from '@/components/geo/AgentReadableChunk';
+import JsonLdScript from '@/components/geo/JsonLdScript';
+import { buildTechArticleSchema } from '@/lib/geo/schema-builder';
+
 interface Opportunity {
   title: string;
   province: string;
@@ -400,49 +405,85 @@ function SentientInterfaceInner() {
       {/* Phase 1: EmotionalGrid wraps all content — injects CSS variable morphing */}
       <EmotionalGrid>
       
-      <div className="glass mx-auto max-w-5xl mt-16 rounded-3xl p-16 relative overflow-hidden">
-        <div className="liquid-reflection" />
-        <div className="flex items-center gap-4 mb-6">
-          <motion.div animate={{ scale: heartbeatIntensity }} transition={{ type: 'spring', stiffness: 300 }}>
-            <Heart
-              className="w-12 h-12 text-red-500 heart-pulse"
-              style={{ filter: `drop-shadow(0 0 ${10 * heartbeatIntensity}px rgba(239, 68, 68, 0.6))` }}
-            />
-          </motion.div>
-          <h1 className="text-7xl font-bold tracking-tighter">Sentient Interface</h1>
-        </div>
-        <p className="text-2xl text-zinc-400">Phase 3 Live • XRPL Pre-Sign & Stream + WebGL Visualization</p>
-        <div className="flex items-center gap-4 mt-6">
+      {/* Pillar 2: GEO — TechArticle JSON-LD for AI citation */}
+      <JsonLdScript
+        schema={buildTechArticleSchema({
+          headline: 'Apex Central — AI-Powered Digital Income Platform for South Africa',
+          abstract:
+            'Apex Central is a living South African digital platform that discovers real income opportunities under R2000 to start, provides personalised AI guidance via a multi-model swarm, and executes autonomous XRPL micro-transactions with sub-3-second settlement.',
+          slug: 'home',
+          keywords: [
+            'South Africa digital income',
+            'AI opportunities ZAR',
+            'XRPL blockchain South Africa',
+            'Scout Agent opportunities',
+            'Vaal AI Empire',
+            'African Futurism',
+            'digital freelancing South Africa',
+          ],
+          aboutName: 'Digital Income Opportunities — South Africa',
+          aboutDescription:
+            'Verified digital income opportunities for South African creators costing R0–R2000 to start, refreshed every 5 minutes by an AI Scout Agent.',
+        })}
+      />
 
-        </div>
-      </div>
+      {/* Pillar 2: GEO — Hero section with sr-only answer-first summary */}
+      <AgentReadableChunk
+        id="apex-hero"
+        agentSummary="Apex Central is a South African AI-powered digital income platform built in the Vaal Triangle, Gauteng. It combines a Scout Agent that refreshes real digital opportunities every 5 minutes (all under R2000 to start), an Intelligent Engine using a 4-model AI swarm for personalised guidance, and XRPL autonomous transaction settlement in under 3 seconds."
+        summaryLabel="Platform Overview"
+      >
+        <div className="glass mx-auto max-w-5xl mt-16 rounded-3xl p-16 relative overflow-hidden">
+          <div className="liquid-reflection" />
+          <div className="flex items-center gap-4 mb-6">
+            <motion.div animate={{ scale: heartbeatIntensity }} transition={{ type: 'spring', stiffness: 300 }}>
+              <Heart
+                className="w-12 h-12 text-red-500 heart-pulse"
+                style={{ filter: `drop-shadow(0 0 ${10 * heartbeatIntensity}px rgba(239, 68, 68, 0.6))` }}
+              />
+            </motion.div>
+            <h1 className="text-7xl font-bold tracking-tighter">Sentient Interface</h1>
+          </div>
+          <p className="text-2xl text-zinc-400">Phase 3 Live • XRPL Pre-Sign &amp; Stream + WebGL Visualization</p>
+          <div className="flex items-center gap-4 mt-6">
 
-      <div className="glass mx-auto max-w-5xl mt-8 p-8 rounded-3xl border border-white/10">
-        <div className="flex items-center gap-3 mb-4">
-          <Zap className="w-6 h-6 text-yellow-400" />
-          <h2 className="text-2xl font-bold">What is Apex?</h2>
-        </div>
-        <p className="text-lg text-zinc-300 leading-relaxed">
-          Apex is a living digital platform that helps South African creators build sustainable digital income.
-          It combines an AI-powered Scout Agent that finds real opportunities under R2000, a conversational
-          Intelligent Engine for personalised guidance, and real-time GitHub and platform metrics — all
-          observable through Grafana Cloud via OpenTelemetry.
-        </p>
-        <div className="mt-6 grid grid-cols-3 gap-4 text-sm">
-          <div className="glass p-4 rounded-2xl">
-            <div className="text-emerald-400 font-semibold mb-1">Scout Agent</div>
-            <div className="text-zinc-400">Finds real ZAR digital income opportunities refreshed every 5 minutes</div>
-          </div>
-          <div className="glass p-4 rounded-2xl">
-            <div className="text-blue-400 font-semibold mb-1">Intelligent Engine</div>
-            <div className="text-zinc-400">Answer-First AI responses grounded in live SA opportunity data</div>
-          </div>
-          <div className="glass p-4 rounded-2xl">
-            <div className="text-purple-400 font-semibold mb-1">Full Observability</div>
-            <div className="text-zinc-400">OTEL metrics, structured logs, and Speed Insights flowing to Grafana</div>
           </div>
         </div>
-      </div>
+      </AgentReadableChunk>
+
+      {/* Pillar 2: GEO — Platform capabilities with answer-first summary */}
+      <AgentReadableChunk
+        id="apex-capabilities"
+        agentSummary="Apex Central's three core capabilities are: (1) Scout Agent — discovers South African digital income opportunities ≤R2000, refreshing every 5 minutes; (2) Intelligent Engine — Answer-First AI powered by Groq Llama, Qwen 3.5-Plus, GLM-5, and Kimi K2.5 for personalised guidance; (3) Full Observability — OpenTelemetry metrics to Prometheus and Grafana Cloud."
+        summaryLabel="Platform Capabilities"
+      >
+        <div className="glass mx-auto max-w-5xl mt-8 p-8 rounded-3xl border border-white/10">
+          <div className="flex items-center gap-3 mb-4">
+            <Zap className="w-6 h-6 text-yellow-400" />
+            <h2 className="text-2xl font-bold">What is Apex?</h2>
+          </div>
+          <p className="text-lg text-zinc-300 leading-relaxed">
+            Apex is a living digital platform that helps South African creators build sustainable digital income.
+            It combines an AI-powered Scout Agent that finds real opportunities under R2000, a conversational
+            Intelligent Engine for personalised guidance, and real-time GitHub and platform metrics — all
+            observable through Grafana Cloud via OpenTelemetry.
+          </p>
+          <div className="mt-6 grid grid-cols-3 gap-4 text-sm">
+            <div className="glass p-4 rounded-2xl">
+              <div className="text-emerald-400 font-semibold mb-1">Scout Agent</div>
+              <div className="text-zinc-400">Finds real ZAR digital income opportunities refreshed every 5 minutes</div>
+            </div>
+            <div className="glass p-4 rounded-2xl">
+              <div className="text-blue-400 font-semibold mb-1">Intelligent Engine</div>
+              <div className="text-zinc-400">Answer-First AI responses grounded in live SA opportunity data</div>
+            </div>
+            <div className="glass p-4 rounded-2xl">
+              <div className="text-purple-400 font-semibold mb-1">Full Observability</div>
+              <div className="text-zinc-400">OTEL metrics, structured logs, and Speed Insights flowing to Grafana</div>
+            </div>
+          </div>
+        </div>
+      </AgentReadableChunk>
 
       <nav className="glass sticky top-8 mx-auto max-w-5xl rounded-3xl px-8 py-4 flex items-center justify-between z-50">
         <div className="flex items-center gap-8">
@@ -476,6 +517,11 @@ function SentientInterfaceInner() {
         </div>
       </nav>
 
+      <AgentReadableChunk
+        id="scout-opportunities"
+        agentSummary="The Scout Agent on Apex Central surfaces verified digital income opportunities for South Africans, all costing R0–R2000 to start. Categories include Freelancing (Fiverr, Upwork), E-commerce (Takealot, Bidorbuy), Content Creation (YouTube, TikTok), Online Tutoring, and Digital Skills. Results refresh every 5 minutes with province-aware filtering."
+        summaryLabel="Live Digital Income Opportunities"
+      >
       <section id="opportunities" className="max-w-5xl mx-auto px-8 py-20">
         <h2 className="text-4xl font-semibold mb-4 flex items-center gap-3">
           <Zap className="w-9 h-9 text-yellow-400" /> Live Digital Income Opportunities
@@ -528,8 +574,13 @@ function SentientInterfaceInner() {
           </div>
         )}
       </section>
+      </AgentReadableChunk>
 
-
+      <AgentReadableChunk
+        id="sentient-insights"
+        agentSummary="Apex Central's Sentient Insights section delivers AI-generated analysis of South African digital economy trends, sourced from live market data. Each insight includes a confidence score, trend direction, key data points, and an actionable recommendation grounded in the platform's live opportunity data."
+        summaryLabel="Sentient Insights — AI Market Analysis"
+      >
       <section id="insights" className="max-w-5xl mx-auto px-8 py-20 border-t border-white/10">
         <div className="flex items-start justify-between mb-4">
           <div>
@@ -835,7 +886,13 @@ function SentientInterfaceInner() {
           );
         })()}
       </section>
+      </AgentReadableChunk>
 
+      <AgentReadableChunk
+        id="live-news"
+        agentSummary="The Live News section on Apex Central aggregates real-time South African digital economy news via Perplexity Search API, categorised into Latest, Tech & AI, Finance & Crypto, and Startups. Each article includes a research button that routes the topic to the Intelligent Engine for AI-powered analysis relevant to South African income opportunities."
+        summaryLabel="Live South African Digital Economy News"
+      >
       <section id="news" className="max-w-5xl mx-auto px-8 py-20 border-t border-white/10">
         <div className="flex items-center justify-between mb-8">
           <h2 className="text-4xl font-semibold flex items-center gap-3">
@@ -1040,6 +1097,7 @@ function SentientInterfaceInner() {
           </div>
         )}
       </section>
+      </AgentReadableChunk>
 
       {/* FAB — Floating AI Chat */}
       <div className="fixed bottom-8 right-8 z-50">
