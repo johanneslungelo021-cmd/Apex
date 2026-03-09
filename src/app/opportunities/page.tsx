@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { ArrowLeft, MessageSquare, Mic, MicOff, Send, Zap } from 'lucide-react';
@@ -27,7 +27,7 @@ interface ChatMessage {
 
 const DEFAULT_PROMPT = 'Find me 3 top digital income opportunities in South Africa under R2000 to start right now';
 
-export default function OpportunitiesPage() {
+function OpportunitiesPageInner() {
   const searchParams = useSearchParams();
   const initialPrompt = searchParams.get('prompt')?.trim() ?? '';
 
@@ -377,5 +377,13 @@ export default function OpportunitiesPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function OpportunitiesPage() {
+  return (
+    <Suspense fallback={null}>
+      <OpportunitiesPageInner />
+    </Suspense>
   );
 }
