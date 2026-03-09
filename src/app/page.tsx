@@ -1303,7 +1303,14 @@ function SentientInterfaceInner() {
                   id="ai-chat-input"
                   type="text"
                   value={voiceInput.isListening && voiceInput.interimText ? voiceInput.interimText : aiMessage}
-                  onChange={(e) => setAiMessage(e.target.value)}
+                  onChange={(e) => {
+                    // Block writes to aiMessage while voice is active — the displayed
+                    // value is interim speech text, not the user's own typing.
+                    // Without this guard, typing during listening corrupts aiMessage
+                    // with a hybrid of interim text + keypress on next non-listening render.
+                    if (!voiceInput.isListening) setAiMessage(e.target.value);
+                  }}
+                  readOnly={voiceInput.isListening}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
