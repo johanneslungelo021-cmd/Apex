@@ -1,0 +1,39 @@
+/* src/styles/sentient.css */
+/* @property registrations allow the browser to smoothly interpolate
+   CSS custom properties injected by EmotionalGrid */
+
+@property --apex-border {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: rgba(255, 255, 255, 0.05);
+}
+
+@property --apex-gap {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 1.5rem;
+}
+
+/* Hide default cursor when motion is allowed and pointer is precise (desktop) */
+@media (prefers-reduced-motion: no-preference) {
+  @media (pointer: fine) {
+    body,
+    a,
+    button,
+    input,
+    [role='button'] {
+      cursor: none;
+    }
+  }
+}
+
+/* Content layer reads injected CSS variables */
+.sentient-content-layer {
+  position: relative;
+  z-index: 10;
+  gap: var(--apex-gap);
+  border-color: var(--apex-border);
+  transition:
+    --apex-border 0.7s ease-out,
+    --apex-gap 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+}

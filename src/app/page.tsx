@@ -1,21 +1,20 @@
 /**
- * Sentient Interface - Main Landing Page (Phase 3)
+ * Sentient Interface - Main Landing Page (Phase 1 — Sentient Vessel)
  *
- * A full-functional landing page implementing Phase 3 of the Apex platform.
- * Features: Streaming typography, optimistic transaction UI, WebGL swarm visualization.
+ * Phase 1 wraps the existing functional content in the Emotion Engine symbiote:
+ * EmotionalSwarm (reactive WebGL), EmotionalGrid (CSS variable morphing),
+ * MagneticReticle (custom cursor physics), SensoryControls (accessibility toggles).
  *
  * @module app/page
  */
 
 'use client';
 
-import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { Heart, Search, User, BarChart3, MessageSquare, Star, AlertCircle, TrendingUp, TrendingDown, Minus, Users, DollarSign, Zap, ExternalLink, Newspaper, Clock, RefreshCw, Microscope, Activity, Shield, ChevronDown, ChevronUp, ArrowUpRight, Info, Sparkles, Filter, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { Points, PointMaterial } from '@react-three/drei';
-import * as THREE from 'three';
+import { Canvas } from '@react-three/fiber';
 import {
   StreamingTypography,
   OptimisticTransactionCard,
@@ -23,6 +22,14 @@ import {
   useOptimisticTransaction,
   type TransactionIntent,
 } from '@/lib/streaming/OptimisticTransactionUI';
+
+// Phase 1: Sentient Vessel imports
+import { EmotionProvider, useEmotionEngine } from '@/hooks/useEmotionEngine';
+import { useMultiSensory } from '@/hooks/useMultiSensory';
+import EmotionalSwarm from '@/components/sentient/EmotionalSwarm';
+import EmotionalGrid from '@/components/sentient/EmotionalGrid';
+import MagneticReticle from '@/components/sentient/MagneticReticle';
+import SensoryControls from '@/components/sentient/SensoryControls';
 
 interface Opportunity {
   title: string;
@@ -42,62 +49,14 @@ interface NewsArticle {
   imageUrl: string;
 }
 
-/**
- * SwarmBackground - WebGL particle swarm visualization
- * 
- * Creates an ambient "living data" background effect using Three.js.
- * Particles orbit in a 3D space, responding to the platform's heartbeat.
- */
-function SwarmBackground({ intensity = 1 }: { intensity?: number }) {
-  const count = 2000;
-  // Use seeded deterministic positions to avoid React strict mode issues
-  const points = useMemo(() => {
-    const positions = new Float32Array(count * 3);
-    // Simple seeded pseudo-random for deterministic output
-    let seed = 12345;
-    const seededRandom = () => {
-      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-      return seed / 0x7fffffff;
-    };
-    for (let i = 0; i < count; i++) {
-      positions[i * 3] = (seededRandom() - 0.5) * 20;
-      positions[i * 3 + 1] = (seededRandom() - 0.5) * 20;
-      positions[i * 3 + 2] = (seededRandom() - 0.5) * 20;
-    }
-    return positions;
-  }, []);
-
-  const ref = useRef<THREE.Points>(null);
-  
-  useFrame((state) => {
-    if (ref.current) {
-      ref.current.rotation.x = state.clock.elapsedTime * 0.02 * intensity;
-      ref.current.rotation.y = state.clock.elapsedTime * 0.03 * intensity;
-    }
-  });
-
-  return (
-    <Points ref={ref} positions={points} stride={3} frustumCulled={false}>
-      <PointMaterial
-        transparent
-        color="#00ff88"
-        size={0.02}
-        sizeAttenuation={true}
-        depthWrite={false}
-        opacity={0.6}
-      />
-    </Points>
-  );
-}
-
-export default function SentientInterface() {
+// ─── Inner page that consumes EmotionProvider context ─────────────────────────
+function SentientInterfaceInner() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showRegister, setShowRegister] = useState(false);
   const [registerEmail, setRegisterEmail] = useState('');
   const [aiMessage, setAiMessage] = useState('');
   const [chatHistory, setChatHistory] = useState<{ role: string; content: string }[]>([]);
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [heartbeatIntensity, setHeartbeatIntensity] = useState(1);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [agentLoading, setAgentLoading] = useState(false);
   const [news, setNews] = useState<NewsArticle[]>([]);
@@ -105,8 +64,41 @@ export default function SentientInterface() {
   const [newsError, setNewsError] = useState(false);
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
   const [expandedInsight, setExpandedInsight] = useState<string | null>(null);
-  
-  // Phase 3: Transaction state for optimistic UI
+
+  // Phase 1: Emotion Engine — replaces heartbeatIntensity + inline triggerSentient
+  const emotion = useEmotionEngine();
+  const { trigger: triggerAudio } = useMultiSensory();
+
+  /**
+   * triggerSentient — drop-in replacement for the old inline version.
+   * Drives the emotion cycle + multi-sensory feedback.
+   */
+  const triggerSentient = useCallback(
+    (intensityLevel: number = 1) => {
+      emotion.pulse(intensityLevel);
+      // Map intensity to emotion state
+      if (intensityLevel >= 1.4) {
+        emotion.runCycle(2500);
+        triggerAudio('awakened');
+      } else if (intensityLevel >= 1.0) {
+        emotion.transition('awakened');
+        triggerAudio('awakened');
+        setTimeout(() => emotion.transition('dormant'), 600);
+      } else {
+        emotion.pulse(intensityLevel);
+      }
+    },
+    [emotion, triggerAudio]
+  );
+
+  // Sync audio layer with emotion state changes
+  useEffect(() => {
+    triggerAudio(emotion.state);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emotion.state]);
+
+  // Derived heartbeat intensity for backward-compatible Heart icon animation
+  const heartbeatIntensity = emotion.intensity;
   const {
     transactionState,
     resetTransaction,
@@ -123,32 +115,7 @@ export default function SentientInterface() {
   type NewsCategory = typeof NEWS_CATEGORIES[number];
   const [activeCategory, setActiveCategory] = useState<NewsCategory>('Latest');
 
-  const triggerSentient = useCallback((intensity: number = 1) => {
-    if (navigator.vibrate) {
-      navigator.vibrate([60 * intensity, 30, 60 * intensity]);
-    }
-    try {
-      const AudioContext = window.AudioContext || (window as unknown as { webkitAudioContext: typeof window.AudioContext }).webkitAudioContext;
-      const audio = new AudioContext();
-      const oscillator = audio.createOscillator();
-      const gainNode = audio.createGain();
-      const panner = audio.createStereoPanner();
-      oscillator.type = 'sine';
-      oscillator.frequency.value = 180 + (intensity * 20);
-      gainNode.gain.value = 0.15 * intensity;
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audio.currentTime + 0.3);
-      panner.pan.value = Math.random() * 0.6 - 0.3;
-      oscillator.connect(gainNode);
-      gainNode.connect(panner);
-      panner.connect(audio.destination);
-      oscillator.start();
-      setTimeout(() => { oscillator.stop(); audio.close(); }, 280);
-    } catch {
-      // Audio not available — silently skip
-    }
-    setHeartbeatIntensity(1.3);
-    setTimeout(() => setHeartbeatIntensity(1), 300);
-  }, []);
+  // Phase 1: transaction state for optimistic UI
 
   useEffect(() => {
     fetch('/api/analytics', { method: 'POST' }).catch(() => {});
@@ -410,15 +377,18 @@ export default function SentientInterface() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white relative">
-      {/* Phase 3: WebGL Swarm Background */}
-      <div className="fixed inset-0 -z-10 opacity-30">
+      {/* Phase 1: Emotion-reactive WebGL swarm */}
+      <div className="fixed inset-0 -z-10 opacity-30 mix-blend-screen pointer-events-none">
         <Suspense fallback={null}>
-          <Canvas camera={{ position: [0, 0, 5], fov: 75 }}>
-            <SwarmBackground intensity={heartbeatIntensity} />
+          <Canvas camera={{ position: [0, 0, 15], fov: 60 }}>
+            <EmotionalSwarm />
           </Canvas>
         </Suspense>
       </div>
-      
+
+      {/* Phase 1: Custom magnetic cursor (desktop only) */}
+      <MagneticReticle />
+
       {/* Transaction Beam Effect */}
       <TransactionBeam
         isActive={showTransactionBeam}
@@ -426,6 +396,9 @@ export default function SentientInterface() {
         endColor="#00AAFF"
         onComplete={() => setShowTransactionBeam(false)}
       />
+
+      {/* Phase 1: EmotionalGrid wraps all content — injects CSS variable morphing */}
+      <EmotionalGrid>
       
       <div className="glass mx-auto max-w-5xl mt-16 rounded-3xl p-16 relative overflow-hidden">
         <div className="liquid-reflection" />
@@ -1218,6 +1191,21 @@ export default function SentientInterface() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Phase 1: Accessibility toggles for audio / haptics / motion */}
+      <SensoryControls />
+
+      </EmotionalGrid>
     </div>
   );
 }
+
+// ─── Public default export wraps inner component in EmotionProvider ────────────
+export default function SentientInterface() {
+  return (
+    <EmotionProvider>
+      <SentientInterfaceInner />
+    </EmotionProvider>
+  );
+}
+
