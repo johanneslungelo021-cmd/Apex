@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { Heart, Search, User, MessageSquare, Zap, ExternalLink, Newspaper, Clock, RefreshCw, Microscope, Filter, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
+import Link from 'next/link';
 import { Canvas } from '@react-three/fiber';
 import {
   StreamingTypography,
@@ -540,16 +541,17 @@ function SentientInterfaceInner() {
         </div>
       </AgentReadableChunk>
 
+      {/* ─── Navigation ─────────────────────────────────────────────────────── */}
       <nav className="glass sticky top-8 mx-auto max-w-5xl rounded-3xl px-8 py-4 flex items-center justify-between z-50">
         <div className="flex items-center gap-8">
           <span className="font-semibold">Apex</span>
           <div className="flex gap-6 text-sm">
-            <a href="#opportunities" className="hover:text-white/70 transition" onClick={() => triggerSentient(0.5)}>Opportunities</a>
-            <a href="#news" className="hover:text-white/70 transition" onClick={() => triggerSentient(0.5)}>News</a>
-            <a href="/trading" className="hover:text-emerald-400 transition">Trading</a>
-            <a href="/social" className="hover:text-purple-400 transition">Social</a>
-            <a href="/reels" className="hover:text-red-400 transition">Reels</a>
-            <a href="/blogs" className="hover:text-blue-400 transition">Blogs</a>
+            <Link href="/opportunities" className="hover:text-yellow-400 transition" onClick={() => triggerSentient(0.5)}>Opportunities</Link>
+            <Link href="/news" className="hover:text-blue-400 transition" onClick={() => triggerSentient(0.5)}>News</Link>
+            <Link href="/trading" className="hover:text-emerald-400 transition">Trading</Link>
+            <Link href="/social" className="hover:text-purple-400 transition">Social</Link>
+            <Link href="/reels" className="hover:text-red-400 transition">Reels</Link>
+            <Link href="/blogs" className="hover:text-blue-400 transition">Blogs</Link>
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -581,9 +583,14 @@ function SentientInterfaceInner() {
         summaryLabel="Live Digital Income Opportunities"
       >
       <section id="opportunities" className="max-w-5xl mx-auto px-8 py-20">
-        <h2 className="text-4xl font-semibold mb-4 flex items-center gap-3">
-          <Zap className="w-9 h-9 text-yellow-400" /> Live Digital Income Opportunities
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-4xl font-semibold flex items-center gap-3">
+            <Zap className="w-9 h-9 text-yellow-400" /> Live Digital Income Opportunities
+          </h2>
+          <Link href="/opportunities" className="text-xs text-zinc-500 hover:text-yellow-400 transition flex items-center gap-1">
+            Full page <ExternalLink className="w-3 h-3" />
+          </Link>
+        </div>
         <p className="text-zinc-400 mb-8">
           Ask the AI assistant below to discover opportunities — the Scout Agent will find real options under R2000.
         </p>
@@ -641,9 +648,14 @@ function SentientInterfaceInner() {
       >
       <section id="news" className="max-w-5xl mx-auto px-8 py-20 border-t border-white/10">
         <div className="flex items-center justify-between mb-8">
-          <h2 className="text-4xl font-semibold flex items-center gap-3">
-            <Newspaper className="w-9 h-9 text-blue-400" /> Live News
-          </h2>
+          <div className="flex items-center gap-4">
+            <h2 className="text-4xl font-semibold flex items-center gap-3">
+              <Newspaper className="w-9 h-9 text-blue-400" /> Live News
+            </h2>
+            <Link href="/news" className="text-xs text-zinc-500 hover:text-blue-400 transition flex items-center gap-1">
+              Full page <ExternalLink className="w-3 h-3" />
+            </Link>
+          </div>
           <button
             onClick={() => { void fetchNews(activeCategory); triggerSentient(0.4); }}
             disabled={newsLoading}
@@ -1069,5 +1081,3 @@ export default function SentientInterface() {
     </EmotionProvider>
   );
 }
-
-

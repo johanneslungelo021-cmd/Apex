@@ -104,5 +104,8 @@ function resolveMarkdownSlug(pathname: string): string | null {
   // /opportunities → opportunities
   if (pathname.startsWith('/opportunities')) return 'opportunities';
 
+  // /news → news (AI crawlers get a markdown summary of the news section)
+  if (pathname.startsWith('/news')) return 'news';
+
   return null;
 }
