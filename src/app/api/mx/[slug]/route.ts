@@ -5,10 +5,11 @@
  * assistants and search crawlers via content negotiation.
  *
  * Supported slugs:
- *   /api/mx/home       — Full platform snapshot
- *   /api/mx/about      — Organisation / citation guide
- *   /api/mx/memory     — Verified agentic facts database
+ *   /api/mx/home          — Full platform snapshot
+ *   /api/mx/about         — Organisation / citation guide
+ *   /api/mx/memory        — Verified agentic facts database
  *   /api/mx/opportunities — Current Scout Agent opportunities
+ *   /api/mx/news          — Live South African digital economy news summary
  *
  * Content parity: every Markdown document represents the same information
  * visible to human users — only the format differs. This is content
@@ -22,7 +23,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { renderPlatformMarkdown, renderAboutMarkdown, type PlatformSnapshot } from '@/lib/geo/markdown-renderer';
 import { renderMemoryMarkdown } from '@/lib/geo/memory-store';
 
-const VALID_SLUGS = new Set(['home', 'about', 'memory', 'opportunities']);
+const VALID_SLUGS = new Set(['home', 'about', 'memory', 'opportunities', 'news']);
 
 // Cache TTL for Markdown responses (5 minutes — aligns with Scout Agent cache)
 const CACHE_CONTROL = 'public, max-age=300, stale-while-revalidate=60';
@@ -35,7 +36,7 @@ export async function GET(
 
   if (!VALID_SLUGS.has(slug)) {
     return new NextResponse(
-      `# 404 — Unknown Endpoint\n\nAvailable endpoints: /api/mx/home, /api/mx/about, /api/mx/memory, /api/mx/opportunities`,
+      `# 404 — Unknown Endpoint\n\nAvailable endpoints: /api/mx/home, /api/mx/about, /api/mx/memory, /api/mx/opportunities, /api/mx/news`,
       {
         status: 404,
         headers: {
@@ -67,6 +68,11 @@ export async function GET(
 
     case 'opportunities': {
       markdown = await buildOpportunitiesMarkdown();
+      break;
+    }
+
+    case 'news': {
+      markdown = buildNewsMarkdown();
       break;
     }
 
@@ -208,6 +214,46 @@ async function buildOpportunitiesMarkdown(): Promise<string> {
     `**Platform:** Apex Central — Vaal AI Empire`,
     `**URL:** https://apex-central.vercel.app`,
     `**Data freshness:** Live (5-minute cache)`,
+    '',
+  ].join('\n');
+}
+
+function buildNewsMarkdown(): string {
+  // Returns a static, always-accurate markdown summary of the news section.
+  // Live article content is dynamic (Perplexity API) and cannot be pre-rendered
+  // at request time in a shadow-route without introducing latency and API cost.
+  // AI crawlers are directed to the canonical live URL for fresh data.
+  return [
+    `# Live South African Digital Economy News — Apex Central`,
+    '',
+    `> **Answer-First Summary:** Apex Central aggregates real-time South African digital economy news via the Perplexity Search API, refreshed every 10 minutes. Categories cover Latest, Tech & AI, Finance & Crypto, and Startups. Each article includes an AI Research button that routes the topic into the Intelligent Engine for income-opportunity analysis.`,
+    '',
+    `## News Categories`,
+    '',
+    `| Category | Focus |`,
+    `|---|---|`,
+    `| **Latest** | Breaking SA digital economy headlines |`,
+    `| **Tech & AI** | AI, software, and technology news relevant to SA |`,
+    `| **Finance & Crypto** | Markets, ZAR rates, crypto, and fintech |`,
+    `| **Startups** | New SA ventures, funding rounds, and founder stories |`,
+    '',
+    `## Features`,
+    '',
+    `- **Auto-refresh** every 10 minutes via Perplexity Search API`,
+    `- **Featured article** displayed full-width with image`,
+    `- **Research button** on every article — routes to Intelligent Engine for AI analysis`,
+    `- **Province-aware** context: news is interpreted relative to the user's selected SA province`,
+    '',
+    `## Live News`,
+    '',
+    `For current live articles, visit: https://apex-central.vercel.app/news`,
+    '',
+    `---`,
+    '',
+    `**Platform:** Apex Central — Vaal AI Empire`,
+    `**URL:** https://apex-central.vercel.app/news`,
+    `**Data source:** Perplexity Search API`,
+    `**Data freshness:** Live (10-minute cache)`,
     '',
   ].join('\n');
 }

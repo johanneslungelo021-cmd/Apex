@@ -40,6 +40,7 @@ import { APP_VERSION } from '@/lib/version';
 const SERVICE = 'ai-agent';
 const GROQ_TIMEOUT_MS = envTimeoutMs(process.env.GROQ_TIMEOUT_MS, 15_000);
 const PERPLEXITY_TIMEOUT_MS = envTimeoutMs(process.env.PERPLEXITY_TIMEOUT_MS, 14_000);
+const KIMI_TIMEOUT_MS = envTimeoutMs(process.env.KIMI_TIMEOUT_MS, 20_000);
 const RATE_LIMIT = 20;
 const RATE_WINDOW_MS = 60_000;
 const MAX_REQUEST_BODY_BYTES = 5 * 1024 * 1024;
@@ -62,7 +63,7 @@ type QueryTier = 'simple' | 'complex' | 'research';
 
 interface TierConfig {
   tier: QueryTier;
-  provider: 'groq' | 'perplexity';
+  provider: 'groq' | 'perplexity' | 'kimi';
   model: string;
   maxTokens: number;
   temperature: number;
@@ -112,10 +113,10 @@ function classifyQuery(messages: ValidatedMessage[]): TierConfig {
   if (isComplex) {
     return {
       tier: 'complex',
-      provider: 'groq',
-      model: 'llama-3.3-70b-versatile',
-      maxTokens: 1024,
-      temperature: 0.7,
+      provider: 'kimi',
+      model: 'kimi-k2-0711-preview',
+      maxTokens: 2048,
+      temperature: 0.6,
     };
   }
 
@@ -237,7 +238,7 @@ function estimateCost(
 ): string {
   const pricing: Record<string, { input: number; output: number }> = {
     'llama-3.1-8b-instant': { input: 0.05, output: 0.08 },
-    'llama-3.3-70b-versatile': { input: 0.59, output: 0.79 },
+    'kimi-k2-0711-preview': { input: 0.15, output: 0.60 },
     sonar: { input: 1.0, output: 1.0 },
   };
 
@@ -281,7 +282,7 @@ export async function GET(): Promise<Response> {
       'Tiered AI assistant with streaming responses, cost-optimized model routing, and live web research for South African digital income opportunities.',
     models: {
       simple: 'llama-3.1-8b-instant (Groq, $0.05/$0.08 per M tokens)',
-      complex: 'llama-3.3-70b-versatile (Groq, $0.59/$0.79 per M tokens)',
+      complex: 'kimi-k2-0711-preview (Moonshot AI, $0.15/$0.60 per M tokens)',
       research: 'sonar (Perplexity, $1/$1 per M tokens + $0.005/request)',
     },
     streaming: true,
@@ -441,16 +442,29 @@ export async function POST(req: Request): Promise<Response> {
 
     const apiKey = tierConfig.provider === 'perplexity'
       ? process.env.PERPLEXITY_API_KEY
-      : process.env.GROQ_API_KEY;
+      : tierConfig.provider === 'kimi'
+        ? (process.env.KIMI_API_KEY ?? process.env.MPC_APEX)
+        : process.env.GROQ_API_KEY;
 
     if (!apiKey) {
-      // Graceful degradation: fall back to Groq 70b if Perplexity key missing
-      if (tierConfig.provider === 'perplexity') {
+      // Graceful degradation: Kimi missing → fall back to Groq simple
+      if (tierConfig.provider === 'kimi') {
         const groqKey = process.env.GROQ_API_KEY;
         if (groqKey) {
-          log({ level: 'warn', service: SERVICE, message: 'PERPLEXITY_API_KEY missing — falling back to Groq 70b', requestId });
-          tierConfig = { tier: 'complex', provider: 'groq', model: 'llama-3.3-70b-versatile', maxTokens: 1024, temperature: 0.7 };
-          (tierConfig as { provider: string }).provider = 'groq';
+          log({ level: 'warn', service: SERVICE, message: 'KIMI_API_KEY missing — falling back to Groq simple', requestId });
+          tierConfig = { tier: 'simple', provider: 'groq', model: 'llama-3.1-8b-instant', maxTokens: 512, temperature: 0.7 };
+        } else {
+          log({ level: 'error', service: SERVICE, message: 'No AI keys configured', requestId });
+          return NextResponse.json(
+            { error: 'SERVICE_UNAVAILABLE', message: 'AI engine not configured.', requestId },
+            { status: 503, headers: { 'X-Request-Id': requestId } },
+          );
+        }
+      } else if (tierConfig.provider === 'perplexity') {
+        const groqKey = process.env.GROQ_API_KEY;
+        if (groqKey) {
+          log({ level: 'warn', service: SERVICE, message: 'PERPLEXITY_API_KEY missing — falling back to Groq simple', requestId });
+          tierConfig = { tier: 'simple', provider: 'groq', model: 'llama-3.1-8b-instant', maxTokens: 512, temperature: 0.7 };
         } else {
           log({ level: 'error', service: SERVICE, message: 'GROQ_API_KEY not configured', requestId });
           return NextResponse.json(
@@ -469,11 +483,17 @@ export async function POST(req: Request): Promise<Response> {
 
     const apiEndpoint = tierConfig.provider === 'perplexity'
       ? 'https://api.perplexity.ai/chat/completions'
-      : 'https://api.groq.com/openai/v1/chat/completions';
+      : tierConfig.provider === 'kimi'
+        ? 'https://api.moonshot.cn/v1/chat/completions'
+        : 'https://api.groq.com/openai/v1/chat/completions';
 
     // Create abort controller that responds to BOTH timeout AND client disconnect
     const abortController = new AbortController();
-    const timeoutMs = tierConfig.provider === 'perplexity' ? PERPLEXITY_TIMEOUT_MS : GROQ_TIMEOUT_MS;
+    const timeoutMs = tierConfig.provider === 'perplexity'
+      ? PERPLEXITY_TIMEOUT_MS
+      : tierConfig.provider === 'kimi'
+        ? KIMI_TIMEOUT_MS
+        : GROQ_TIMEOUT_MS;
     const timeoutId = setTimeout(() => abortController.abort('timeout'), timeoutMs);
 
     let response: Response;
