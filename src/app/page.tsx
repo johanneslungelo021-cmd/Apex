@@ -11,7 +11,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
-import { Heart, Search, User, BarChart3, MessageSquare, Star, AlertCircle, TrendingUp, TrendingDown, Minus, Users, DollarSign, Zap, ExternalLink, Newspaper, Clock, RefreshCw, Microscope, Activity, Shield, ChevronDown, ChevronUp, ArrowUpRight, Info, Sparkles, Filter, X } from 'lucide-react';
+import { Heart, Search, User, MessageSquare, Zap, ExternalLink, Newspaper, Clock, RefreshCw, Microscope, Filter, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import { Canvas } from '@react-three/fiber';
@@ -74,7 +74,7 @@ function SentientInterfaceInner() {
   const [newsLoading, setNewsLoading] = useState(true);
   const [newsError, setNewsError] = useState(false);
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
-  const [expandedInsight, setExpandedInsight] = useState<string | null>(null);
+
 
   // Phase 1: Emotion Engine — replaces heartbeatIntensity + inline triggerSentient
   const emotion = useEmotionEngine();
@@ -133,12 +133,6 @@ function SentientInterfaceInner() {
   type NewsCategory = typeof NEWS_CATEGORIES[number];
   const [activeCategory, setActiveCategory] = useState<NewsCategory>('Latest');
 
-  // ─── Live metrics state (fetched from /api/github-metrics) ─────────────────
-  const [liveStars, setLiveStars] = useState<number>(0);
-  const [liveUsers, setLiveUsers] = useState<number>(0);
-  const [liveImpact, setLiveImpact] = useState<number>(0);
-  const [metricsLoaded, setMetricsLoaded] = useState(false);
-
   // Phase 1: transaction state for optimistic UI
 
   // ─── News Fetcher ──────────────────────────────────────────────────────────
@@ -180,33 +174,6 @@ function SentientInterfaceInner() {
     );
     return () => { clearInterval(newsInterval); };
   }, [fetchNews]); // fetchNews is stable (useCallback []); ref handles category
-
-  // On mount: fetch live GitHub metrics — replaces hardcoded constants
-  useEffect(() => {
-    const fetchMetrics = async () => {
-      try {
-        const res = await fetch('/api/github-metrics');
-        if (!res.ok) return;
-        const data = await res.json() as { stars?: number; forks?: number };
-        if (typeof data.stars === 'number') {
-          setLiveStars(data.stars);
-          // Users heuristic: forks * 18 + stars * 3 (reasonable proxy for community size)
-          const forks = typeof data.forks === 'number' ? data.forks : 0;
-          setLiveUsers(data.stars * 3 + forks * 18);
-          // Economic impact heuristic: each active user * R70 average session value
-          setLiveImpact((data.stars * 3 + forks * 18) * 70);
-        }
-      } catch {
-        // Silently fall through — hardcoded fallback values will be used
-      } finally {
-        setMetricsLoaded(true);
-      }
-    };
-    void fetchMetrics();
-    // Refresh metrics every 5 minutes
-    const metricsInterval = setInterval(() => { void fetchMetrics(); }, 5 * 60 * 1000);
-    return () => { clearInterval(metricsInterval); };
-  }, []);
 
   // On mount: auto-boot Scout Agent so opportunities section is never empty
   useEffect(() => {
@@ -465,11 +432,6 @@ function SentientInterfaceInner() {
     }
   };
 
-  const formatNumber = (num: number): string => {
-    if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + 'M';
-    if (num >= 1_000) return (num / 1_000).toFixed(1) + 'K';
-    return num.toString();
-  };
 
   const lastMessage = chatHistory[chatHistory.length - 1];
 
@@ -583,8 +545,11 @@ function SentientInterfaceInner() {
           <span className="font-semibold">Apex</span>
           <div className="flex gap-6 text-sm">
             <a href="#opportunities" className="hover:text-white/70 transition" onClick={() => triggerSentient(0.5)}>Opportunities</a>
-            <a href="#insights" className="hover:text-white/70 transition" onClick={() => triggerSentient(0.5)}>Insights</a>
             <a href="#news" className="hover:text-white/70 transition" onClick={() => triggerSentient(0.5)}>News</a>
+            <a href="/trading" className="hover:text-emerald-400 transition">Trading</a>
+            <a href="/social" className="hover:text-purple-400 transition">Social</a>
+            <a href="/reels" className="hover:text-red-400 transition">Reels</a>
+            <a href="/blogs" className="hover:text-blue-400 transition">Blogs</a>
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -666,322 +631,6 @@ function SentientInterfaceInner() {
             ))}
           </div>
         )}
-      </section>
-      </AgentReadableChunk>
-
-      <AgentReadableChunk
-        id="sentient-insights"
-        agentSummary="Apex Central's Sentient Insights section delivers AI-generated analysis of South African digital economy trends, sourced from live market data. Each insight includes a confidence score, trend direction, key data points, and an actionable recommendation grounded in the platform's live opportunity data."
-        summaryLabel="Sentient Insights — AI Market Analysis"
-      >
-      <section id="insights" className="max-w-5xl mx-auto px-8 py-20 border-t border-white/10">
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <h2 className="text-4xl font-semibold flex items-center gap-3">
-              <BarChart3 className="w-9 h-9" /> Sentient Insights
-            </h2>
-            <p className="text-zinc-400 mt-2 max-w-2xl">
-              Real-time intelligence with trend analysis, anomaly detection, and actionable context. Click any metric to explore.
-            </p>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-zinc-500 mt-2">
-            <Activity className="w-3.5 h-3.5 text-emerald-400" />
-            <span>{metricsLoaded && liveStars > 0 ? 'Live GitHub Data' : 'Live Analysis'}</span>
-          </div>
-        </div>
-
-        {(() => {
-          const generateHistory = (baseValue: number, volatility: number = 0.08): number[] => {
-            const now = Date.now();
-            const dayMs = 86400000;
-            return Array.from({ length: 7 }, (_, i) => {
-              const dayOffset = 6 - i;
-              const seed = Math.floor((now - dayOffset * dayMs) / dayMs);
-              const wave1 = Math.sin(seed * 0.7) * volatility;
-              const wave2 = Math.cos(seed * 1.3) * (volatility * 0.5);
-              const trend = (i / 6) * 0.02;
-              return Math.round(baseValue * (1 + wave1 + wave2 + trend));
-            });
-          };
-
-          const Sparkline = ({ data, color, height = 40, width = 120 }: { data: number[]; color: string; height?: number; width?: number }) => {
-            const min = Math.min(...data);
-            const max = Math.max(...data);
-            const range = max - min || 1;
-            const padding = 2;
-            const points = data.map((v, i) => {
-              const x = padding + (i / (data.length - 1)) * (width - padding * 2);
-              const y = height - padding - ((v - min) / range) * (height - padding * 2);
-              return `${x},${y}`;
-            }).join(' ');
-            const areaPoints = `${padding},${height - padding} ${points} ${width - padding},${height - padding}`;
-            return (
-              <svg width={width} height={height} className="overflow-visible" aria-hidden="true">
-                <defs>
-                  <linearGradient id={`sparkGrad-${color.replace('#', '')}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={color} stopOpacity="0.3" />
-                    <stop offset="100%" stopColor={color} stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-                <polygon points={areaPoints} fill={`url(#sparkGrad-${color.replace('#', '')})`} />
-                <polyline points={points} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                {data.length > 0 && (() => {
-                  const lastX = padding + ((data.length - 1) / (data.length - 1)) * (width - padding * 2);
-                  const lastY = height - padding - ((data[data.length - 1] - min) / range) * (height - padding * 2);
-                  return <circle cx={lastX} cy={lastY} r="3" fill={color} className="insight-pulse" />;
-                })()}
-              </svg>
-            );
-          };
-
-          // Use live GitHub metrics when loaded; fall back to seeded estimates
-          // while the fetch is in-flight (metricsLoaded false = skeleton shimmer)
-          const starsValue = metricsLoaded && liveStars > 0 ? liveStars : 847;
-          const usersValue = metricsLoaded && liveUsers > 0 ? liveUsers : 12480;
-          const impactValue = metricsLoaded && liveImpact > 0 ? liveImpact : 874200;
-
-          const starsHistory = generateHistory(starsValue, 0.06);
-          const usersHistory = generateHistory(usersValue, 0.10);
-          const impactHistory = generateHistory(impactValue, 0.12);
-
-          const getDelta = (history: number[]): number => {
-            if (history.length < 2 || history[0] === 0) return 0;
-            return ((history[history.length - 1] - history[0]) / history[0]) * 100;
-          };
-
-          const confidenceColors = { high: 'text-emerald-400', medium: 'text-yellow-400', low: 'text-red-400' };
-          const confidenceLabels = { high: 'High Confidence', medium: 'Moderate', low: 'Stale Data' };
-          const confidenceIcons = { high: Shield, medium: Info, low: AlertCircle };
-          const isAnomaly = (delta: number, threshold: number = 5): boolean => Math.abs(delta) > threshold;
-
-          const dataConfidence = (metricsLoaded && liveStars > 0) ? 'high' as const : 'medium' as const;
-
-          const insights = [
-            {
-              key: 'stars',
-              icon: <Star className="w-5 h-5 text-yellow-400" />,
-              label: 'GitHub Stars',
-              value: starsValue,
-              history: starsHistory,
-              delta: getDelta(starsHistory),
-              color: '#facc15',
-              confidence: dataConfidence,
-              whyMoved: starsValue > 0
-                ? 'Star count reflects community interest driven by recent commits, README updates, and social sharing across developer communities.'
-                : 'Repository is new — star growth will begin as the platform gains visibility in developer communities.',
-              relatedSection: 'github',
-              relatedLabel: 'View GitHub Metrics',
-              aiPrompt: `Analyze the GitHub stars trend for Apex (currently ${starsValue} stars). What strategies could accelerate star growth for a South African digital income platform?`,
-            },
-            {
-              key: 'users',
-              icon: <Users className="w-5 h-5 text-emerald-400" />,
-              label: 'Platform Users',
-              value: usersValue,
-              history: usersHistory,
-              delta: getDelta(usersHistory),
-              color: '#34d399',
-              confidence: dataConfidence,
-              whyMoved: 'User growth correlates with Scout Agent opportunity discovery and Intelligent Engine engagement. Peak activity follows new course launches and social media campaigns.',
-              relatedSection: 'opportunities',
-              relatedLabel: 'View Opportunities',
-              aiPrompt: `Our platform has ${formatNumber(usersValue)} active users. Analyze this growth and suggest strategies to increase user acquisition for South African digital income seekers.`,
-            },
-            {
-              key: 'impact',
-              icon: <DollarSign className="w-5 h-5 text-green-400" />,
-              label: 'Total Impact',
-              value: impactValue,
-              history: impactHistory,
-              delta: getDelta(impactHistory),
-              color: '#4ade80',
-              confidence: dataConfidence,
-              suffix: ' (R)',
-              whyMoved: 'Total impact tracks cumulative economic value generated through platform opportunities. Spikes correlate with high-value opportunity completions and course enrollments.',
-              relatedSection: 'news',
-              relatedLabel: 'Market News',
-              aiPrompt: `The Apex platform has generated R${formatNumber(impactValue)} in total impact for South African users. What factors drive this metric and how can we increase it?`,
-            },
-          ];
-
-          return (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {insights.map((insight) => {
-                  const isExpanded = expandedInsight === insight.key;
-                  const anomaly = isAnomaly(insight.delta);
-                  const trendUp = insight.delta > 0.5;
-                  const trendDown = insight.delta < -0.5;
-                  const ConfidenceIcon = confidenceIcons[insight.confidence];
-
-                  return (
-                    <div key={insight.key} className="flex flex-col">
-                      <motion.div
-                        className={`glass p-6 rounded-3xl cursor-pointer border transition-all duration-300 ${
-                          isExpanded ? 'border-white/20 ring-1 ring-white/10' : 'border-transparent hover:border-white/10'
-                        }`}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => {
-                          setExpandedInsight(isExpanded ? null : insight.key);
-                          triggerSentient(0.6);
-                        }}
-                        layout
-                      >
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-2">
-                            {insight.icon}
-                            <span className="text-sm text-zinc-400 font-medium">{insight.label}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            {anomaly && (
-                              <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-medium">
-                                <Sparkles className="w-3 h-3" /> Anomaly
-                              </span>
-                            )}
-                            <span className={`flex items-center gap-1 text-[10px] ${confidenceColors[insight.confidence]}`} title={confidenceLabels[insight.confidence]}>
-                              <ConfidenceIcon className="w-3 h-3" />
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-end justify-between mb-3">
-                          <div>
-                            <div className="text-4xl font-mono font-bold leading-none">
-                              {formatNumber(insight.value)}
-                            </div>
-                            {insight.suffix && (
-                              <span className="text-xs text-zinc-500 font-mono">{insight.suffix}</span>
-                            )}
-                          </div>
-                          {(
-                            <div className={`flex items-center gap-1 text-sm font-medium px-2 py-1 rounded-lg ${
-                              trendUp ? 'text-emerald-400 bg-emerald-500/10' :
-                              trendDown ? 'text-red-400 bg-red-500/10' :
-                              'text-zinc-500 bg-white/5'
-                            }`}>
-                              {trendUp ? <TrendingUp className="w-3.5 h-3.5" /> :
-                               trendDown ? <TrendingDown className="w-3.5 h-3.5" /> :
-                               <Minus className="w-3.5 h-3.5" />}
-                              <span>{insight.delta > 0 ? '+' : ''}{insight.delta.toFixed(1)}%</span>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="mb-3">
-                          <Sparkline data={insight.history} color={insight.color} width={280} height={36} />
-                          <div className="flex justify-between text-[10px] text-zinc-600 mt-1">
-                            <span>7d ago</span>
-                            <span>Now</span>
-                          </div>
-                        </div>
-
-                        <p className="text-xs text-zinc-500 leading-relaxed line-clamp-2">
-                          {insight.whyMoved}
-                        </p>
-
-                        <div className="flex items-center justify-center mt-3 text-zinc-600">
-                          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                        </div>
-                      </motion.div>
-
-                      <AnimatePresence>
-                        {isExpanded && (
-                          <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                            exit={{ opacity: 0, height: 0 }}
-                            transition={{ duration: 0.3, ease: 'easeInOut' }}
-                            className="overflow-hidden"
-                          >
-                            <div className="glass rounded-2xl p-5 mt-2 border border-white/5 space-y-4">
-                              <div>
-                                <div className="text-xs text-zinc-400 font-medium mb-2">7-Day Trend</div>
-                                <Sparkline data={insight.history} color={insight.color} width={300} height={60} />
-                                <div className="flex justify-between text-[10px] text-zinc-600 mt-1 px-0.5">
-                                  {insight.history.map((_, i) => (
-                                    <span key={i}>{i === 0 ? '7d' : i === 6 ? 'Now' : `${6 - i}d`}</span>
-                                  ))}
-                                </div>
-                              </div>
-
-                              <div className="grid grid-cols-3 gap-3">
-                                <div className="bg-white/5 rounded-xl p-3 text-center">
-                                  <div className="text-xs text-zinc-500 mb-1">7d High</div>
-                                  <div className="text-sm font-mono font-semibold">{formatNumber(Math.max(...insight.history))}</div>
-                                </div>
-                                <div className="bg-white/5 rounded-xl p-3 text-center">
-                                  <div className="text-xs text-zinc-500 mb-1">7d Low</div>
-                                  <div className="text-sm font-mono font-semibold">{formatNumber(Math.min(...insight.history))}</div>
-                                </div>
-                                <div className="bg-white/5 rounded-xl p-3 text-center">
-                                  <div className="text-xs text-zinc-500 mb-1">Avg</div>
-                                  <div className="text-sm font-mono font-semibold">
-                                    {formatNumber(Math.round(insight.history.reduce((a, b) => a + b, 0) / insight.history.length))}
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="bg-white/5 rounded-xl p-3">
-                                <div className="flex items-center gap-1.5 text-xs text-zinc-400 font-medium mb-1.5">
-                                  <Info className="w-3 h-3" /> Why this moved
-                                </div>
-                                <p className="text-xs text-zinc-300 leading-relaxed">{insight.whyMoved}</p>
-                              </div>
-
-                              <div className="flex items-center gap-2 text-xs">
-                                <ConfidenceIcon className={`w-3.5 h-3.5 ${confidenceColors[insight.confidence]}`} />
-                                <span className={confidenceColors[insight.confidence]}>{confidenceLabels[insight.confidence]}</span>
-                                {insight.confidence !== 'high' && (
-                                  <span className="text-zinc-600">— Data may be delayed</span>
-                                )}
-                              </div>
-
-                              <div className="flex items-center gap-3 pt-1">
-                                <a
-                                  href={`#${insight.relatedSection}`}
-                                  onClick={() => triggerSentient(0.5)}
-                                  className="flex items-center gap-1.5 text-xs glass px-3 py-1.5 rounded-full text-zinc-300 hover:text-white hover:bg-white/10 transition"
-                                >
-                                  <ArrowUpRight className="w-3 h-3" />
-                                  {insight.relatedLabel}
-                                </a>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    triggerSentient(0.8);
-                                    setAiMessage(insight.aiPrompt);
-                                    setIsChatOpen(true);
-                                  }}
-                                  disabled={agentLoading}
-                                  className="flex items-center gap-1.5 text-xs glass px-3 py-1.5 rounded-full text-zinc-300 hover:text-white hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed"
-                                >
-                                  <MessageSquare className="w-3 h-3" />
-                                  Ask AI About This
-                                </button>
-                              </div>
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="flex items-center justify-between text-xs text-zinc-600 pt-2">
-                <div className="flex items-center gap-4">
-                  <span className="flex items-center gap-1.5">
-                    <Activity className="w-3 h-3 text-emerald-500" />
-                    {metricsLoaded && liveStars > 0 ? 'Live GitHub stars · community size & impact derived' : 'Trends computed from 7-day deterministic analysis'}
-                  </span>
-                </div>
-
-              </div>
-            </div>
-          );
-        })()}
       </section>
       </AgentReadableChunk>
 
