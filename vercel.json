@@ -2,7 +2,9 @@
   "buildCommand": "bun run build",
   "installCommand": "bun install",
   "framework": "nextjs",
-  "regions": ["iad1"],
+  "regions": [
+    "cpt1"
+  ],
   "functions": {
     "src/app/api/news/route.ts": {
       "maxDuration": 30

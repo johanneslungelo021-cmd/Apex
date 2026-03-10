@@ -22,11 +22,16 @@ import { buildOrganizationSchema, buildWebSiteSchema } from "@/lib/geo/schema-bu
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+  // Fix 6: display swap — text visible immediately with fallback; no invisible FOIT
+  display: "swap",
+  preload: true,
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  display: "swap",
+  preload: false,  // Mono font not LCP-critical — defer preload
 });
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://apex-central.vercel.app";
@@ -101,6 +106,20 @@ export default function RootLayout({
   return (
     <html lang="en-ZA">
       <head>
+        {/*
+         * Fix 7: Resource hints — eliminates DNS + TCP + TLS round trips (150-900ms
+         * saving on South African high-latency mobile connections).
+         * CRITICAL: Max 4-6 preconnects — each consumes bandwidth for TLS certificate.
+         */}
+        {/* Primary AI providers — hot path for every chat interaction */}
+        <link rel="preconnect" href="https://api.groq.com" />
+        <link rel="preconnect" href="https://api.perplexity.ai" />
+        {/* Vercel analytics — always called on page load */}
+        <link rel="preconnect" href="https://vitals.vercel-insights.com" />
+        {/* Secondary providers — dns-prefetch is the lightweight option */}
+        <link rel="dns-prefetch" href="https://api-inference.huggingface.co" />
+        <link rel="dns-prefetch" href="https://api.moonshot.cn" />
+        <link rel="dns-prefetch" href="https://otel.grafana.net" />
         {/* GEO: Organization schema — helps AI systems understand who we are */}
         <script
           type="application/ld+json"

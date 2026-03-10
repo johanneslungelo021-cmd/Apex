@@ -15,7 +15,7 @@ import { Heart, Search, User, MessageSquare, Zap, ExternalLink, Newspaper, Clock
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Canvas } from '@react-three/fiber';
+// Canvas dynamically imported below — removed from critical bundle (Fix 2)
 import {
   StreamingTypography,
   OptimisticTransactionCard,
@@ -25,12 +25,52 @@ import {
 } from '@/lib/streaming/OptimisticTransactionUI';
 
 // Phase 1: Sentient Vessel imports
+import dynamic from 'next/dynamic';
 import { EmotionProvider, useEmotionEngine } from '@/hooks/useEmotionEngine';
 import { useMultiSensory } from '@/hooks/useMultiSensory';
-import EmotionalSwarm from '@/components/sentient/EmotionalSwarm';
+
+/**
+ * Fix 2: Dynamic imports — CRITICAL path surgery.
+ *
+ * Three.js + @react-three/fiber + @react-three/drei = ~500KB minified.
+ * Loading this statically blocks the browser from painting FCP until the
+ * entire bundle downloads, parses, and executes on a South African mobile
+ * connection at 150-200ms latency.
+ *
+ * ssr: false is REQUIRED for any R3F component — Three.js needs the browser
+ * WebGL context which doesn't exist on the server.
+ *
+ * The loading: () => null pattern means zero layout shift — the canvas
+ * position was already reserved by its fixed/absolute parent container.
+ * <canvas> is NOT an LCP candidate, so deferring it cannot hurt LCP scores.
+ */
+
+// WebGL Swarm: pulls Three.js + R3F + Drei — the heaviest bundle on the page.
+// Dynamic import ensures it is completely absent from the initial JS payload.
+const SentientCanvasScene = dynamic(
+  () => import('@/components/sentient/SentientCanvasScene'),
+  {
+    ssr: false,
+    loading: () => null, // Fixed container already reserves space — no CLS
+  }
+);
+
+// MagneticReticle: framer-motion cursor tracking — not needed for first paint.
+// Defer until after LCP to avoid competing for main thread during critical path.
+const MagneticReticle = dynamic(
+  () => import('@/components/sentient/MagneticReticle'),
+  { ssr: false, loading: () => null }
+);
+
+// EmotionalGrid: CSS variable morphing wrapper — lightweight but uses context.
+// Keep static since it wraps all content (removing would break layout structure).
 import EmotionalGrid from '@/components/sentient/EmotionalGrid';
-import MagneticReticle from '@/components/sentient/MagneticReticle';
-import SensoryControls from '@/components/sentient/SensoryControls';
+
+// SensoryControls: accessibility toggles — never needed for first paint.
+const SensoryControls = dynamic(
+  () => import('@/components/sentient/SensoryControls'),
+  { ssr: false, loading: () => null }
+);
 
 // Pillar 2: GEO — Generative Engine Optimization
 import AgentReadableChunk from '@/components/geo/AgentReadableChunk';
@@ -441,9 +481,12 @@ function SentientInterfaceInner() {
       {/* Phase 1: Emotion-reactive WebGL swarm */}
       <div className="fixed inset-0 -z-10 opacity-60 mix-blend-screen pointer-events-none">
         <Suspense fallback={null}>
-          <Canvas camera={{ position: [0, 0, 15], fov: 60 }}>
-            <EmotionalSwarm />
-          </Canvas>
+          {/*
+           * Fix 2: SentientCanvasScene is dynamically imported with ssr:false.
+           * Three.js (~500KB) now loads AFTER FCP — browser paints text content first.
+           * The fixed container is already in the DOM; canvas slot is reserved.
+           */}
+          <SentientCanvasScene />
         </Suspense>
       </div>
 
