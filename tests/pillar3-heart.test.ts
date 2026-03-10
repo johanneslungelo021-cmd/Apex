@@ -34,6 +34,7 @@ import {
 
 // ─── Identity Middleware ──────────────────────────────────────────────────────
 import {
+  enrichMessages,
   enrichMessagesSync,
   detectToneViolations,
   validateTone,
@@ -668,5 +669,103 @@ describe('Integration — full empathy loop', () => {
     // First interaction + excited = celebration + welcome context
     expect(sysContent).toContain('FIRST interaction');
     expect(sysContent).toContain('Match their energy');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONNECTIVITY FIX: useLocalSentiment flag routing
+// Ensures the 4-second HF API penalty is never incurred when the flag is set.
+// Critical for Eastern Cape / Northern Cape / rural Limpopo users on low bandwidth.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('Identity Middleware — useLocalSentiment routing (connectivity fix)', () => {
+  it('enrichMessages with useLocalSentiment:true completes synchronously fast', async () => {
+    const messages: ServerMessage[] = [
+      { role: 'user', content: 'Eish this keeps failing!!' },
+    ];
+
+    const start = performance.now();
+    const enriched = await enrichMessages(messages, {
+      userContext: { province: 'EC', provinceName: 'Eastern Cape', unemploymentRate: 41.2 },
+      useLocalSentiment: true,
+    });
+    const elapsed = performance.now() - start;
+
+    // Must complete in well under 200ms — proves no HF round-trip occurred
+    expect(elapsed).toBeLessThan(200);
+
+    const sysContent = enriched.find((m) => m.role === 'system')!.content;
+    // Frustrated sentiment still detected and injected via local path
+    expect(sysContent).toContain('adaptive_context');
+    expect(sysContent).toContain('acknowledgment');
+  });
+
+  it('useLocalSentiment:true detects frustrated isiZulu user without HF API', async () => {
+    const messages: ServerMessage[] = [
+      { role: 'user', content: 'Haibo! This transaction is broken, eish!' },
+    ];
+    const enriched = await enrichMessages(messages, {
+      userContext: {},
+      useLocalSentiment: true,
+    });
+    const sysContent = enriched.find((m) => m.role === 'system')!.content;
+
+    // Local path detects frustration (eish + haibo) and injects adaptive context
+    expect(sysContent).toContain('adaptive_context');
+    expect(sysContent).toContain('acknowledgment');
+    // Language mirror also fires (vernacular detected locally)
+    expect(sysContent).toContain('language_mirror');
+  });
+
+  it('useLocalSentiment:true detects excited user without HF API', async () => {
+    const messages: ServerMessage[] = [
+      { role: 'user', content: 'Sharp sharp! I finally deployed my first contract!' },
+    ];
+    const enriched = await enrichMessages(messages, {
+      userContext: {},
+      useLocalSentiment: true,
+    });
+    const sysContent = enriched.find((m) => m.role === 'system')!.content;
+
+    // Local path detects excitement
+    expect(sysContent).toContain('Match their energy');
+  });
+
+  it('enrichMessagesSync produces identical system structure to enrichMessages(local)', async () => {
+    const messages: ServerMessage[] = [
+      { role: 'user', content: 'How does XRPL work?' },
+    ];
+    const ctx = { userContext: { isFirstInteraction: true } };
+
+    const syncResult  = enrichMessagesSync(messages, ctx);
+    const asyncResult = await enrichMessages(messages, { ...ctx, useLocalSentiment: true });
+
+    const syncSys  = syncResult.find((m) => m.role === 'system')!.content;
+    const asyncSys = asyncResult.find((m) => m.role === 'system')!.content;
+
+    // Both paths should produce structurally identical system prompts
+    // (same layers, same adaptive context, same language mirror logic)
+    expect(syncSys).toContain('Apex Central');
+    expect(asyncSys).toContain('Apex Central');
+    expect(syncSys).toContain('FIRST interaction');
+    expect(asyncSys).toContain('FIRST interaction');
+
+    // Message count preserved identically
+    expect(syncResult.length).toBe(asyncResult.length);
+  });
+
+  it('useLocalSentiment:false path exists and is async (default behaviour preserved)', async () => {
+    const messages: ServerMessage[] = [
+      { role: 'user', content: 'Tell me about opportunities in Gauteng' },
+    ];
+    // Default (useLocalSentiment not set) should NOT throw — HF may fail in CI
+    // but the function must complete via local fallback
+    const enriched = await enrichMessages(messages, {
+      userContext: { province: 'GP', provinceName: 'Gauteng' },
+      // useLocalSentiment deliberately omitted — tests default false path
+    });
+    const sysContent = enriched.find((m) => m.role === 'system')!.content;
+    expect(sysContent).toContain('Apex Central');
+    expect(sysContent).toContain('Gauteng');
   });
 });

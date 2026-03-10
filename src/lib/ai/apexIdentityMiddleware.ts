@@ -112,9 +112,16 @@ export async function enrichMessages(
 ): Promise<ServerMessage[]> {
   const lastUserText = getLastUserText(messages);
 
-  // 1. Detect emotional state
+  // 1. Detect emotional state.
+  //    Critical routing: useLocalSentiment flag bypasses the HuggingFace API entirely.
+  //    For low-connectivity provinces (Eastern Cape, Northern Cape, rural Limpopo),
+  //    a 4-second HF round-trip destroys perceived responsiveness.
+  //    The local lexical scan runs in <1ms with zero network cost.
+  //    Default (false) = HF API with local fallback on failure.
   const emotionalState = lastUserText
-    ? await analyzeSentiment(lastUserText)
+    ? options.useLocalSentiment
+      ? analyzeSentimentLocal(lastUserText)          // Instant — zero latency, zero quota
+      : await analyzeSentiment(lastUserText)          // HF zero-shot, falls back locally on error
     : 'neutral';
 
   // 2. Detect code-switching
