@@ -52,6 +52,40 @@ const SECURITY_HEADERS = [
   },
 ];
 
+/**
+ * Fix 5: Layered caching headers for department API routes.
+ *
+ * Vercel CDN will serve cached responses from the nearest PoP (including
+ * Johannesburg). South African repeat visitors and navigations receive instant
+ * responses instead of paying the serverless cold-start + network penalty.
+ *
+ * stale-while-revalidate: serve stale content immediately while regenerating
+ * in the background. Users never wait for a round-trip.
+ *
+ * NOTE: These cannot go in SECURITY_HEADERS because they are route-specific.
+ * The security headers array is applied to source:'/(.*)', i.e. all routes.
+ */
+const CACHE_HEADERS_TRADING = [
+  { key: 'Cache-Control', value: 'public, s-maxage=600, stale-while-revalidate=1200' },
+  { key: 'Vary', value: 'Accept-Encoding' },
+];
+
+const CACHE_HEADERS_BLOGS_REELS = [
+  { key: 'Cache-Control', value: 'public, s-maxage=1800, stale-while-revalidate=3600' },
+  { key: 'Vary', value: 'Accept-Encoding' },
+];
+
+const CACHE_HEADERS_NEWS = [
+  { key: 'Cache-Control', value: 'public, s-maxage=300, stale-while-revalidate=600' },
+  { key: 'Vary', value: 'Accept-Encoding' },
+];
+
+const CACHE_HEADERS_GEO = [
+  // GEO markdown shadow routes — content changes at most with deploys
+  { key: 'Cache-Control', value: 'public, s-maxage=3600, stale-while-revalidate=86400' },
+  { key: 'Vary', value: 'Accept-Encoding' },
+];
+
 const nextConfig: NextConfig = {
   // instrumentation.ts works automatically in Next.js 16 – no flag needed
   transpilePackages: ['three'],
@@ -61,6 +95,27 @@ const nextConfig: NextConfig = {
         // Apply security headers to all routes including API responses
         source: '/(.*)',
         headers: SECURITY_HEADERS,
+      },
+      // Fix 5: Department API caching — eliminates repeat SA latency penalty
+      {
+        source: '/api/trading',
+        headers: CACHE_HEADERS_TRADING,
+      },
+      {
+        source: '/api/blogs',
+        headers: CACHE_HEADERS_BLOGS_REELS,
+      },
+      {
+        source: '/api/reels',
+        headers: CACHE_HEADERS_BLOGS_REELS,
+      },
+      {
+        source: '/api/news',
+        headers: CACHE_HEADERS_NEWS,
+      },
+      {
+        source: '/api/mx/:path*',
+        headers: CACHE_HEADERS_GEO,
       },
     ];
   },
