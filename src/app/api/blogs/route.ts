@@ -8,6 +8,8 @@
 
 import { NextResponse } from 'next/server';
 import { log, generateRequestId, fetchWithTimeout } from '@/lib/api-utils';
+import { checkRateLimit } from '@/lib/api-utils';
+import { departmentRateLimitCounter } from '@/lib/observability/pillar4Metrics';
 
 const SERVICE = 'blogs-api';
 const CACHE_TTL_MS = 30 * 60 * 1000;
@@ -95,8 +97,19 @@ async function generateBlogPosts(requestId: string): Promise<BlogPost[]> {
   return parsed.slice(0, 4);
 }
 
-export async function GET(): Promise<Response> {
+export async function GET(req: Request): Promise<Response> {
   const requestId = generateRequestId();
+
+  // Pillar 4: rate limit — 10 req/min per IP (Perplexity blog generation is expensive)
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown';
+  const allowed = checkRateLimit(`blogs:${ip}`, 10, 60_000);
+  departmentRateLimitCounter.add(1, { route: 'blogs', outcome: allowed ? 'allowed' : 'blocked' });
+  if (!allowed) {
+    return new Response(JSON.stringify({ error: 'Rate limit exceeded. Try again shortly.' }), {
+      status: 429,
+      headers: { 'Content-Type': 'application/json', 'Retry-After': '60' },
+    });
+  }
 
   if (cache && Date.now() - cache.cachedAt < CACHE_TTL_MS) {
     return NextResponse.json({ posts: cache.posts }, {

@@ -18,6 +18,8 @@
  * - Hick's Law: max 3 action choices per error (fewer = faster decisions)
  */
 
+import { empathyErrorCounter } from '../observability/pillar4Metrics';
+
 export interface ApexError {
   code: string;
   severity: 'low' | 'medium' | 'high' | 'critical';
@@ -207,8 +209,13 @@ export function humanizeError(error: ApexError): HumanizedError {
     }),
   };
 
-  const handler = handlers[error.code] ?? handlers['DEFAULT'];
-  return handler();
+  const safeCode = error.code in handlers ? error.code : 'DEFAULT';
+  const humanized = handlers[safeCode]();
+
+  // Pillar 4: emit error humanization metric
+  empathyErrorCounter.add(1, { error_code: safeCode, severity: error.severity });
+
+  return humanized;
 }
 
 /**

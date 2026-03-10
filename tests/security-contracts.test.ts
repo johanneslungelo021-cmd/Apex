@@ -38,6 +38,6 @@ describe('security and protocol contracts', () => {
   });
 
   it('uses one shared app version constant', () => {
-    expect(APP_VERSION).toBe('2.1.0-phase2');
+    expect(APP_VERSION).toBe('4.0.0-pillar4');
   });
 });

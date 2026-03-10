@@ -1,3 +1,4 @@
+import { departmentRateLimitCounter } from '@/lib/observability/pillar4Metrics';
 /**
  * News API Route — Category-Aware
  *
@@ -9,7 +10,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { generateRequestId, log, fetchWithTimeout, envTimeoutMs } from '@/lib/api-utils';
+import { generateRequestId, log, fetchWithTimeout, envTimeoutMs , checkRateLimit } from '@/lib/api-utils';
 import dns from 'dns/promises';
 
 const SERVICE = 'news';
@@ -338,6 +339,17 @@ async function fetchArticlesForCategory(
 
 export async function GET(req: Request): Promise<Response> {
   const requestId = generateRequestId();
+
+  // Pillar 4: rate limit — 30 req/min per IP
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown';
+  const newsAllowed = checkRateLimit(`news:${ip}`, 30, 60_000);
+  departmentRateLimitCounter.add(1, { route: 'news', outcome: newsAllowed ? 'allowed' : 'blocked' });
+  if (!newsAllowed) {
+    return new Response(JSON.stringify({ error: 'Rate limit exceeded. Try again shortly.' }), {
+      status: 429,
+      headers: { 'Content-Type': 'application/json', 'Retry-After': '60' },
+    });
+  }
 
   // Parse ?category= param — validate against whitelist, fall back to 'Latest'
   const { searchParams } = new URL(req.url);

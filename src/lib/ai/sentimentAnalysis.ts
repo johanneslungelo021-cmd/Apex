@@ -14,6 +14,8 @@
 
 export type EmotionalState = 'neutral' | 'frustrated' | 'excited' | 'confused' | 'anxious';
 
+import { sentimentCounter, sentimentLatencyHistogram } from '../observability/pillar4Metrics';
+
 // ─── Cache ────────────────────────────────────────────────────────────────────
 
 const sentimentCache = new Map<string, { state: EmotionalState; timestamp: number }>();
@@ -84,6 +86,7 @@ export async function analyzeSentiment(text: string): Promise<EmotionalState> {
   const key = getCacheKey(text);
   const cached = sentimentCache.get(key);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    sentimentCounter.add(1, { tier: 'hf', emotion: cached.state, outcome: 'cache_hit' });
     return cached.state;
   }
 
@@ -92,6 +95,8 @@ export async function analyzeSentiment(text: string): Promise<EmotionalState> {
     // No token — fall through to local immediately
     return analyzeSentimentLocal(text);
   }
+
+  const hfStart = Date.now();
 
   try {
     const response = await fetch(
@@ -119,12 +124,18 @@ export async function analyzeSentiment(text: string): Promise<EmotionalState> {
     const state: EmotionalState = LABEL_MAP[topLabel] ?? 'neutral';
 
     sentimentCache.set(key, { state, timestamp: Date.now() });
+    // Pillar 4: emit HF tier success metrics
+    sentimentLatencyHistogram.record(Date.now() - hfStart, { tier: 'hf' });
+    sentimentCounter.add(1, { tier: 'hf', emotion: state, outcome: 'success' });
     return state;
   } catch {
-    // HF API failed — use local heuristic silently
-    const state = analyzeSentimentLocal(text);
-    sentimentCache.set(key, { state, timestamp: Date.now() });
-    return state;
+    // HF API failed — fall back to local heuristic silently
+    const fallbackState = analyzeSentimentLocal(text);
+    sentimentCache.set(key, { state: fallbackState, timestamp: Date.now() });
+    // Pillar 4: record HF attempt latency and local fallback outcome
+    sentimentLatencyHistogram.record(Date.now() - hfStart, { tier: 'hf' });
+    sentimentCounter.add(1, { tier: 'local', emotion: fallbackState, outcome: 'fallback' });
+    return fallbackState;
   }
 }
 
