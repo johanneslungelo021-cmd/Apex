@@ -19,6 +19,12 @@
 import { buildApexIdentity, buildAdaptiveContext, type AdaptiveContextInput } from '../agents/identityMatrix';
 import { detectUserLanguageStyle, buildLanguageMirrorInstruction } from '../agents/codeSwitch';
 import { analyzeSentiment, analyzeSentimentLocal } from './sentimentAnalysis';
+import {
+  enrichmentCounter,
+  enrichmentLatencyHistogram,
+  toneViolationCounter,
+  toneValidationCounter,
+} from '../observability/pillar4Metrics';
 
 export type ServerMessage = {
   role: 'system' | 'user' | 'assistant';
@@ -112,6 +118,8 @@ export async function enrichMessages(
 ): Promise<ServerMessage[]> {
   const lastUserText = getLastUserText(messages);
 
+  const enrichStart = Date.now();
+
   // 1. Detect emotional state.
   //    Critical routing: useLocalSentiment flag bypasses the HuggingFace API entirely.
   //    For low-connectivity provinces (Eastern Cape, Northern Cape, rural Limpopo),
@@ -142,7 +150,14 @@ export async function enrichMessages(
   const identityPrompt = buildApexIdentity(adaptiveContext + languageMirror);
 
   // 6. Inject as system message
-  return injectSystemMessage(messages, identityPrompt);
+  const result = injectSystemMessage(messages, identityPrompt);
+
+  // Pillar 4: emit enrichment metrics
+  const enrichMs = Date.now() - enrichStart;
+  enrichmentLatencyHistogram.record(enrichMs, { tier: options.useLocalSentiment ? 'sync' : 'async' });
+  enrichmentCounter.add(1, { tier: options.useLocalSentiment ? 'sync' : 'async', outcome: 'success' });
+
+  return result;
 }
 
 /**
@@ -153,6 +168,7 @@ export function enrichMessagesSync(
   messages: ServerMessage[],
   options: IdentityEnrichmentOptions
 ): ServerMessage[] {
+  const syncStart = Date.now();
   const lastUserText = getLastUserText(messages);
 
   const emotionalState = lastUserText
@@ -170,8 +186,14 @@ export function enrichMessagesSync(
 
   const languageMirror = buildLanguageMirrorInstruction(languageStyle);
   const identityPrompt = buildApexIdentity(adaptiveContext + languageMirror);
+  const syncResult = injectSystemMessage(messages, identityPrompt);
 
-  return injectSystemMessage(messages, identityPrompt);
+  // Pillar 4: emit enrichment metrics for sync path
+  const syncMs = Date.now() - syncStart;
+  enrichmentLatencyHistogram.record(syncMs, { tier: 'sync' });
+  enrichmentCounter.add(1, { tier: 'sync', outcome: 'success' });
+
+  return syncResult;
 }
 
 /**
@@ -180,6 +202,13 @@ export function enrichMessagesSync(
  */
 export function validateTone(responseText: string): boolean {
   const violations = detectToneViolations(responseText);
+
+  // Pillar 4: emit per-violation-type metrics
+  for (const violation of violations) {
+    toneViolationCounter.add(1, { violation_type: violation.label });
+  }
+  toneValidationCounter.add(1, { outcome: violations.length === 0 ? 'clean' : 'violated' });
+
   if (violations.length > 0 && process.env.NODE_ENV === 'development') {
     console.warn(
       `[Apex Identity] Tone violations detected (${violations.length}):`,
@@ -188,3 +217,4 @@ export function validateTone(responseText: string): boolean {
   }
   return violations.length === 0;
 }
+

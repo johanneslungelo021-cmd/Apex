@@ -11,6 +11,8 @@
  * Township slang / Iscamtho, and SA English code-switching patterns.
  */
 
+import { codeSwitchCounter } from '../observability/pillar4Metrics';
+
 export type SALanguageCode = 'zu-ZA' | 'st-ZA' | 'af-ZA' | 'slang' | 'default';
 export type Formality = 'formal' | 'casual' | 'mixed';
 
@@ -99,6 +101,15 @@ export function detectUserLanguageStyle(message: string): LanguageStyle {
     : CASUAL_MARKERS.test(message) || hasVernacular
       ? 'casual'
       : 'mixed';
+
+  // Pillar 4: emit code-switch detection metric
+  if (hasVernacular) {
+    for (const lang of detected) {
+      codeSwitchCounter.add(1, { language: lang, detected: 'true' });
+    }
+  } else {
+    codeSwitchCounter.add(1, { language: 'english', detected: 'false' });
+  }
 
   return { hasVernacular, detectedLanguages: detected, formality };
 }
