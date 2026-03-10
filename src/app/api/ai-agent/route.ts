@@ -28,8 +28,8 @@ import {
   rateLimitCounter,
   payloadRejectCounter,
 } from '@/lib/metrics';
+import { enrichMessages, validateTone } from '@/lib/ai/apexIdentityMiddleware';
 import {
-  STATIC_SYSTEM_PROMPT,
   buildScoutContextMessage,
   encodeNdjsonEvent,
   estimateOutputTokensFromText,
@@ -422,21 +422,20 @@ export async function POST(req: Request): Promise<Response> {
       )
       .join('\n');
 
-    // Static system prompt (no dynamic scout data inside privileged instructions)
-    const systemPrompt: ServerMessage = {
-      role: 'system',
-      content: STATIC_SYSTEM_PROMPT,
-    };
-
-    // Scout context as untrusted user message (not instructions)
+    // Apex Identity Matrix: enriches messages with multi-layer identity context,
+    // adaptive emotional state detection, and language-mirroring instructions.
+    // This replaces STATIC_SYSTEM_PROMPT with a dynamically assembled identity prompt.
     const scoutContext = buildScoutContextMessage(opportunitySummary);
-
-    // Build upstream messages array once for reuse
-    const upstreamMessages: ServerMessage[] = [
-      systemPrompt,
+    const baseMessages: ServerMessage[] = [
       ...(scoutContext ? [scoutContext] : []),
       ...messages,
     ];
+
+    const upstreamMessages: ServerMessage[] = await enrichMessages(baseMessages, {
+      userContext: {
+        isFirstInteraction: messages.length === 1,
+      },
+    });
 
     const estimatedInputTokens = estimateInputTokensFromMessages(upstreamMessages);
 
@@ -661,6 +660,9 @@ export async function POST(req: Request): Promise<Response> {
           } else {
             agentQueryCounter.add(1, { status: 'success', tier: tierConfig.tier });
 
+            // Apex Identity: validate tone — flag drift in logs
+            const toneClean = validateTone(reply);
+
             log({
               level: 'info',
               service: SERVICE,
@@ -672,6 +674,7 @@ export async function POST(req: Request): Promise<Response> {
               estimatedInputTokens,
               estimatedOutputTokens,
               estimatedCostUsd: costEst,
+              toneClean,
             });
           }
 
