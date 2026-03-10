@@ -37,15 +37,16 @@ describe('Fix 1 — Cape Town region', () => {
     expect(vercel.regions).toContain('cpt1');
   });
 
-  it('cpt1 is listed BEFORE iad1 (Washington DC default)', () => {
-    const cptIdx = vercel.regions.indexOf('cpt1');
-    const iadIdx = vercel.regions.indexOf('iad1');
-    // cpt1 first means SA users route to the closest PoP by default
-    expect(cptIdx).toBeLessThan(iadIdx);
+  it('cpt1 is the sole region — no iad1 or other regions (Hobby plan)', () => {
+    expect(vercel.regions).not.toContain('iad1');
+    expect(vercel.regions[0]).toBe('cpt1');
   });
 
-  it('retains iad1 as a fallback region (global resilience)', () => {
-    expect(vercel.regions).toContain('iad1');
+  it('has exactly one region (Hobby plan restriction — multi-region requires Pro)', () => {
+    // Vercel Hobby/Free plan: single region only.
+    // Multi-region throws: "Deploying Serverless Functions to multiple regions
+    // is restricted to the Pro and Enterprise plans."
+    expect(vercel.regions).toHaveLength(1);
   });
 
   it('preserves existing function maxDuration configs', () => {

@@ -3,8 +3,7 @@
   "installCommand": "bun install",
   "framework": "nextjs",
   "regions": [
-    "cpt1",
-    "iad1"
+    "cpt1"
   ],
   "functions": {
     "src/app/api/news/route.ts": {
