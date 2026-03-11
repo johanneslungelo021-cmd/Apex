@@ -5,6 +5,13 @@
  * EmotionalSwarm (reactive WebGL), EmotionalGrid (CSS variable morphing),
  * MagneticReticle (custom cursor physics), SensoryControls (accessibility toggles).
  *
+ * FCP FIX (SA-2026-03-11 — 14.89s root cause fixed):
+ * 1. instrumentation.ts: OTEL init now fires AFTER request handling (setImmediate).
+ *    Previous synchronous registerOTel() caused ~15s TCP timeout on cold starts
+ *    when the Grafana OTLP endpoint was unreachable from cpt1.
+ * 2. loading.tsx: pure CSS skeleton streamed in first HTTP chunk by Next.js.
+ *    Provides instant FCP while this component renders server-side behind it.
+ *
  * @module app/page
  */
 

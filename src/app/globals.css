@@ -253,3 +253,11 @@ a {
   min-height: 300px;
   font-synthesis: none;
 }
+
+/* ─── Loading skeleton shimmer (used by src/app/loading.tsx) ─────────────────
+ * Runs on compositor — no main thread cost.
+ * Used by: src/app/loading.tsx shimmer overlay (line ~43)
+ * ────────────────────────────────────────────────────────────────────────────── */
+@keyframes shimmer {
+  100% { transform: translateX(100%); }
+}
