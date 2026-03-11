@@ -23,10 +23,11 @@ export { generateImage, type ImageGenerationOptions } from './image-generation';
 export { analyzeImage, type VLMResult } from './vlm';
 
 // Skill status for health checks
+// NOTE: tts and imageGeneration are stubs — no working backend yet
 export const SKILLS_STATUS = {
   chat: true,
   webSearch: true,
-  tts: true,
-  imageGeneration: true,
+  tts: false,              // Stub — no working TTS backend yet
+  imageGeneration: false,  // Stub — no working image gen backend yet
   vlm: true,
 } as const;

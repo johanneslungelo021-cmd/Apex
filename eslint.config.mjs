@@ -7,7 +7,7 @@ const eslintConfig = defineConfig([
   ...nextTs,
   // Override default ignores of eslint-config-next.
   globalIgnores([
-    // Default ignores of eslint-config-next:
+    // Next.js build artefacts
     ".next/**",
     "out/**",
     "build/**",
@@ -17,6 +17,7 @@ const eslintConfig = defineConfig([
     // Config and scripts directories are not part of the main app
     "config/**",
     "scripts/**",
+    // Test files use their own relaxed ruleset
     "tests/**",
   ]),
   // Allow unused variables that start with underscore (common convention for reserved/future use)
