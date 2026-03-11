@@ -823,11 +823,13 @@ function SentientInterfaceInner() {
                       className="w-full h-full object-cover"
                     />
                   ) : (
+                    // Fix: removed `priority` — #news is below-fold-section.
+                    // Preloading this image competes with above-the-fold LCP resources
+                    // and can push FCP/LCP in the wrong direction.
                     <Image
                       src={article.imageUrl}
                       alt={article.title}
                       fill
-                      priority
                       sizes="(max-width: 768px) 100vw, 66vw"
                       className="object-cover group-hover:scale-105 transition-transform duration-500"
                       onError={() => {
