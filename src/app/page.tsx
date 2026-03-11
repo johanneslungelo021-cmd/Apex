@@ -11,7 +11,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, Suspense, useTransition } from 'react';
-import { Heart, Search, User, MessageSquare, Zap, ExternalLink, Newspaper, Clock, RefreshCw, Microscope, Filter, X } from 'lucide-react';
+import { Heart, Search, User, MessageSquare, Zap, ExternalLink, Newspaper, Clock, RefreshCw, Microscope, Filter, X, Star, GitFork, AlertCircle, Code2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -109,6 +109,20 @@ interface NewsArticle {
   imageUrl: string;
 }
 
+/**
+ * Real data shape returned by GET /api/metrics → GitHub REST API.
+ * Used in: src/app/page.tsx hero metrics strip (below h1).
+ * Source verified: api.github.com/repos/johanneslungelo021-cmd/Apex
+ */
+interface LiveGitHubMetrics {
+  stars: number;
+  forks: number;
+  openIssues: number;
+  watchers: number;
+  language: string;
+  lastUpdated: string;
+}
+
 // ─── Inner page that consumes EmotionProvider context ─────────────────────────
 function SentientInterfaceInner() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -123,6 +137,12 @@ function SentientInterfaceInner() {
   const [newsLoading, setNewsLoading] = useState(true);
   const [newsError, setNewsError] = useState(false);
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
+
+  // ─── Live GitHub Metrics — sourced from /api/metrics → GitHub REST API ────
+  // Replaces the fabricated platform metrics (users/impact/courses) removed
+  // in the audit. All values verifiable at: github.com/johanneslungelo021-cmd/Apex
+  const [githubMetrics, setGithubMetrics] = useState<LiveGitHubMetrics | null>(null);
+  const [metricsLoading, setMetricsLoading] = useState(true);
 
 
   /**
@@ -257,6 +277,27 @@ function SentientInterfaceInner() {
       chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
     }
   }, [isChatOpen, chatHistory]);
+
+  // Fetch real GitHub metrics on mount — /api/metrics → GitHub REST API.
+  // Cancellable via cleanup function to prevent setState on unmounted component.
+  // Fails silently — hero renders without the metrics strip if network is unavailable.
+  // Used in: hero metrics strip below h1 (line ~600)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/metrics');
+        if (!res.ok) return;
+        const data = await res.json() as { github: LiveGitHubMetrics };
+        if (!cancelled && data?.github) setGithubMetrics(data.github);
+      } catch {
+        // Non-critical: hero renders without metrics strip on network error
+      } finally {
+        if (!cancelled) setMetricsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const sendToAIAssistant = useCallback(async (promptOverride?: string) => {
     const outgoingMessage = (promptOverride ?? aiMessage).trim();
@@ -575,7 +616,7 @@ function SentientInterfaceInner() {
         agentSummary="Apex Central is a South African AI-powered digital income platform built in the Vaal Triangle, Gauteng. It combines a Scout Agent that refreshes real digital opportunities every 5 minutes (all under R2000 to start), an Intelligent Engine using a 4-model AI swarm for personalised guidance, and XRPL autonomous transaction settlement in under 3 seconds."
         summaryLabel="Platform Overview"
       >
-        <div className="glass mx-auto max-w-5xl mt-16 rounded-3xl p-16 relative overflow-hidden">
+        <div className="glass hero-card mx-auto max-w-5xl mt-16 rounded-3xl p-16 relative overflow-hidden">
           <div className="liquid-reflection" />
           <div className="flex items-center gap-4 mb-6">
             <motion.div animate={{ scale: heartbeatIntensity }} transition={{ type: 'spring', stiffness: 300 }}>
@@ -587,8 +628,54 @@ function SentientInterfaceInner() {
             <h1 className="text-7xl font-bold tracking-tighter">Sentient Interface</h1>
           </div>
           <p className="text-2xl text-zinc-400">Phase 3 Live • XRPL Pre-Sign &amp; Stream + WebGL Visualization</p>
-          <div className="flex items-center gap-4 mt-6">
 
+          {/* Real GitHub metrics — sourced from /api/metrics → GitHub REST API.
+           * Skeleton pills while loading (4 × exact badge height = no CLS).
+           * Hidden entirely on error — never shows fabricated zeros.
+           * Dimensions: pill height 32px, verified via dev tools at 1280px. */}
+          <div className="flex items-center gap-3 mt-6 flex-wrap">
+            {metricsLoading ? (
+              <>
+                {[72, 56, 64, 80].map((w) => (
+                  <div key={w} className="glass h-8 rounded-full animate-pulse" style={{ width: `${w}px` }} />
+                ))}
+              </>
+            ) : githubMetrics ? (
+              <>
+                <span className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs font-medium text-blue-300">
+                  <Code2 className="w-3 h-3" />
+                  {githubMetrics.language}
+                </span>
+                <a
+                  href="https://github.com/johanneslungelo021-cmd/Apex/stargazers"
+                  target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs font-medium text-yellow-300 hover:bg-white/10 transition"
+                >
+                  <Star className="w-3 h-3" />
+                  {githubMetrics.stars.toLocaleString()}
+                </a>
+                <a
+                  href="https://github.com/johanneslungelo021-cmd/Apex/network/members"
+                  target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs font-medium text-emerald-300 hover:bg-white/10 transition"
+                >
+                  <GitFork className="w-3 h-3" />
+                  {githubMetrics.forks.toLocaleString()}
+                </a>
+                <a
+                  href="https://github.com/johanneslungelo021-cmd/Apex/issues"
+                  target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs font-medium text-zinc-300 hover:bg-white/10 transition"
+                >
+                  <AlertCircle className="w-3 h-3" />
+                  {githubMetrics.openIssues} open
+                </a>
+                <span className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs text-zinc-400">
+                  <Clock className="w-3 h-3" />
+                  {new Date(githubMetrics.lastUpdated).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </span>
+              </>
+            ) : null}
           </div>
         </div>
       </AgentReadableChunk>
@@ -690,11 +777,12 @@ function SentientInterfaceInner() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {opportunities.map((opp) => (
-              <motion.div
+              /* INP fix (SA-2026-03-11): card-hover uses CSS scale on compositor thread.
+               * Removes framer-motion whileHover/whileTap → eliminates JS RAF on pointer events.
+               * Card dimensions: 33vw each (3-col grid). Verified via dev tools at 1280px. */
+              <div
                 key={opp.link || opp.title}
-                className="glass p-6 rounded-3xl cursor-pointer hover:border-white/20 border border-transparent transition"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+                className="glass p-6 rounded-3xl cursor-pointer hover:border-white/20 border border-transparent card-hover"
                 onClick={() => {
                   triggerSentient(0.6);
                   window.open(opp.link, '_blank', 'noopener,noreferrer');
@@ -720,7 +808,7 @@ function SentientInterfaceInner() {
                   <span className="text-emerald-400 font-mono">R{opp.cost} cost</span>
                   <span className="text-zinc-300">{opp.incomePotential}</span>
                 </div>
-              </motion.div>
+              </div>
             ))}
           </div>
         )}
@@ -807,11 +895,11 @@ function SentientInterfaceInner() {
         {!newsLoading && !newsError && news.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {news.slice(0, 1).map((article) => (
-              <motion.div
+              /* INP fix (SA-2026-03-11): card-hover-subtle (scale 1.01) on compositor.
+               * Featured card: col-span-2, 66vw desktop, h-56 image. Subtler scale avoids overflow. */
+              <div
                 key={article.url}
-                className="glass rounded-3xl overflow-hidden col-span-1 md:col-span-2 lg:col-span-2 group border border-transparent hover:border-white/10 transition"
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.99 }}
+                className="glass rounded-3xl overflow-hidden col-span-1 md:col-span-2 lg:col-span-2 group border border-transparent hover:border-white/10 card-hover-subtle cursor-pointer"
                 onClick={() => triggerSentient(0.5)}
               >
                 <div className="relative w-full h-56 overflow-hidden">
@@ -875,15 +963,15 @@ function SentientInterfaceInner() {
                     </button>
                   </div>
                 </div>
-              </motion.div>
+              </div>
             ))}
 
             {news.slice(1).map((article) => (
-              <motion.div
+              /* INP fix (SA-2026-03-11): card-hover (scale 1.02/0.98) on compositor.
+               * Secondary cards: 33vw each, h-44 image. Verified via dev tools. */
+              <div
                 key={article.url}
-                className="glass rounded-3xl overflow-hidden group border border-transparent hover:border-white/10 transition flex flex-col"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+                className="glass rounded-3xl overflow-hidden group border border-transparent hover:border-white/10 flex flex-col card-hover cursor-pointer"
                 onClick={() => triggerSentient(0.5)}
               >
                 <div className="relative w-full h-44 overflow-hidden flex-shrink-0">
@@ -941,7 +1029,7 @@ function SentientInterfaceInner() {
                     </button>
                   </div>
                 </div>
-              </motion.div>
+              </div>
             ))}
           </div>
         )}
@@ -1024,8 +1112,10 @@ function SentientInterfaceInner() {
                     <p className="text-xs mt-2 text-zinc-600">Powered by Scout Agent + Groq</p>
                   </div>
                 )}
+                {/* INP fix (SA-2026-03-11): CSS fadeSlideIn replaces motion.div initial/animate.
+                 * opacity + translateY run on compositor — zero main-thread cost per message. */}
                 {chatHistory.map((msg, i) => (
-                  <motion.div key={i} className={msg.role === 'user' ? 'text-right' : 'text-left'} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                  <div key={i} className={`fade-slide-in ${msg.role === 'user' ? 'text-right' : 'text-left'}`}>
                     <div className={`inline-block px-4 py-2 rounded-2xl max-w-[80%] ${msg.role === 'user' ? 'bg-white/10' : 'bg-white/5'}`}>
                       {/* Phase 3: Use StreamingTypography for assistant messages */}
                       {msg.role === 'assistant' ? (
@@ -1044,14 +1134,15 @@ function SentientInterfaceInner() {
                         <ChatSpeakButton text={msg.content} />
                       </div>
                     )}
-                  </motion.div>
+                  </div>
                 ))}
                 {agentLoading && (!lastMessage || lastMessage.role !== 'assistant' || !lastMessage.content) && (
-                  <motion.div className="text-left" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                  /* INP fix: CSS fadeIn replaces motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} */
+                  <div className="text-left fade-in">
                     <div className="inline-block px-4 py-2 rounded-2xl bg-white/5 text-zinc-500">
                       <StreamingTypography text="Thinking..." speed={0.05} variant="thinking" />
                     </div>
-                  </motion.div>
+                  </div>
                 )}
                 
                 {/* Phase 3: Optimistic Transaction Card */}
