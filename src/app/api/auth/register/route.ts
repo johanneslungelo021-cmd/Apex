@@ -10,7 +10,7 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { generateRequestId, log, checkRateLimit } from '@/lib/api-utils';
-import { hashPassword, verifyPassword } from '@/lib/auth/password';
+import { hashPassword } from '@/lib/auth/password';
 import { createSession, buildSessionCookie } from '@/lib/auth/session';
 import { findUserByEmail, createUser, type StoredUser } from '@/lib/auth/store';
 
