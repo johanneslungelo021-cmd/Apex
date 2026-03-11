@@ -1,13 +1,20 @@
 /**
  * Text-to-Speech Adapter
  *
- * Provides TTS functionality using z-ai-web-dev-sdk.
- * This adapter wraps the SDK's audio.tts.create method.
+ * Server-side TTS is not available in the current Apex stack (the sandbox
+ * `skills/TTS/` script uses z-ai-web-dev-sdk which is not deployed to
+ * Vercel).
+ *
+ * This adapter provides the same interface with a graceful "unavailable"
+ * response so the build succeeds and callers can handle the absence cleanly.
+ * When a server-side TTS API (e.g. ElevenLabs or a future Groq Audio API)
+ * is added, this file is the single place to implement it.
+ *
+ * Client-side TTS is already available via the `useMultiSensory` hook which
+ * uses the Web Speech API (window.speechSynthesis) with no server round-trip.
  *
  * @module lib/skills/tts
  */
-
-import ZAI from 'z-ai-web-dev-sdk';
 
 export interface TTSOptions {
   text: string;
@@ -23,45 +30,17 @@ export interface TTSResult {
 }
 
 /**
- * Converts text to speech using the z-ai-web-dev-sdk.
+ * Converts text to speech.
  *
- * @example
- * ```ts
- * const result = await textToSpeech({
- *   text: 'Hello, world!',
- *   voice: 'tongtong',
- *   speed: 1.0
- * });
- *
- * if (result.success && result.audioBuffer) {
- *   // Use the audio buffer
- * }
- * ```
+ * Currently returns an unavailable response because no server-side TTS
+ * provider is configured. Client-side TTS is handled by the Web Speech API
+ * in the browser via `useMultiSensory`.
  */
-export async function textToSpeech(options: TTSOptions): Promise<TTSResult> {
-  try {
-    const zai = await ZAI.create();
-
-    const response = await zai.audio.tts.create({
-      input: options.text,
-      voice: options.voice ?? 'tongtong',
-      speed: options.speed ?? 1.0,
-      response_format: options.format ?? 'wav',
-      stream: false,
-    });
-
-    const arrayBuffer = await response.arrayBuffer();
-
-    return {
-      audioBuffer: arrayBuffer,
-      success: true,
-    };
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    return {
-      audioBuffer: null,
-      success: false,
-      error: errorMessage,
-    };
-  }
+export async function textToSpeech(_options: TTSOptions): Promise<TTSResult> {
+  return {
+    audioBuffer: null,
+    success: false,
+    error:
+      'Server-side TTS is not configured. Use the Web Speech API (client-side) via useMultiSensory hook instead.',
+  };
 }

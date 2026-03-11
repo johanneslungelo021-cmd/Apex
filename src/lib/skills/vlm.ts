@@ -1,16 +1,20 @@
 /**
  * Vision Language Model (VLM) Adapter
  *
- * Provides image analysis and understanding using z-ai-web-dev-sdk.
- * This adapter wraps the SDK's vision capabilities using createVision.
+ * Provides image analysis via the Groq vision API (llama-3.2-11b-vision-preview).
+ * Falls back gracefully when GROQ_API_KEY is not configured.
+ *
+ * The `skills/VLM/` directory contains a standalone z-ai-web-dev-sdk script
+ * for the Claude sandbox. This adapter uses the real Groq vision API so the
+ * Next.js build succeeds on Vercel.
  *
  * @module lib/skills/vlm
  */
 
-import ZAI, { type VisionMessage } from 'z-ai-web-dev-sdk';
+import { fetchWithTimeout } from '@/lib/api-utils';
 
 export interface VLMOptions {
-  image: string; // base64 encoded image or URL
+  image: string; // base64-encoded image data or image URL
   prompt?: string;
   isUrl?: boolean;
 }
@@ -21,70 +25,86 @@ export interface VLMResult {
   error?: string;
 }
 
+const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
+const VISION_MODEL = 'llama-3.2-11b-vision-preview';
+const DEFAULT_TIMEOUT_MS = 20_000;
+
 /**
- * Analyzes an image using the Vision Language Model via z-ai-web-dev-sdk.
+ * Analyzes an image using the Groq vision API.
+ *
+ * @param options.image - base64-encoded image data or an https:// URL
+ * @param options.isUrl  - set true when `image` is a URL (default: false)
+ * @param options.prompt - custom analysis prompt (default: "Describe this image in detail.")
  *
  * @example
  * ```ts
- * // Using a URL
- * const result = await analyzeImage({
- *   image: 'https://example.com/image.jpg',
- *   prompt: 'What do you see in this image?',
- *   isUrl: true
- * });
- *
- * // Using base64
- * const result = await analyzeImage({
- *   image: base64EncodedImage,
- *   prompt: 'Describe this image'
- * });
+ * const result = await analyzeImage({ image: 'https://example.com/photo.jpg', isUrl: true });
+ * if (result.success) console.log(result.description);
  * ```
  */
 export async function analyzeImage(options: VLMOptions): Promise<VLMResult> {
+  const apiKey = process.env.GROQ_API_KEY;
+
+  if (!apiKey) {
+    return { description: '', success: false, error: 'GROQ_API_KEY not configured' };
+  }
+
+  const imageUrl = options.isUrl
+    ? options.image
+    : `data:image/jpeg;base64,${options.image}`;
+
+  const prompt = options.prompt ?? 'Describe this image in detail.';
+
   try {
-    const zai = await ZAI.create();
-
-    // Prepare the image URL - either direct URL or data URL for base64
-    const imageUrl = options.isUrl
-      ? options.image
-      : `data:image/jpeg;base64,${options.image}`;
-
-    const messages: VisionMessage[] = [
+    const response = await fetchWithTimeout(
+      GROQ_ENDPOINT,
       {
-        role: 'user',
-        content: [
-          { type: 'text', text: options.prompt ?? 'Describe this image in detail.' },
-          { type: 'image_url', image_url: { url: imageUrl } }
-        ]
-      }
-    ];
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: VISION_MODEL,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: prompt },
+                { type: 'image_url', image_url: { url: imageUrl } },
+              ],
+            },
+          ],
+          max_tokens: 1024,
+          temperature: 0.3,
+          stream: false,
+        }),
+      },
+      DEFAULT_TIMEOUT_MS,
+    );
 
-    const response = await zai.chat.completions.createVision({
-      model: 'glm-4.6v',
-      messages,
-      thinking: { type: 'disabled' }
-    });
-
-    const description = response.choices?.[0]?.message?.content;
-
-    if (!description) {
+    if (!response.ok) {
+      const text = await response.text();
       return {
         description: '',
         success: false,
-        error: 'No description in response',
+        error: `Groq Vision API error ${response.status}: ${text.slice(0, 200)}`,
       };
     }
 
-    return {
-      description,
-      success: true,
+    const data = await response.json() as {
+      choices?: Array<{ message?: { content?: string } }>;
     };
+
+    const description = data.choices?.[0]?.message?.content;
+
+    if (!description) {
+      return { description: '', success: false, error: 'No description in response' };
+    }
+
+    return { description, success: true };
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
-    return {
-      description: '',
-      success: false,
-      error: errorMessage,
-    };
+    return { description: '', success: false, error: errorMessage };
   }
 }

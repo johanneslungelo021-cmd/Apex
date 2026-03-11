@@ -1,17 +1,28 @@
 /**
  * Image Generation Adapter
  *
- * Provides AI image generation functionality using z-ai-web-dev-sdk.
- * This adapter wraps the SDK's images.generations.create method.
+ * Image generation is not available in the current Apex stack (the sandbox
+ * `skills/image-generation/` script uses z-ai-web-dev-sdk which is not
+ * deployed to Vercel).
+ *
+ * This adapter provides the same interface with a graceful "unavailable"
+ * response so the build succeeds and callers can handle the absence cleanly.
+ * When an image generation API (e.g. Replicate, DALL-E, or Stability AI) is
+ * added to the stack, this file is the single place to implement it.
  *
  * @module lib/skills/image-generation
  */
 
-import ZAI from 'z-ai-web-dev-sdk';
-
 export interface ImageGenerationOptions {
   prompt: string;
-  size?: '1024x1024' | '768x1344' | '864x1152' | '1344x768' | '1152x864' | '1440x720' | '720x1440';
+  size?:
+    | '1024x1024'
+    | '768x1344'
+    | '864x1152'
+    | '1344x768'
+    | '1152x864'
+    | '1440x720'
+    | '720x1440';
 }
 
 export interface ImageGenerationResult {
@@ -21,52 +32,17 @@ export interface ImageGenerationResult {
 }
 
 /**
- * Generates an image from a text prompt using the z-ai-web-dev-sdk.
+ * Generates an image from a text prompt.
  *
- * @example
- * ```ts
- * const result = await generateImage({
- *   prompt: 'A beautiful sunset over Table Mountain',
- *   size: '1024x1024'
- * });
- *
- * if (result.success && result.base64) {
- *   // Use the base64 image data
- *   const dataUrl = `data:image/png;base64,${result.base64}`;
- * }
- * ```
+ * Currently returns an unavailable response because no image generation
+ * provider is configured in the Apex environment variables.
  */
 export async function generateImage(
-  options: ImageGenerationOptions
+  _options: ImageGenerationOptions,
 ): Promise<ImageGenerationResult> {
-  try {
-    const zai = await ZAI.create();
-
-    const response = await zai.images.generations.create({
-      prompt: options.prompt,
-      size: options.size ?? '1024x1024',
-    });
-
-    const base64 = response.data?.[0]?.base64;
-
-    if (!base64) {
-      return {
-        base64: null,
-        success: false,
-        error: 'No image data in response',
-      };
-    }
-
-    return {
-      base64,
-      success: true,
-    };
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    return {
-      base64: null,
-      success: false,
-      error: errorMessage,
-    };
-  }
+  return {
+    base64: null,
+    success: false,
+    error: 'Image generation is not configured. Add an image generation API key to enable this skill.',
+  };
 }
