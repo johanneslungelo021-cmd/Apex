@@ -24,7 +24,7 @@ import {
   SKILLS_STATUS,
   type ChatMessage,
 } from '@/lib/skills';
-import { log, generateRequestId } from '@/lib/api-utils';
+import { log, generateRequestId, checkRateLimit } from '@/lib/api-utils';
 
 const SERVICE = 'skills';
 
@@ -89,6 +89,19 @@ interface SkillRequest {
 
 export async function POST(req: Request): Promise<Response> {
   const requestId = generateRequestId();
+
+  // ─── Rate Limit (matches /api/news at 30 req/min/IP) ───────────────────────
+  const forwarded = req.headers.get('x-forwarded-for');
+  const ip = forwarded?.split(',')[0]?.trim() ?? 'unknown';
+
+  if (!checkRateLimit(`skills:${ip}`, 30, 60_000)) {
+    log({ level: 'warn', service: SERVICE, message: 'Rate limit exceeded', requestId });
+    return NextResponse.json(
+      { error: 'RATE_LIMITED', message: 'Too many requests — max 30 per minute', requestId },
+      { status: 429, headers: { 'Retry-After': '60', 'X-Request-Id': requestId } }
+    );
+  }
+
   let body: SkillRequest;
 
   try {
@@ -199,10 +212,16 @@ export async function POST(req: Request): Promise<Response> {
             { status: 400, headers: { 'X-Request-Id': requestId } }
           );
         }
+
+        // Auto-detect URL vs base64 if isUrl not explicitly provided
+        const isUrl = typeof body.isUrl === 'boolean'
+          ? body.isUrl
+          : (image.startsWith('http://') || image.startsWith('https://'));
+
         const result = await analyzeImage({
           image,
           prompt: body.prompt as string | undefined,
-          isUrl: body.isUrl === true,
+          isUrl,
         });
         return NextResponse.json(
           { ...result, requestId },
@@ -217,10 +236,14 @@ export async function POST(req: Request): Promise<Response> {
         );
     }
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    log({ level: 'error', service: SERVICE, message: `Skill error: ${errorMessage}`, requestId });
+    const internalMessage = err instanceof Error ? err.message : String(err);
+
+    // Log the real error server-side for debugging
+    log({ level: 'error', service: SERVICE, message: `Skill error: ${internalMessage}`, requestId });
+
+    // Return a safe, generic message to the client — never leak internals
     return NextResponse.json(
-      { error: 'SKILL_ERROR', message: errorMessage, requestId },
+      { error: 'SKILL_ERROR', message: 'Internal skill error', requestId },
       { status: 500, headers: { 'X-Request-Id': requestId } }
     );
   }

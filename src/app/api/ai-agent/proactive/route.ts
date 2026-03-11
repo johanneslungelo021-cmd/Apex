@@ -9,6 +9,9 @@
  * - Integrates with existing streaming AI agent
  * - Proactive transaction detection and pre-building
  * - Real-time transaction status via Server-Sent Events
+ * 
+ * NOTE: XRPL integration requires XRPL_SERVICE_URL environment variable.
+ * Without it, transaction intents are detected but not executed.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -31,6 +34,13 @@ interface TransactionEvent {
   hash?: string;
   message?: string;
   timestamp: number;
+}
+
+interface PreBuildResult {
+  pre_signed: boolean;
+  tx_json?: object;
+  sequence?: number;
+  error?: string;
 }
 
 /**
@@ -71,82 +81,58 @@ function detectTransactionIntent(prompt: string): TransactionIntent | null {
  * Pre-build Transaction
  * 
  * Creates a transaction object before user confirmation.
- * In production, this would call the Python xrpl_proactive module.
- */
-async function preBuildTransaction(intent: TransactionIntent): Promise<{
-  pre_signed: boolean;
-  tx_json?: object;
-  sequence?: number;
-}> {
-  // In production: Call Python service for actual XRPL transaction building
-  // For now, return mock pre-signed transaction
-  return {
-    pre_signed: true,
-    tx_json: {
-      TransactionType: intent.type,
-      Amount: intent.amount || '0',
-      Destination: intent.destination || '',
-    },
-    sequence: Math.floor(Math.random() * 1000000),
-  };
-}
-
-/**
- feat/audit-remove-all-simulations
-
- * Submit Transaction to XRPL
+ * Returns pre_signed: false if XRPL_SERVICE_URL is not configured.
  * 
- * Submits a pre-built transaction to the XRPL ledger.
- * Reserved for future XRPL integration.
+ * In production, this calls the Python xrpl_proactive module.
  */
-async function _submitTransaction(_txJson: object): Promise<{
-  hash: string;
-  status: string;
-}> {
-  // In production: Call Python service for actual submission
-  // Mock response for demonstration
-  const mockHash = '0' + Math.random().toString(36).substring(2, 65);
+async function preBuildTransaction(intent: TransactionIntent): Promise<PreBuildResult> {
+  const xrplServiceUrl = process.env.XRPL_SERVICE_URL;
   
-  return {
-    hash: mockHash,
-    status: 'submitted',
-  };
-}
+  if (!xrplServiceUrl) {
+    // No XRPL service configured — return unsigned stub
+    // UI can still show intent but cannot execute
+    return { 
+      pre_signed: false,
+      error: 'XRPL service not configured. Set XRPL_SERVICE_URL environment variable.',
+    };
+  }
 
-/**
- * Wait for XRPL Confirmation
- * 
- * Polls the ledger for transaction confirmation.
- * XRPL typically confirms in 3-5 seconds.
- * Reserved for future XRPL integration.
- */
-async function _waitForConfirmation(
-  _hash: string,
-  _onProgress: (status: string) => void
-): Promise<{ confirmed: boolean; ledger?: number }> {
-  const maxAttempts = 8;
-  const intervalMs = 500;
-  
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    _onProgress(`Checking ledger... (${attempt + 1}/${maxAttempts})`);
+  try {
+    // Delegate to the external XRPL Python service
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
     
-    // In production: Call XRPL to check transaction status
-    // Mock: succeed after ~2 seconds
-    if (attempt >= 4) {
-      return {
-        confirmed: true,
-        ledger: 89000000 + attempt,
+    const res = await fetch(`${xrplServiceUrl}/prebuild`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: intent.type,
+        amount: intent.amount,
+        currency: intent.currency,
+        destination: intent.destination,
+      }),
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      return { 
+        pre_signed: false, 
+        error: `XRPL service error: HTTP ${res.status}`,
       };
     }
-    
-    await new Promise(resolve => setTimeout(resolve, intervalMs));
+
+    return res.json();
+  } catch (error) {
+    return { 
+      pre_signed: false, 
+      error: `Failed to connect to XRPL service: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    };
   }
-  
-  return { confirmed: false };
 }
 
 /**
- perf/speed-insights-improvements
  * SSE Encoder for streaming responses
  */
 function createSSEEncoder() {
@@ -165,14 +151,10 @@ function createSSEEncoder() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
- feat/audit-remove-all-simulations
-    const { prompt } = body;
-
     const { prompt, userId: _userId, walletAddress: _walletAddress } = body;
     // Reserved for future user-specific transaction features
     void _userId;
     void _walletAddress;
- perf/speed-insights-improvements
     
     if (!prompt) {
       return NextResponse.json(
@@ -198,28 +180,39 @@ export async function POST(request: NextRequest) {
         };
         controller.enqueue(textEncoder.encode(sseEncoder.encode(initialEvent)));
         
-        // If transaction detected, pre-build it
-        let preSignedTx = null;
+        // If transaction detected, attempt to pre-build
+        let preBuildResult: PreBuildResult | null = null;
         if (intent) {
           // Send "analyzing transaction" status
           const analyzingEvent: TransactionEvent = {
             type: 'transaction_ready',
-            message: 'Transaction intent detected. Pre-building transaction...',
+            message: 'Transaction intent detected. Analyzing...',
             timestamp: Date.now(),
           };
           controller.enqueue(textEncoder.encode(sseEncoder.encode(analyzingEvent)));
           
           try {
-            preSignedTx = await preBuildTransaction(intent);
+            preBuildResult = await preBuildTransaction(intent);
             
-            // Send ready status
-            const readyEvent: TransactionEvent = {
-              type: 'transaction_ready',
-              intent,
-              message: 'Transaction pre-built and ready for confirmation',
-              timestamp: Date.now(),
-            };
-            controller.enqueue(textEncoder.encode(sseEncoder.encode(readyEvent)));
+            if (preBuildResult.pre_signed) {
+              // Successfully pre-built
+              const readyEvent: TransactionEvent = {
+                type: 'transaction_ready',
+                intent,
+                message: 'Transaction pre-built and ready for confirmation',
+                timestamp: Date.now(),
+              };
+              controller.enqueue(textEncoder.encode(sseEncoder.encode(readyEvent)));
+            } else {
+              // Pre-build failed or service not configured
+              const warnEvent: TransactionEvent = {
+                type: 'transaction_ready',
+                intent,
+                message: preBuildResult.error || 'Transaction intent detected but XRPL service unavailable.',
+                timestamp: Date.now(),
+              };
+              controller.enqueue(textEncoder.encode(sseEncoder.encode(warnEvent)));
+            }
           } catch (error) {
             const errorEvent: TransactionEvent = {
               type: 'error',
@@ -230,19 +223,17 @@ export async function POST(request: NextRequest) {
           }
         }
         
- feat/audit-remove-all-simulations
-        // Streaming response: if transaction detected, prompt user to confirm; otherwise generic ack
-
-        // Simulate AI streaming response (in production, this would be the actual AI stream)
-        // Reserved for future use in actual AI response streaming
-        const _aiResponse = `I've analyzed your request to ${intent ? intent.type.toLowerCase().replace(/_/g, ' ') : 'process your query'}. `;
-        void _aiResponse;
-        
- perf/speed-insights-improvements
-        if (intent && preSignedTx) {
-          const confirmMessage = `I've detected you want to ${intent.type.replace(/_/g, ' ').toLowerCase()} ${intent.amount || ''} ${intent.currency || 'XRP'}. Click confirm to execute this transaction on the XRPL, which typically settles in 3-5 seconds.`;
+        // Streaming response: if transaction detected, inform user
+        if (intent) {
+          let responseMessage: string;
           
-          for (const char of confirmMessage) {
+          if (preBuildResult?.pre_signed) {
+            responseMessage = `I've detected you want to ${intent.type.replace(/_/g, ' ').toLowerCase()} ${intent.amount || ''} ${intent.currency || 'XRP'}. Click confirm to execute this transaction on the XRPL, which typically settles in 3-5 seconds.`;
+          } else {
+            responseMessage = `I've detected a transaction intent (${intent.type.replace(/_/g, ' ').toLowerCase()}), but the XRPL service is not currently configured. Please contact support to enable blockchain transactions.`;
+          }
+          
+          for (const char of responseMessage) {
             controller.enqueue(textEncoder.encode(
               `data: ${JSON.stringify({ type: 'text', content: char })}\n\n`
             ));
@@ -288,9 +279,12 @@ export async function POST(request: NextRequest) {
  * GET Handler - Health check
  */
 export async function GET() {
+  const xrplConfigured = !!process.env.XRPL_SERVICE_URL;
+  
   return NextResponse.json({
     status: 'healthy',
     version: '3.0.0-phase3',
+    xrpl_service: xrplConfigured ? 'configured' : 'not_configured',
     features: [
       'pre_sign_stream',
       'edge_runtime',

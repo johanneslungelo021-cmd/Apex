@@ -419,13 +419,9 @@ export function useNDJSONStream(
       } else if (data.type === 'transaction_confirmed') {
         onTransactionConfirmed?.(data.hash);
       }
- feat/audit-remove-all-simulations
-    } catch {
       // Not JSON, just text chunk — intentionally ignored
-
-    } catch (_e) {
+    } catch {
       // Not JSON, just text chunk
- perf/speed-insights-improvements
       setChunks(prev => prev + line);
     }
   }, [onTransactionReady, onTransactionConfirmed]);
