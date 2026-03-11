@@ -74,7 +74,8 @@ export default function BlogsPage() {
   const [error, setError] = useState(false);
   const [activeFilter, setActiveFilter] = useState<string>('All');
   // Perf: filter change only re-renders the list — non-urgent, interruptible
-  const [, startFilterTransition] = useTransition();
+  // isPending keeps skeleton visible until the deferred posts state commits
+  const [isPending, startFilterTransition] = useTransition();
 
   const categories = ['All', ...Array.from(new Set(posts.map((p) => p.category)))];
 
@@ -141,7 +142,8 @@ export default function BlogsPage() {
         )}
 
         <AnimatePresence mode="wait">
-          {loading && posts.length === 0 && (
+          {/* Fix: use (loading || isPending) so skeleton shows until transition commits */}
+          {(loading || isPending) && posts.length === 0 && (
             <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="space-y-4">
               {Array.from({ length: 3 }).map((_, i) => (

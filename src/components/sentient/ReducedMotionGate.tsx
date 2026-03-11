@@ -21,6 +21,21 @@
  * infinite.  This gate satisfies that requirement for users who have already
  * expressed their preference at the OS level.
  *
+ * FIX — useSyncExternalStore:
+ * ───────────────────────────
+ * The previous useState + useEffect pattern caused two renders on mount:
+ * first with false (SSR-safe default), then after the effect ran with the
+ * actual matchMedia value.  This means reduced-motion users still triggered
+ * the SentientCanvasScene dynamic import on the first client pass.
+ *
+ * useSyncExternalStore is the correct React pattern for external browser APIs:
+ * - getServerSnapshot returns false → no SSR/hydration mismatch
+ * - getSnapshot reads matchMedia synchronously → correct value on first paint
+ * - subscribe wires the mql 'change' listener → real-time OS setting changes
+ *
+ * Result: zero double-render, no blank flash, Three.js never loads for
+ * reduced-motion users even on the first client render.
+ *
  * OS PATHS TO ENABLE:
  * ───────────────────
  * macOS   → System Settings → Accessibility → Display → Reduce Motion
@@ -32,7 +47,7 @@
  */
 'use client';
 
-import { useState, useEffect, type ReactNode } from 'react';
+import { useSyncExternalStore, type ReactNode } from 'react';
 
 interface ReducedMotionGateProps {
   /**
@@ -46,32 +61,41 @@ interface ReducedMotionGateProps {
   fallback?: ReactNode;
 }
 
+/**
+ * Subscribe function for useSyncExternalStore.
+ * Wires a listener to the prefers-reduced-motion media query so React
+ * re-renders whenever the OS setting changes while the page is open.
+ */
+function subscribe(onStoreChange: () => void): () => void {
+  const mql = window.matchMedia('(prefers-reduced-motion: reduce)');
+  mql.addEventListener('change', onStoreChange);
+  return () => mql.removeEventListener('change', onStoreChange);
+}
+
+/**
+ * getSnapshot — called on every render (client).
+ * Returns the current value of the media query synchronously.
+ */
+function getSnapshot(): boolean {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+/**
+ * getServerSnapshot — called during SSR and hydration.
+ * Returns false (motion allowed) to avoid hydration mismatches.
+ * All R3F components are already wrapped in dynamic({ ssr: false }),
+ * so this path never actually renders Three.js on the server.
+ */
+function getServerSnapshot(): boolean {
+  return false;
+}
+
 export function ReducedMotionGate({ children, fallback }: ReducedMotionGateProps) {
   /**
-   * Start with false (motion allowed) to avoid an SSR/client hydration mismatch.
-   * The useEffect below corrects the value immediately on the client after mount.
-   * On the server this component always renders the children path — harmless
-   * because Three.js components are all wrapped in `dynamic({ ssr: false })`.
+   * useSyncExternalStore gives us the correct value synchronously on the
+   * first client render — no double-render, no blank flash, no stale state.
    */
-  const [prefersReduced, setPrefersReduced] = useState(false);
-
-  useEffect(() => {
-    const mql = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setPrefersReduced(mql.matches);
-
-    /**
-     * Listen for OS-level changes in real time.
-     * A user can toggle the setting while the page is open (e.g. enabling
-     * Low Power Mode on iOS).  This handler ensures the canvas is unmounted
-     * immediately when that happens.
-     */
-    const handleChange = (event: MediaQueryListEvent) => {
-      setPrefersReduced(event.matches);
-    };
-
-    mql.addEventListener('change', handleChange);
-    return () => mql.removeEventListener('change', handleChange);
-  }, []);
+  const prefersReduced = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   if (prefersReduced) {
     return (

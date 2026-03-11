@@ -115,7 +115,8 @@ export default function ReelsPage() {
   const [error, setError] = useState(false);
   const [platform, setPlatform] = useState<string>('All');
   // Perf: platform filter re-renders the ideas list — non-urgent, interruptible
-  const [, startPlatformTransition] = useTransition();
+  // isPending keeps skeleton visible until the deferred ideas state commits
+  const [isPending, startPlatformTransition] = useTransition();
 
   const platforms = ['All', 'TikTok', 'YouTube Shorts', 'Instagram Reels', 'All Platforms'];
   const filtered = platform === 'All' ? ideas : ideas.filter((i) => i.platform === platform);
@@ -181,7 +182,8 @@ export default function ReelsPage() {
         )}
 
         <AnimatePresence mode="wait">
-          {loading && ideas.length === 0 && (
+          {/* Fix: use (loading || isPending) so skeleton shows until transition commits */}
+          {(loading || isPending) && ideas.length === 0 && (
             <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="space-y-4">
               {Array.from({ length: 3 }).map((_, i) => (

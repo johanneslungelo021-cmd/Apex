@@ -73,6 +73,8 @@ export default function SocialPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SocialPackage | null>(null);
   // Perf: social package result is non-urgent — interruptible by user clicks
+  // Fix: setLoading(false) is moved INSIDE the transition so loading clears
+  // atomically with result — prevents a blank flash between skeleton and content
   const [, startResultTransition] = useTransition();
 
   const generate = async (nicheInput: string) => {
@@ -91,10 +93,13 @@ export default function SocialPage() {
         throw new Error(err.message ?? `HTTP ${res.status}`);
       }
       const pkg = await res.json() as SocialPackage;
-      startResultTransition(() => setResult(pkg));
+      // Fix: clear loading inside the transition so it commits with result
+      startResultTransition(() => {
+        setResult(pkg);
+        setLoading(false);
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Generation failed. Try again.');
-    } finally {
       setLoading(false);
     }
   };
