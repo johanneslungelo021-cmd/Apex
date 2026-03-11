@@ -15,17 +15,25 @@ import { Heart, Search, User, MessageSquare, Zap, ExternalLink, Newspaper, Clock
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
+
 // Canvas dynamically imported below — removed from critical bundle (Fix 2)
 import {
-  StreamingTypography,
-  OptimisticTransactionCard,
-  TransactionBeam,
   useOptimisticTransaction,
   type TransactionIntent,
 } from '@/lib/streaming/OptimisticTransactionUI';
 
+// Dynamic import for heavy streaming UI components — not needed for first paint
+const TransactionBeam = dynamic(
+  () => import('@/lib/streaming/OptimisticTransactionUI').then((mod) => ({ default: mod.TransactionBeam })),
+  { ssr: false, loading: () => null }
+);
+const StreamingTypography = dynamic(
+  () => import('@/lib/streaming/OptimisticTransactionUI').then((mod) => ({ default: mod.StreamingTypography })),
+  { ssr: false, loading: () => null }
+);
+
 // Phase 1: Sentient Vessel imports
-import dynamic from 'next/dynamic';
 import { EmotionProvider, useEmotionEngine } from '@/hooks/useEmotionEngine';
 import { useMultiSensory } from '@/hooks/useMultiSensory';
 
@@ -87,9 +95,17 @@ import { yieldToMain, isLongTask } from '@/lib/performance/yieldToMain';
 
 // Phase 2: Audio + Province Intelligence
 import { useVoiceInput } from '@/hooks/useVoiceInput';
-import ProvinceEconomicPanel from '@/components/chat/ProvinceEconomicPanel';
-import ChatSpeakButton from '@/components/chat/ChatSpeakButton';
 import { type ProvinceProfile } from '@/lib/sa-context/provinces';
+
+// Dynamic imports for chat components — not needed for first paint
+const ProvinceEconomicPanel = dynamic(
+  () => import('@/components/chat/ProvinceEconomicPanel'),
+  { ssr: false, loading: () => null }
+);
+const ChatSpeakButton = dynamic(
+  () => import('@/components/chat/ChatSpeakButton'),
+  { ssr: false, loading: () => null }
+);
 
 interface Opportunity {
   title: string;
@@ -157,8 +173,8 @@ function SentientInterfaceInner() {
   const emotion = useEmotionEngine();
   const { trigger: triggerAudio } = useMultiSensory();
 
-  // Phase 2: Voice input + Province Intelligence
-  const voiceInput = useVoiceInput((transcript) => {
+  // Phase 2: Voice input — hook registers a transcript callback; return value unused
+  useVoiceInput((transcript) => {
     setAiMessage(transcript);
   });
   const [selectedProvince, setSelectedProvince] = useState<ProvinceProfile | null>(null);
@@ -195,8 +211,6 @@ function SentientInterfaceInner() {
   // Derived heartbeat intensity for backward-compatible Heart icon animation
   const heartbeatIntensity = emotion.intensity;
   const {
-    transactionState,
-    resetTransaction,
     startTransaction,
     markOptimisticSuccess,
     confirmTransaction,
@@ -251,15 +265,6 @@ function SentientInterfaceInner() {
     );
     return () => { clearInterval(newsInterval); };
   }, [fetchNews]); // fetchNews is stable (useCallback []); ref handles category
-
-  // On mount: auto-boot Scout Agent so opportunities section is never empty
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      void sendToAIAssistant('Find me 3 top digital income opportunities in South Africa under R2000 to start right now');
-    }, 1800); // slight delay so chat history doesn't flash on first render
-    return () => { clearTimeout(timer); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // intentionally runs once on mount — sendToAIAssistant is stable
 
   // Re-fetch immediately whenever the user switches categories.
   useEffect(() => {
@@ -512,6 +517,15 @@ function SentientInterfaceInner() {
     failTransaction,
   ]);
 
+  // On mount: auto-boot Scout Agent so opportunities section is never empty
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void sendToAIAssistant('Find me 3 top digital income opportunities in South Africa under R2000 to start right now');
+    }, 1800); // slight delay so chat history doesn't flash on first render
+    return () => { clearTimeout(timer); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally runs once on mount — sendToAIAssistant is stable
+
   const investigateNews = useCallback((articleTitle: string) => {
     if (agentLoading) return;
 
@@ -545,7 +559,8 @@ function SentientInterfaceInner() {
   };
 
 
-  const lastMessage = chatHistory[chatHistory.length - 1];
+  // Last message available for future features (e.g., message status indicators)
+
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white relative">
@@ -572,16 +587,18 @@ function SentientInterfaceInner() {
       <MagneticReticle />
 
       {/* Transaction Beam Effect */}
-      <TransactionBeam
-        isActive={showTransactionBeam}
-        startColor="#00FF88"
-        endColor="#00AAFF"
-        onComplete={() => setShowTransactionBeam(false)}
-      />
+      {showTransactionBeam && (
+        <TransactionBeam
+          isActive={showTransactionBeam}
+          startColor="#00FF88"
+          endColor="#00AAFF"
+          onComplete={() => setShowTransactionBeam(false)}
+        />
+      )}
 
       {/* Phase 1: EmotionalGrid wraps all content — injects CSS variable morphing */}
       <EmotionalGrid>
-      
+
       {/* Pillar 2: GEO — TechArticle JSON-LD for AI citation */}
       <JsonLdScript
         schema={buildTechArticleSchema({
@@ -1022,26 +1039,24 @@ function SentientInterfaceInner() {
                       </span>
                     )}
                   </div>
-                  <h3 className="font-semibold text-base leading-snug mb-2 group-hover:text-blue-300 transition line-clamp-3 flex-1">{article.title}</h3>
-                  <p className="text-zinc-500 text-xs leading-relaxed line-clamp-2 mb-3">{article.snippet}</p>
-                  <div className="flex items-center justify-between mt-auto">
+                  <h3 className="font-semibold text-base leading-snug mb-2 group-hover:text-blue-300 transition line-clamp-2">{article.title}</h3>
+                  <p className="text-zinc-500 text-sm leading-relaxed line-clamp-2 flex-1">{article.snippet}</p>
+                  <div className="mt-3 flex items-center justify-between">
                     <a
                       href={article.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-xs text-zinc-600 group-hover:text-white transition"
+                      className="text-xs text-zinc-500 hover:text-white transition"
                     >
-                      Read more <ExternalLink className="w-3 h-3 ml-1" />
+                      Read <ExternalLink className="w-3 h-3 inline ml-0.5" />
                     </a>
                     <button
                       type="button"
-                      onClick={() => investigateNews(article.title)}
+                      onClick={(e) => { e.stopPropagation(); investigateNews(article.title); }}
                       disabled={agentLoading}
-                      className="flex items-center gap-1.5 text-xs glass px-2.5 py-1 rounded-full text-zinc-400 hover:text-white hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed"
-                      title="Research this article with AI"
+                      className="text-xs text-zinc-400 hover:text-white transition disabled:opacity-40"
                     >
                       <Microscope className="w-3 h-3" />
-                      Research
                     </button>
                   </div>
                 </div>
@@ -1052,222 +1067,189 @@ function SentientInterfaceInner() {
       </section>
       </AgentReadableChunk>
 
-      {/* FAB — Floating AI Chat */}
-      <div className="fixed bottom-8 right-8 z-50">
-        <AnimatePresence mode="wait">
-          {!isChatOpen ? (
-            <motion.button
-              key="fab"
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              onClick={() => { setIsChatOpen(true); triggerSentient(0.5); }}
-              className="flex items-center gap-2 glass px-5 py-3 rounded-full shadow-xl hover:bg-white/15 transition"
-            >
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-              </span>
-              <MessageSquare className="w-4 h-4" />
-              <span className="text-sm font-medium">Ask AI Scout</span>
-            </motion.button>
-          ) : (
+      {/* ─── AI Assistant Chat Panel ───────────────────────────────────────────── */}
+      <div className="fixed bottom-6 right-6 z-50">
+        <AnimatePresence>
+          {isChatOpen && (
             <motion.div
-              key="panel"
-              initial={{ opacity: 0, y: 24, scale: 0.95 }}
+              initial={{ opacity: 0, y: 20, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 24, scale: 0.95 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 28 }}
-              className="w-96 glass rounded-3xl overflow-hidden shadow-2xl"
+              exit={{ opacity: 0, y: 20, scale: 0.95 }}
+              className="glass w-96 h-[32rem] rounded-3xl flex flex-col overflow-hidden border border-white/10"
             >
-              <div className="p-4 border-b border-white/10 flex items-center gap-3">
-                <MessageSquare className="w-5 h-5" />
-                <span className="font-medium">Intelligent Engine</span>
-                <span className="text-xs text-emerald-400 animate-pulse ml-auto">● Online</span>
-                {/* Phase 2: Province selector badge */}
-                <button
-                  onClick={() => startUITransition(() => setShowProvincePanel((p) => !p))}
-                  className={`text-xs px-2 py-1 rounded-lg transition ${selectedProvince ? 'bg-blue-500/20 text-blue-300' : 'bg-white/10 text-zinc-400 hover:text-white'}`}
-                  title="Select your province for personalised advice"
-                  aria-label={selectedProvince ? `Province: ${selectedProvince.name}. Click to change` : 'Select province'}
-                >
-                  {selectedProvince ? selectedProvince.code : '🌍 SA'}
-                </button>
+              <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-blue-400" />
+                  <span className="font-medium text-sm">AI Assistant</span>
+                </div>
                 <button
                   onClick={() => setIsChatOpen(false)}
-                  className="ml-1 p-1 rounded-full hover:bg-white/10 transition text-zinc-400 hover:text-white"
-                  aria-label="Close chat"
+                  className="text-zinc-400 hover:text-white transition"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              {/* Phase 2: Province economic panel (collapsible) */}
-              <AnimatePresence>
-                {showProvincePanel && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="overflow-hidden border-b border-white/10"
-                  >
-                    <ProvinceEconomicPanel
-                      selectedCode={selectedProvince?.code ?? null}
-                      onSelect={(p) => {
-                        setSelectedProvince(p);
-                        setShowProvincePanel(false);
-                      }}
-                      compact
-                    />
-                  </motion.div>
-                )}
-              </AnimatePresence>
-              <div ref={chatScrollRef} className="h-96 p-6 overflow-y-auto text-sm space-y-4 relative" id="chat">
+
+              <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
                 {chatHistory.length === 0 && (
-                  <div className="text-zinc-500 text-center py-8">
-                    <p>Ask about digital income opportunities in South Africa.</p>
-                    <p className="text-xs mt-2 text-zinc-600">Powered by Scout Agent + Groq</p>
+                  <div className="text-center text-zinc-500 text-sm py-8">
+                    <MessageSquare className="w-8 h-8 mx-auto mb-2 text-zinc-600" />
+                    <p>Ask about digital income opportunities in South Africa</p>
                   </div>
                 )}
                 {chatHistory.map((msg, i) => (
-                  <motion.div key={i} className={msg.role === 'user' ? 'text-right' : 'text-left'} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-                    <div className={`inline-block px-4 py-2 rounded-2xl max-w-[80%] ${msg.role === 'user' ? 'bg-white/10' : 'bg-white/5'}`}>
-                      {/* Phase 3: Use StreamingTypography for assistant messages */}
-                      {msg.role === 'assistant' ? (
-                        <StreamingTypography 
-                          text={msg.content} 
-                          speed={0.02}
-                          variant="default"
-                        />
+                  <div
+                    key={i}
+                    className={`${msg.role === 'user' ? 'text-right' : 'text-left'}`}
+                  >
+                    <div
+                      className={`inline-block max-w-[85%] px-3 py-2 rounded-2xl text-sm ${
+                        msg.role === 'user'
+                          ? 'bg-blue-500/20 text-blue-100'
+                          : 'bg-zinc-800/50 text-zinc-200'
+                      }`}
+                    >
+                      {msg.role === 'assistant' && StreamingTypography ? (
+                        <StreamingTypography text={msg.content} speed={0.02} variant="default" />
                       ) : (
-                        <span className="whitespace-pre-wrap">{msg.content}</span>
+                        msg.content
+                      )}
+                      {msg.role === 'assistant' && ChatSpeakButton && (
+                        <div className="mt-1.5">
+                          <ChatSpeakButton text={msg.content} />
+                        </div>
                       )}
                     </div>
-                    {/* Phase 2: Speak button on completed assistant messages */}
-                    {msg.role === 'assistant' && msg.content && !agentLoading && (
-                      <div className="mt-1">
-                        <ChatSpeakButton text={msg.content} />
-                      </div>
-                    )}
-                  </motion.div>
+                  </div>
                 ))}
-                {agentLoading && (!lastMessage || lastMessage.role !== 'assistant' || !lastMessage.content) && (
-                  <motion.div className="text-left" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                    <div className="inline-block px-4 py-2 rounded-2xl bg-white/5 text-zinc-500">
-                      <StreamingTypography text="Thinking..." speed={0.05} variant="thinking" />
+                {agentLoading && (
+                  <div className="text-left">
+                    <div className="inline-block px-3 py-2 rounded-2xl bg-zinc-800/50 text-zinc-400 text-sm">
+                      <span className="animate-pulse">Thinking...</span>
                     </div>
-                  </motion.div>
+                  </div>
                 )}
-                
-                {/* Phase 3: Optimistic Transaction Card */}
-                <AnimatePresence>
-                  {transactionState.status !== 'idle' && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -20 }}
-                    >
-                      <OptimisticTransactionCard
-                        intent={transactionState.intent}
-                        status={transactionState.status}
-                        hash={transactionState.hash}
-                        error={transactionState.error}
-                        onConfirm={() => {
-                          if (transactionState.intent) {
-                            setShowTransactionBeam(true);
-                            markOptimisticSuccess('pending-tx-hash');
-                            // In production, this would call the proactive submit endpoint
-                            setTimeout(() => confirmTransaction('confirmed-tx-hash'), 2000);
-                          }
-                        }}
-                        onCancel={resetTransaction}
-                      />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
               </div>
-              <div className="p-4 border-t border-white/10 flex gap-3 items-center">
-                {/* Phase 2: Voice input mic button */}
-                {voiceInput.isSupported && (
+
+              <div className="p-3 border-t border-white/10">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Ask about opportunities..."
+                    className="flex-1 bg-zinc-800/50 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+                    value={aiMessage}
+                    onChange={(e) => setAiMessage(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        void sendToAIAssistant();
+                      }
+                    }}
+                  />
                   <button
-                    onClick={voiceInput.isListening ? voiceInput.stopListening : voiceInput.startListening}
-                    aria-label={voiceInput.isListening ? 'Stop voice input' : 'Start voice input'}
-                    aria-pressed={voiceInput.isListening}
-                    className={`p-2 rounded-full transition ${voiceInput.isListening ? 'bg-red-500/30 text-red-400 animate-pulse' : 'hover:bg-white/10 text-zinc-500 hover:text-white'}`}
+                    onClick={() => void sendToAIAssistant()}
+                    disabled={agentLoading || !aiMessage.trim()}
+                    className="bg-blue-500/20 text-blue-300 px-3 py-2 rounded-xl text-sm hover:bg-blue-500/30 transition disabled:opacity-40"
                   >
-                    <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
-                      <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd"/>
-                    </svg>
+                    Send
                   </button>
-                )}
-                <input
-                  id="ai-chat-input"
-                  type="text"
-                  value={voiceInput.isListening && voiceInput.interimText ? voiceInput.interimText : aiMessage}
-                  onChange={(e) => {
-                    // Block writes to aiMessage while voice is active — the displayed
-                    // value is interim speech text, not the user's own typing.
-                    // Without this guard, typing during listening corrupts aiMessage
-                    // with a hybrid of interim text + keypress on next non-listening render.
-                    if (!voiceInput.isListening) setAiMessage(e.target.value);
-                  }}
-                  readOnly={voiceInput.isListening}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      void sendToAIAssistant();
-                    }
-                  }}
-                  placeholder={voiceInput.isListening ? 'Listening...' : selectedProvince ? `Ask about ${selectedProvince.name}...` : 'Ask about opportunities...'}
-                  className="flex-1 bg-transparent focus:outline-none"
-                  disabled={agentLoading}
-                />
-                <button
-                  onClick={() => { void sendToAIAssistant(); }}
-                  disabled={agentLoading || !aiMessage.trim()}
-                  className="px-6 py-2 glass rounded-2xl hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  Send
-                </button>
+                </div>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Chat toggle button */}
+        <motion.button
+          onClick={() => { setIsChatOpen(!isChatOpen); triggerSentient(0.5); }}
+          className="glass w-14 h-14 rounded-2xl flex items-center justify-center hover:scale-105 transition"
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+        >
+          <MessageSquare className="w-6 h-6 text-blue-400" />
+        </motion.button>
       </div>
 
+      {/* Province Economic Panel */}
+      <AnimatePresence>
+        {showProvincePanel && ProvinceEconomicPanel && (
+          <motion.div
+            initial={{ opacity: 0, x: 300 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 300 }}
+            className="fixed top-20 right-6 z-40"
+          >
+            <ProvinceEconomicPanel
+              selectedCode={selectedProvince?.code ?? null}
+              onSelect={(province: ProvinceProfile) => {
+                setSelectedProvince(province);
+                setShowProvincePanel(false);
+              }}
+              compact={false}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Register Modal */}
       <AnimatePresence>
         {showRegister && (
-          <motion.div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <motion.div className="glass w-full max-w-md rounded-3xl p-12 relative overflow-hidden" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}>
-              <div className="liquid-reflection opacity-30" />
-              <h3 className="text-3xl font-semibold mb-8">Create Account</h3>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+            onClick={() => setShowRegister(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="glass p-8 rounded-3xl w-full max-w-md border border-white/10"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-2xl font-bold mb-4">Create Account</h2>
+              <p className="text-zinc-400 mb-6">Join the Apex Central community</p>
               <input
                 type="email"
-                placeholder="your@email.com"
+                placeholder="Email address"
+                className="w-full bg-zinc-800/50 rounded-xl px-4 py-3 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 value={registerEmail}
                 onChange={(e) => setRegisterEmail(e.target.value)}
-                className="w-full glass px-6 py-4 rounded-2xl mb-6 focus:outline-none focus:ring-2 focus:ring-white/20"
               />
-              <button onClick={handleRegister} className="w-full py-4 glass rounded-2xl text-lg font-medium hover:bg-white/10 transition">
-                Join Now
-              </button>
-              <button onClick={() => setShowRegister(false)} className="mt-6 text-xs text-zinc-400 hover:text-white transition">
-                Cancel
-              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowRegister(false)}
+                  className="flex-1 glass px-4 py-3 rounded-xl text-sm hover:bg-white/10 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleRegister}
+                  disabled={!registerEmail.trim()}
+                  className="flex-1 bg-blue-500/20 text-blue-300 px-4 py-3 rounded-xl text-sm hover:bg-blue-500/30 transition disabled:opacity-40"
+                >
+                  Register
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Phase 1: Accessibility toggles for audio / haptics / motion */}
-      <SensoryControls />
-
       </EmotionalGrid>
+
+      {/* Sensory Controls — accessibility toggles (bottom-left, fixed) */}
+      <div className="fixed bottom-6 left-6 z-50">
+        {SensoryControls && <SensoryControls />}
+      </div>
     </div>
   );
 }
 
-// ─── Public default export wraps inner component in EmotionProvider ────────────
-export default function SentientInterface() {
+// ─── Page wrapper with EmotionProvider ────────────────────────────────────────
+
+export default function Page() {
   return (
     <EmotionProvider>
       <SentientInterfaceInner />
