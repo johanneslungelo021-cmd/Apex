@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import { Play, RefreshCw, ArrowLeft, Hash, Clock, TrendingUp, Copy, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -114,6 +114,9 @@ export default function ReelsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [platform, setPlatform] = useState<string>('All');
+  // Perf: platform filter re-renders the ideas list — non-urgent, interruptible
+  // isPending keeps skeleton visible until the deferred ideas state commits
+  const [isPending, startPlatformTransition] = useTransition();
 
   const platforms = ['All', 'TikTok', 'YouTube Shorts', 'Instagram Reels', 'All Platforms'];
   const filtered = platform === 'All' ? ideas : ideas.filter((i) => i.platform === platform);
@@ -125,7 +128,7 @@ export default function ReelsPage() {
       const res = await fetch('/api/reels');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json() as { ideas: ReelIdea[] };
-      setIdeas(json.ideas ?? []);
+      startPlatformTransition(() => setIdeas(json.ideas ?? []));
     } catch {
       setError(true);
     } finally {
@@ -167,7 +170,7 @@ export default function ReelsPage() {
             {platforms.map((p) => (
               <button
                 key={p}
-                onClick={() => setPlatform(p)}
+                onClick={() => startPlatformTransition(() => setPlatform(p))}
                 className={`px-3 py-1.5 rounded-xl text-sm transition ${
                   platform === p ? 'bg-white/20 text-white' : 'glass text-zinc-400 hover:text-white'
                 }`}
@@ -179,7 +182,8 @@ export default function ReelsPage() {
         )}
 
         <AnimatePresence mode="wait">
-          {loading && ideas.length === 0 && (
+          {/* Fix: use (loading || isPending) so skeleton shows until transition commits */}
+          {(loading || isPending) && ideas.length === 0 && (
             <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="space-y-4">
               {Array.from({ length: 3 }).map((_, i) => (
