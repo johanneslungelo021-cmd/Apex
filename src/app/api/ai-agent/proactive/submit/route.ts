@@ -86,11 +86,19 @@ async function waitForConfirmation(_hash: string): Promise<{
     }
 
     // Delegate to the external XRPL Python service.
-    const res = await fetch(`${xrplServiceUrl}/submit`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ intent, amount, currency, destination, userId }),
-    });
+    const ac = new AbortController();
+    const tid = setTimeout(() => ac.abort(), 10_000);
+    let res: Response;
+    try {
+      res = await fetch(`${xrplServiceUrl}/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ intent, amount, currency, destination, userId }),
+        signal: ac.signal,
+      });
+    } finally {
+      clearTimeout(tid);
+    }
 
     if (!res.ok) {
       const err = await res.text().catch(() => `HTTP ${res.status}`);
