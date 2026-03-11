@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { APP_VERSION } from '@/lib/version';
+import { SKILLS_STATUS } from '@/lib/skills';
 
 function timingSafeEqual(a: string, b: string): boolean {
   // Pad both buffers to the same length to avoid leaking expected token length
@@ -81,6 +82,8 @@ export async function GET(req: Request) {
         // useLocalSentiment path is always available (zero-dependency)
         localSentimentAlwaysReady: true,
       },
+      // Skills API status - wired through lib/skills adapters
+      skills: SKILLS_STATUS,
     };
   }
 

@@ -95,8 +95,9 @@ async function preBuildTransaction(intent: TransactionIntent): Promise<{
  * Submit Transaction to XRPL
  * 
  * Submits a pre-built transaction to the XRPL ledger.
+ * Reserved for future XRPL integration.
  */
-async function submitTransaction(txJson: object): Promise<{
+async function _submitTransaction(_txJson: object): Promise<{
   hash: string;
   status: string;
 }> {
@@ -115,16 +116,17 @@ async function submitTransaction(txJson: object): Promise<{
  * 
  * Polls the ledger for transaction confirmation.
  * XRPL typically confirms in 3-5 seconds.
+ * Reserved for future XRPL integration.
  */
-async function waitForConfirmation(
-  hash: string,
-  onProgress: (status: string) => void
+async function _waitForConfirmation(
+  _hash: string,
+  _onProgress: (status: string) => void
 ): Promise<{ confirmed: boolean; ledger?: number }> {
   const maxAttempts = 8;
   const intervalMs = 500;
   
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    onProgress(`Checking ledger... (${attempt + 1}/${maxAttempts})`);
+    _onProgress(`Checking ledger... (${attempt + 1}/${maxAttempts})`);
     
     // In production: Call XRPL to check transaction status
     // Mock: succeed after ~2 seconds
@@ -160,7 +162,10 @@ function createSSEEncoder() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { prompt, userId, walletAddress } = body;
+    const { prompt, userId: _userId, walletAddress: _walletAddress } = body;
+    // Reserved for future user-specific transaction features
+    void _userId;
+    void _walletAddress;
     
     if (!prompt) {
       return NextResponse.json(
@@ -219,7 +224,9 @@ export async function POST(request: NextRequest) {
         }
         
         // Simulate AI streaming response (in production, this would be the actual AI stream)
-        const aiResponse = `I've analyzed your request to ${intent ? intent.type.toLowerCase().replace(/_/g, ' ') : 'process your query'}. `;
+        // Reserved for future use in actual AI response streaming
+        const _aiResponse = `I've analyzed your request to ${intent ? intent.type.toLowerCase().replace(/_/g, ' ') : 'process your query'}. `;
+        void _aiResponse;
         
         if (intent && preSignedTx) {
           const confirmMessage = `I've detected you want to ${intent.type.replace(/_/g, ' ').toLowerCase()} ${intent.amount || ''} ${intent.currency || 'XRP'}. Click confirm to execute this transaction on the XRPL, which typically settles in 3-5 seconds.`;

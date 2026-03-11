@@ -12,7 +12,26 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Skills directory contains standalone example scripts, not part of Next.js app
+    "skills/**",
+    // Config and scripts directories are not part of the main app
+    "config/**",
+    "scripts/**",
+    "tests/**",
   ]),
+  // Allow unused variables that start with underscore (common convention for reserved/future use)
+  {
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+        },
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;

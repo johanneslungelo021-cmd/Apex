@@ -21,8 +21,9 @@ interface SubmitTransactionBody {
 
 /**
  * Submit a transaction to XRPL
+ * Reserved for future XRPL integration.
  */
-async function submitToXRPL(txData: SubmitTransactionBody): Promise<{
+async function submitToXRPL(_txData: SubmitTransactionBody): Promise<{
   hash: string;
   status: 'submitted' | 'confirmed' | 'failed';
   ledger?: number;
@@ -40,8 +41,9 @@ async function submitToXRPL(txData: SubmitTransactionBody): Promise<{
 
 /**
  * Wait for transaction confirmation
+ * Reserved for future XRPL integration.
  */
-async function waitForConfirmation(hash: string): Promise<{
+async function waitForConfirmation(_hash: string): Promise<{
   confirmed: boolean;
   ledger?: number;
 }> {
