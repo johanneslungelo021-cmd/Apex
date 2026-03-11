@@ -92,6 +92,8 @@ async function preBuildTransaction(intent: TransactionIntent): Promise<{
 }
 
 /**
+ feat/audit-remove-all-simulations
+
  * Submit Transaction to XRPL
  * 
  * Submits a pre-built transaction to the XRPL ledger.
@@ -144,6 +146,7 @@ async function _waitForConfirmation(
 }
 
 /**
+ perf/speed-insights-improvements
  * SSE Encoder for streaming responses
  */
 function createSSEEncoder() {
@@ -162,10 +165,14 @@ function createSSEEncoder() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+ feat/audit-remove-all-simulations
+    const { prompt } = body;
+
     const { prompt, userId: _userId, walletAddress: _walletAddress } = body;
     // Reserved for future user-specific transaction features
     void _userId;
     void _walletAddress;
+ perf/speed-insights-improvements
     
     if (!prompt) {
       return NextResponse.json(
@@ -223,11 +230,15 @@ export async function POST(request: NextRequest) {
           }
         }
         
+ feat/audit-remove-all-simulations
+        // Streaming response: if transaction detected, prompt user to confirm; otherwise generic ack
+
         // Simulate AI streaming response (in production, this would be the actual AI stream)
         // Reserved for future use in actual AI response streaming
         const _aiResponse = `I've analyzed your request to ${intent ? intent.type.toLowerCase().replace(/_/g, ' ') : 'process your query'}. `;
         void _aiResponse;
         
+ perf/speed-insights-improvements
         if (intent && preSignedTx) {
           const confirmMessage = `I've detected you want to ${intent.type.replace(/_/g, ' ').toLowerCase()} ${intent.amount || ''} ${intent.currency || 'XRP'}. Click confirm to execute this transaction on the XRPL, which typically settles in 3-5 seconds.`;
           

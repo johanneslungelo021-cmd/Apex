@@ -11,7 +11,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, Suspense, useTransition } from 'react';
-import { Heart, Search, User, MessageSquare, Zap, ExternalLink, Newspaper, Clock, RefreshCw, Microscope, Filter, X } from 'lucide-react';
+import { Heart, Search, User, MessageSquare, Zap, ExternalLink, Newspaper, Clock, RefreshCw, Microscope, Filter, X, Star, GitFork, AlertCircle, Code2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -125,6 +125,16 @@ interface NewsArticle {
   imageUrl: string;
 }
 
+/** Shape of the real data returned by GET /api/metrics */
+interface LiveGitHubMetrics {
+  stars: number;
+  forks: number;
+  openIssues: number;
+  watchers: number;
+  language: string;
+  lastUpdated: string;
+}
+
 // ─── Inner page that consumes EmotionProvider context ─────────────────────────
 function SentientInterfaceInner() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -139,6 +149,10 @@ function SentientInterfaceInner() {
   const [newsLoading, setNewsLoading] = useState(true);
   const [newsError, setNewsError] = useState(false);
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
+
+  // ─── Live GitHub Metrics (real data from /api/metrics → GitHub REST API) ──
+  const [githubMetrics, setGithubMetrics] = useState<LiveGitHubMetrics | null>(null);
+  const [metricsLoading, setMetricsLoading] = useState(true);
 
 
   /**
@@ -262,6 +276,27 @@ function SentientInterfaceInner() {
       chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
     }
   }, [isChatOpen, chatHistory]);
+
+  // Fetch real GitHub metrics from /api/metrics on mount.
+  // /api/metrics now returns only real GitHub API data — no fabricated values.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/metrics');
+        if (!res.ok) return;
+        const data = await res.json() as { github: LiveGitHubMetrics };
+        if (!cancelled && data?.github) {
+          setGithubMetrics(data.github);
+        }
+      } catch {
+        // Non-critical — hero simply won't render the metrics strip
+      } finally {
+        if (!cancelled) setMetricsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const sendToAIAssistant = useCallback(async (promptOverride?: string) => {
     const outgoingMessage = (promptOverride ?? aiMessage).trim();
@@ -613,8 +648,77 @@ function SentientInterfaceInner() {
             <h1 className="text-7xl font-bold tracking-tighter">Sentient Interface</h1>
           </div>
           <p className="text-2xl text-zinc-400">Phase 3 Live • XRPL Pre-Sign &amp; Stream + WebGL Visualization</p>
-          <div className="flex items-center gap-4 mt-6">
+          <div className="flex items-center gap-3 mt-6 flex-wrap">
+            {metricsLoading ? (
+              /* Skeleton placeholders — exact height 32px matches badge height */
+              <>
+                {[72, 56, 64, 80].map((w) => (
+                  <div
+                    key={w}
+                    className="glass h-8 rounded-full animate-pulse"
+                    style={{ width: `${w}px` }}
+                  />
+                ))}
+              </>
+            ) : githubMetrics ? (
+              /* Real badges — all values sourced from GitHub REST API */
+              <>
+                {/* Language badge */}
+                <span className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs font-medium text-blue-300">
+                  <Code2 className="w-3 h-3" />
+                  {githubMetrics.language}
+                </span>
 
+                {/* Stars — links to the repo stargazers page */}
+                <a
+                  href="https://github.com/johanneslungelo021-cmd/Apex/stargazers"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs font-medium text-yellow-300 hover:bg-white/10 transition"
+                  title="GitHub Stars"
+                >
+                  <Star className="w-3 h-3" />
+                  {githubMetrics.stars.toLocaleString()}
+                </a>
+
+                {/* Forks */}
+                <a
+                  href="https://github.com/johanneslungelo021-cmd/Apex/network/members"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs font-medium text-emerald-300 hover:bg-white/10 transition"
+                  title="GitHub Forks"
+                >
+                  <GitFork className="w-3 h-3" />
+                  {githubMetrics.forks.toLocaleString()}
+                </a>
+
+                {/* Open issues */}
+                <a
+                  href="https://github.com/johanneslungelo021-cmd/Apex/issues"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs font-medium text-zinc-300 hover:bg-white/10 transition"
+                  title="Open Issues"
+                >
+                  <AlertCircle className="w-3 h-3" />
+                  {githubMetrics.openIssues.toLocaleString()} open
+                </a>
+
+                {/* Last updated */}
+                <span
+                  className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs text-zinc-400"
+                  title={new Date(githubMetrics.lastUpdated).toISOString()}
+                >
+                  <Clock className="w-3 h-3" />
+                  {new Date(githubMetrics.lastUpdated).toLocaleDateString('en-ZA', {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                  })}
+                </span>
+              </>
+            ) : null /* metrics fetch failed — show nothing rather than fake zeros */}
           </div>
         </div>
       </AgentReadableChunk>
