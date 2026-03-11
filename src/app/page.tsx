@@ -102,10 +102,6 @@ const ProvinceEconomicPanel = dynamic(
   () => import('@/components/chat/ProvinceEconomicPanel'),
   { ssr: false, loading: () => null }
 );
-const ChatSpeakButton = dynamic(
-  () => import('@/components/chat/ChatSpeakButton'),
-  { ssr: false, loading: () => null }
-);
 
 interface Opportunity {
   title: string;
@@ -160,9 +156,11 @@ function SentientInterfaceInner() {
   const { trigger: triggerAudio } = useMultiSensory();
 
   // Phase 2: Voice input + Province Intelligence
-  const voiceInput = useVoiceInput((transcript) => {
+  // Hook is called for side effects (callback sets aiMessage)
+  const _voiceInput = useVoiceInput((transcript) => {
     setAiMessage(transcript);
   });
+  void _voiceInput; // Intentionally unused - hook registers callback
   const [selectedProvince, setSelectedProvince] = useState<ProvinceProfile | null>(null);
   const [showProvincePanel, setShowProvincePanel] = useState(false);
 
@@ -197,13 +195,16 @@ function SentientInterfaceInner() {
   // Derived heartbeat intensity for backward-compatible Heart icon animation
   const heartbeatIntensity = emotion.intensity;
   const {
-    transactionState,
-    resetTransaction,
+    // transactionState and resetTransaction are available for future use
+    transactionState: _transactionState,
+    resetTransaction: _resetTransaction,
     startTransaction,
     markOptimisticSuccess,
     confirmTransaction,
     failTransaction,
   } = useOptimisticTransaction();
+  void _transactionState; // Available for transaction status UI
+  void _resetTransaction; // Available for transaction reset
   const [showTransactionBeam, setShowTransactionBeam] = useState(false);
 
   const chatScrollRef = useRef<HTMLDivElement>(null);
@@ -526,7 +527,9 @@ function SentientInterfaceInner() {
   };
 
 
-  const lastMessage = chatHistory[chatHistory.length - 1];
+  // Last message available for future features (e.g., message status indicators)
+  const _lastMessage = chatHistory[chatHistory.length - 1];
+  void _lastMessage; // Reserved for message-level features
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white relative">

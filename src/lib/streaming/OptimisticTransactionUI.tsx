@@ -419,7 +419,7 @@ export function useNDJSONStream(
       } else if (data.type === 'transaction_confirmed') {
         onTransactionConfirmed?.(data.hash);
       }
-    } catch (e) {
+    } catch (_e) {
       // Not JSON, just text chunk
       setChunks(prev => prev + line);
     }

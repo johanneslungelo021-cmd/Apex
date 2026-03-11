@@ -23,7 +23,6 @@ import {
   analyzeImage,
   SKILLS_STATUS,
   type ChatMessage,
-  type SearchResult,
 } from '@/lib/skills';
 import { log, generateRequestId } from '@/lib/api-utils';
 
