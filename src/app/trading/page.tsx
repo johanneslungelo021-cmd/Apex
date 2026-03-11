@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import { TrendingUp, TrendingDown, RefreshCw, ArrowLeft, DollarSign, Activity, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -25,6 +25,8 @@ export default function TradingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  // Perf: non-urgent market data update — user can still interact while data arrives
+  const [, startDataTransition] = useTransition();
 
   const fetchData = async () => {
     setLoading(true);
@@ -33,7 +35,7 @@ export default function TradingPage() {
       const res = await fetch('/api/trading');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json() as TradingData;
-      setData(json);
+      startDataTransition(() => setData(json));
       setLastRefresh(new Date());
     } catch {
       setError(true);

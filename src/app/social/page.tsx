@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { Share2, RefreshCw, ArrowLeft, Copy, Check, Calendar, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -72,6 +72,8 @@ export default function SocialPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SocialPackage | null>(null);
+  // Perf: social package result is non-urgent — interruptible by user clicks
+  const [, startResultTransition] = useTransition();
 
   const generate = async (nicheInput: string) => {
     if (!nicheInput.trim()) return;
@@ -89,7 +91,7 @@ export default function SocialPage() {
         throw new Error(err.message ?? `HTTP ${res.status}`);
       }
       const pkg = await res.json() as SocialPackage;
-      setResult(pkg);
+      startResultTransition(() => setResult(pkg));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Generation failed. Try again.');
     } finally {

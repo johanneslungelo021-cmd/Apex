@@ -10,7 +10,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense, useTransition } from 'react';
 import { Heart, Search, User, MessageSquare, Zap, ExternalLink, Newspaper, Clock, RefreshCw, Microscope, Filter, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
@@ -66,6 +66,10 @@ const MagneticReticle = dynamic(
 // Keep static since it wraps all content (removing would break layout structure).
 import EmotionalGrid from '@/components/sentient/EmotionalGrid';
 
+// Perf: ReducedMotionGate — skips Three.js entirely for prefers-reduced-motion
+// users and returns a static gradient fallback instead.
+import { ReducedMotionGate } from '@/components/sentient/ReducedMotionGate';
+
 // SensoryControls: accessibility toggles — never needed for first paint.
 const SensoryControls = dynamic(
   () => import('@/components/sentient/SensoryControls'),
@@ -76,6 +80,10 @@ const SensoryControls = dynamic(
 import AgentReadableChunk from '@/components/geo/AgentReadableChunk';
 import JsonLdScript from '@/components/geo/JsonLdScript';
 import { buildTechArticleSchema } from '@/lib/geo/schema-builder';
+
+// Perf: yieldToMain — break AI streaming into interruptible micro-tasks
+// so user clicks are processed immediately between stream chunks.
+import { yieldToMain, isLongTask } from '@/lib/performance/yieldToMain';
 
 // Phase 2: Audio + Province Intelligence
 import { useVoiceInput } from '@/hooks/useVoiceInput';
@@ -116,6 +124,20 @@ function SentientInterfaceInner() {
   const [newsError, setNewsError] = useState(false);
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
 
+
+  /**
+   * Perf: React 18 concurrent transitions.
+   *
+   * Without startTransition every state update — switching news categories,
+   * loading opportunities, updating the AI response — runs as a synchronous
+   * high-priority task.  Any user click during these updates must wait,
+   * which is the direct cause of the 568 ms INP.
+   *
+   * startUITransition() marks non-urgent renders as interruptible: the browser
+   * can handle new input events before finishing the transition, keeping INP
+   * well below the 200 ms target.
+   */
+  const [, startUITransition] = useTransition();
 
   // Phase 1: Emotion Engine — replaces heartbeatIntensity + inline triggerSentient
   const emotion = useEmotionEngine();
@@ -189,7 +211,7 @@ function SentientInterfaceInner() {
         setNewsError(true);
         return;
       }
-      setNews(data.articles);
+      startUITransition(() => setNews(data.articles)); // non-urgent: interruptible by user interaction
     } catch {
       setNewsError(true);
     } finally {
@@ -330,7 +352,7 @@ function SentientInterfaceInner() {
 
         if (type === 'opportunities') {
           if (Array.isArray(data) && data.length > 0) {
-            setOpportunities(data as Opportunity[]);
+            startUITransition(() => setOpportunities(data as Opportunity[])); // non-urgent
           }
           return;
         }
@@ -391,7 +413,7 @@ function SentientInterfaceInner() {
 
         // Backward-compatibility for older payloads if any stale deployment emits them
         if (Array.isArray(event.opportunities) && event.opportunities.length > 0) {
-          setOpportunities(event.opportunities as Opportunity[]);
+          startUITransition(() => setOpportunities(event.opportunities as Opportunity[])); // non-urgent
           return;
         }
 
@@ -400,6 +422,9 @@ function SentientInterfaceInner() {
           setAssistantContent(event.message);
         }
       };
+
+      // Perf: track task start time so we can yield when the loop runs long.
+      let _taskStart = performance.now();
 
       while (true) {
         const { done, value } = await reader.read();
@@ -412,6 +437,17 @@ function SentientInterfaceInner() {
 
         for (const line of lines) {
           processLine(line);
+        }
+
+        /**
+         * Perf: yield to main thread if this iteration has consumed > 50 ms.
+         * Allows the browser to process any pending click / touch events before
+         * the next chunk arrives.  Without this the streaming loop is a single
+         * long task that blocks all interaction for the full response duration.
+         */
+        if (isLongTask(_taskStart)) {
+          await yieldToMain();
+          _taskStart = performance.now(); // reset timer after each yield
         }
       }
 
@@ -480,14 +516,21 @@ function SentientInterfaceInner() {
     <div className="min-h-screen bg-zinc-950 text-white relative">
       {/* Phase 1: Emotion-reactive WebGL swarm */}
       <div className="fixed inset-0 -z-10 opacity-60 mix-blend-screen pointer-events-none">
-        <Suspense fallback={null}>
-          {/*
-           * Fix 2: SentientCanvasScene is dynamically imported with ssr:false.
-           * Three.js (~500KB) now loads AFTER FCP — browser paints text content first.
-           * The fixed container is already in the DOM; canvas slot is reserved.
-           */}
-          <SentientCanvasScene />
-        </Suspense>
+        {/*
+         * Perf: ReducedMotionGate checks window.matchMedia('prefers-reduced-motion').
+         * When active it returns a static gradient — Three.js never loads, zero WebGL
+         * cost.  For all other users SentientCanvasScene loads post-FCP via dynamic().
+         */}
+        <ReducedMotionGate>
+          <Suspense fallback={null}>
+            {/*
+             * Fix 2: SentientCanvasScene is dynamically imported with ssr:false.
+             * Three.js (~500KB) now loads AFTER FCP — browser paints text content first.
+             * The fixed container is already in the DOM; canvas slot is reserved.
+             */}
+            <SentientCanvasScene />
+          </Suspense>
+        </ReducedMotionGate>
       </div>
 
       {/* Phase 1: Custom magnetic cursor (desktop only) */}
@@ -625,7 +668,7 @@ function SentientInterfaceInner() {
         agentSummary="The Scout Agent on Apex Central surfaces verified digital income opportunities for South Africans, all costing R0–R2000 to start. Categories include Freelancing (Fiverr, Upwork), E-commerce (Takealot, Bidorbuy), Content Creation (YouTube, TikTok), Online Tutoring, and Digital Skills. Results refresh every 5 minutes with province-aware filtering."
         summaryLabel="Live Digital Income Opportunities"
       >
-      <section id="opportunities" className="max-w-5xl mx-auto px-8 py-20">
+      <section id="opportunities" className="max-w-5xl mx-auto px-8 py-20 below-fold-section">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-4xl font-semibold flex items-center gap-3">
             <Zap className="w-9 h-9 text-yellow-400" /> Live Digital Income Opportunities
@@ -689,7 +732,7 @@ function SentientInterfaceInner() {
         agentSummary="The Live News section on Apex Central aggregates real-time South African digital economy news via Perplexity Search API, categorised into Latest, Tech & AI, Finance & Crypto, and Startups. Each article includes a research button that routes the topic to the Intelligent Engine for AI-powered analysis relevant to South African income opportunities."
         summaryLabel="Live South African Digital Economy News"
       >
-      <section id="news" className="max-w-5xl mx-auto px-8 py-20 border-t border-white/10">
+      <section id="news" className="max-w-5xl mx-auto px-8 py-20 border-t border-white/10 below-fold-section">
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
             <h2 className="text-4xl font-semibold flex items-center gap-3">
@@ -715,7 +758,7 @@ function SentientInterfaceInner() {
           {NEWS_CATEGORIES.map((cat) => (
             <button
               key={cat}
-              onClick={() => { setActiveCategory(cat); triggerSentient(0.3); }}
+              onClick={() => { startUITransition(() => setActiveCategory(cat)); triggerSentient(0.3); }}
               className={`px-4 py-1.5 rounded-full text-sm transition ${
                 activeCategory === cat
                   ? 'bg-white/15 text-white font-medium'
@@ -784,6 +827,7 @@ function SentientInterfaceInner() {
                       src={article.imageUrl}
                       alt={article.title}
                       fill
+                      priority
                       sizes="(max-width: 768px) 100vw, 66vw"
                       className="object-cover group-hover:scale-105 transition-transform duration-500"
                       onError={() => {
@@ -936,7 +980,7 @@ function SentientInterfaceInner() {
                 <span className="text-xs text-emerald-400 animate-pulse ml-auto">● Online</span>
                 {/* Phase 2: Province selector badge */}
                 <button
-                  onClick={() => setShowProvincePanel((p) => !p)}
+                  onClick={() => startUITransition(() => setShowProvincePanel((p) => !p))}
                   className={`text-xs px-2 py-1 rounded-lg transition ${selectedProvince ? 'bg-blue-500/20 text-blue-300' : 'bg-white/10 text-zinc-400 hover:text-white'}`}
                   title="Select your province for personalised advice"
                   aria-label={selectedProvince ? `Province: ${selectedProvince.name}. Click to change` : 'Select province'}
