@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import { BookOpen, Clock, RefreshCw, ArrowLeft, Tag, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -73,6 +73,9 @@ export default function BlogsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [activeFilter, setActiveFilter] = useState<string>('All');
+  // Perf: filter change only re-renders the list — non-urgent, interruptible
+  // isPending keeps skeleton visible until the deferred posts state commits
+  const [isPending, startFilterTransition] = useTransition();
 
   const categories = ['All', ...Array.from(new Set(posts.map((p) => p.category)))];
 
@@ -85,7 +88,7 @@ export default function BlogsPage() {
       const res = await fetch('/api/blogs');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json() as { posts: BlogPost[] };
-      setPosts(json.posts ?? []);
+      startFilterTransition(() => setPosts(json.posts ?? []));
     } catch {
       setError(true);
     } finally {
@@ -127,7 +130,7 @@ export default function BlogsPage() {
             {categories.map((cat) => (
               <button
                 key={cat}
-                onClick={() => setActiveFilter(cat)}
+                onClick={() => startFilterTransition(() => setActiveFilter(cat))}
                 className={`px-3 py-1.5 rounded-xl text-sm transition ${
                   activeFilter === cat ? 'bg-white/20 text-white' : 'glass text-zinc-400 hover:text-white'
                 }`}
@@ -139,7 +142,8 @@ export default function BlogsPage() {
         )}
 
         <AnimatePresence mode="wait">
-          {loading && posts.length === 0 && (
+          {/* Fix: use (loading || isPending) so skeleton shows until transition commits */}
+          {(loading || isPending) && posts.length === 0 && (
             <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="space-y-4">
               {Array.from({ length: 3 }).map((_, i) => (

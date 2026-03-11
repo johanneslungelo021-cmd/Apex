@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import { TrendingUp, TrendingDown, RefreshCw, ArrowLeft, DollarSign, Activity, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -25,6 +25,9 @@ export default function TradingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  // Perf: non-urgent market data update — user can still interact while data arrives
+  // isPending keeps skeleton visible and prevents lastRefresh updating before data commits
+  const [isPending, startDataTransition] = useTransition();
 
   const fetchData = async () => {
     setLoading(true);
@@ -33,8 +36,12 @@ export default function TradingPage() {
       const res = await fetch('/api/trading');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json() as TradingData;
-      setData(json);
-      setLastRefresh(new Date());
+      // Fix: keep setData and setLastRefresh in the same transition so they
+      // commit atomically — prevents showing 'Updated' timestamp before data renders
+      startDataTransition(() => {
+        setData(json);
+        setLastRefresh(new Date());
+      });
     } catch {
       setError(true);
     } finally {
@@ -79,7 +86,8 @@ export default function TradingPage() {
 
       <div className="max-w-5xl mx-auto px-8 pb-20 space-y-6">
         <AnimatePresence mode="wait">
-          {loading && !data && (
+          {/* Fix: use (loading || isPending) so skeleton shows until transition commits */}
+          {(loading || isPending) && !data && (
             <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {Array.from({ length: 8 }).map((_, i) => (
