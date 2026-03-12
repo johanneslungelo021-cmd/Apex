@@ -15,6 +15,9 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, Suspense, useTransition } from 'react';
+// Lucide-react: Turbopack tree-shakes the barrel import correctly in Next.js 16.
+// Individual deep imports (lucide-react/dist/esm/icons/heart) have no .d.ts files
+// in this version, causing TypeScript errors. The barrel import is the correct path.
 import { Heart, Search, User, MessageSquare, Zap, ExternalLink, Newspaper, Clock, RefreshCw, Microscope, Filter, X, Star, GitFork, AlertCircle, Code2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
