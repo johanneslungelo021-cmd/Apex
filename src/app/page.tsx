@@ -161,14 +161,9 @@ function SentientInterfaceInner() {
   // This prevents the 226KB Three.js chunk from blocking the main thread.
   const [showWebGL, setShowWebGL] = useState(false);
   useEffect(() => {
-    // Use requestIdleCallback if available, otherwise setTimeout
-    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      const idleId = window.requestIdleCallback(() => setShowWebGL(true), { timeout: 2000 });
-      return () => window.cancelIdleCallback(idleId);
-    } else {
-      const timeoutId = setTimeout(() => setShowWebGL(true), 1500);
-      return () => clearTimeout(timeoutId);
-    }
+    // Simple timeout fallback - works on all browsers
+    const timeoutId = setTimeout(() => setShowWebGL(true), 2000);
+    return () => clearTimeout(timeoutId);
   }, []);
 
   /**
