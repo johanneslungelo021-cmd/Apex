@@ -92,61 +92,6 @@ async function preBuildTransaction(intent: TransactionIntent): Promise<{
 }
 
 /**
- feat/perf-cwv-zero-mocks
-
- * Submit Transaction to XRPL
- * 
- * Submits a pre-built transaction to the XRPL ledger.
- * Reserved for future XRPL integration.
- */
-async function _submitTransaction(_txJson: object): Promise<{
-  hash: string;
-  status: string;
-}> {
-  // In production: Call Python service for actual submission
-  // Mock response for demonstration
-  const mockHash = '0' + Math.random().toString(36).substring(2, 65);
-  
-  return {
-    hash: mockHash,
-    status: 'submitted',
-  };
-}
-
-/**
- * Wait for XRPL Confirmation
- * 
- * Polls the ledger for transaction confirmation.
- * XRPL typically confirms in 3-5 seconds.
- * Reserved for future XRPL integration.
- */
-async function _waitForConfirmation(
-  _hash: string,
-  _onProgress: (status: string) => void
-): Promise<{ confirmed: boolean; ledger?: number }> {
-  const maxAttempts = 8;
-  const intervalMs = 500;
-  
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    _onProgress(`Checking ledger... (${attempt + 1}/${maxAttempts})`);
-    
-    // In production: Call XRPL to check transaction status
-    // Mock: succeed after ~2 seconds
-    if (attempt >= 4) {
-      return {
-        confirmed: true,
-        ledger: 89000000 + attempt,
-      };
-    }
-    
-    await new Promise(resolve => setTimeout(resolve, intervalMs));
-  }
-  
-  return { confirmed: false };
-}
-
-/**
- main
  * SSE Encoder for streaming responses
  */
 function createSSEEncoder() {
@@ -165,14 +110,7 @@ function createSSEEncoder() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
- feat/perf-cwv-zero-mocks
     const { prompt } = body;
-
-    const { prompt, userId: _userId, walletAddress: _walletAddress } = body;
-    // Reserved for future user-specific transaction features
-    void _userId;
-    void _walletAddress;
- main
     
     if (!prompt) {
       return NextResponse.json(
@@ -230,15 +168,7 @@ export async function POST(request: NextRequest) {
           }
         }
         
- feat/perf-cwv-zero-mocks
         // Stream response: if transaction detected, send confirm message; else generic ack
-
-        // Simulate AI streaming response (in production, this would be the actual AI stream)
-        // Reserved for future use in actual AI response streaming
-        const _aiResponse = `I've analyzed your request to ${intent ? intent.type.toLowerCase().replace(/_/g, ' ') : 'process your query'}. `;
-        void _aiResponse;
-        
- main
         if (intent && preSignedTx) {
           const confirmMessage = `I've detected you want to ${intent.type.replace(/_/g, ' ').toLowerCase()} ${intent.amount || ''} ${intent.currency || 'XRP'}. Click confirm to execute this transaction on the XRPL, which typically settles in 3-5 seconds.`;
           
