@@ -14,41 +14,40 @@ export interface SensoryPrefs {
 const KEY = 'apex-sensory';
 
 export function useSensoryPreferences(): SensoryPrefs {
-  // All initial values derived via lazy initializers — no setState calls in effects
-  const [audio, setAudio] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true;
+  // Start with safe defaults (no localStorage access during SSR)
+  const [audio, setAudio] = useState<boolean>(true);
+  const [haptics, setHaptics] = useState<boolean>(true);
+  const [motion, setMotion] = useState<boolean>(true);
+  const [isTouchDevice, setIsTouchDevice] = useState<boolean>(false);
+  const [mounted, setMounted] = useState(false);
+
+  // Load preferences from localStorage after mount (client-side only)
+  useEffect(() => {
+    setMounted(true);
+    
     try {
       const stored = JSON.parse(localStorage.getItem(KEY) || 'null');
-      return stored?.audio ?? true;
-    } catch { return true; }
-  });
+      if (stored) {
+        if (typeof stored.audio === 'boolean') setAudio(stored.audio);
+        if (typeof stored.haptics === 'boolean') setHaptics(stored.haptics);
+        if (typeof stored.motion === 'boolean') setMotion(stored.motion);
+      }
+    } catch {
+      // private browsing or corrupted data — ignore
+    }
 
-  const [haptics, setHaptics] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true;
-    try {
-      const stored = JSON.parse(localStorage.getItem(KEY) || 'null');
-      return stored?.haptics ?? true;
-    } catch { return true; }
-  });
+    // Check touch device
+    setIsTouchDevice(
+      window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0
+    );
 
-  const [motion, setMotion] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true;
+    // Check reduced motion preference
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reducedMotion) return false;
-    try {
-      const stored = JSON.parse(localStorage.getItem(KEY) || 'null');
-      return stored?.motion ?? true;
-    } catch { return true; }
-  });
-
-  const isTouchDevice = useMemo<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    return window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+    if (reducedMotion) setMotion(false);
   }, []);
 
+  // Listen for OS motion-preference changes
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    // Only responsibility: react to OS motion-preference changes at runtime
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
     const handler = (e: MediaQueryListEvent) => {
       if (e.matches) setMotion(false);
@@ -57,14 +56,15 @@ export function useSensoryPreferences(): SensoryPrefs {
     return () => mq.removeEventListener('change', handler);
   }, []);
 
-  // Persist preferences on change
+  // Persist preferences on change (only after mount)
   useEffect(() => {
+    if (!mounted) return;
     try {
       localStorage.setItem(KEY, JSON.stringify({ audio, haptics, motion }));
     } catch {
       // private browsing — ignore
     }
-  }, [audio, haptics, motion]);
+  }, [audio, haptics, motion, mounted]);
 
   const toggle = useCallback((ch: 'audio' | 'haptics' | 'motion') => {
     if (ch === 'audio') setAudio((v) => !v);
