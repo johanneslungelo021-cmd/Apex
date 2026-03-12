@@ -55,6 +55,8 @@ import { useMultiSensory } from '@/hooks/useMultiSensory';
 
 // WebGL Swarm: pulls Three.js + R3F + Drei — the heaviest bundle on the page.
 // Dynamic import ensures it is completely absent from the initial JS payload.
+// NOTE: Even with ssr:false, the chunk is preloaded. We use a separate lazy trigger
+// below to defer loading until after the page is interactive (requestIdleCallback).
 const SentientCanvasScene = dynamic(
   () => import('@/components/sentient/SentientCanvasScene'),
   {
@@ -154,6 +156,20 @@ function SentientInterfaceInner() {
   const [githubMetrics, setGithubMetrics] = useState<LiveGitHubMetrics | null>(null);
   const [metricsLoading, setMetricsLoading] = useState(true);
 
+  // ─── Performance: Defer Three.js until after page is interactive ─────────────
+  // Don't render WebGL until browser is idle (after FCP + hydration).
+  // This prevents the 226KB Three.js chunk from blocking the main thread.
+  const [showWebGL, setShowWebGL] = useState(false);
+  useEffect(() => {
+    // Use requestIdleCallback if available, otherwise setTimeout
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      const idleId = window.requestIdleCallback(() => setShowWebGL(true), { timeout: 2000 });
+      return () => window.cancelIdleCallback(idleId);
+    } else {
+      const timeoutId = setTimeout(() => setShowWebGL(true), 1500);
+      return () => clearTimeout(timeoutId);
+    }
+  }, []);
 
   /**
    * Perf: React 18 concurrent transitions.
@@ -259,6 +275,7 @@ function SentientInterfaceInner() {
   useEffect(() => {
     fetch('/api/analytics', { method: 'POST' }).catch(() => {});
     void fetchNews(activeCategoryRef.current);
+    
     const newsInterval = setInterval(
       () => { void fetchNews(activeCategoryRef.current); },
       10 * 60 * 1000
@@ -574,23 +591,28 @@ function SentientInterfaceInner() {
   return (
     <div className="min-h-screen bg-zinc-950 text-white relative">
       {/* Phase 1: Emotion-reactive WebGL swarm */}
-      <div className="fixed inset-0 -z-10 opacity-60 mix-blend-screen pointer-events-none">
-        {/*
-         * Perf: ReducedMotionGate checks window.matchMedia('prefers-reduced-motion').
-         * When active it returns a static gradient — Three.js never loads, zero WebGL
-         * cost.  For all other users SentientCanvasScene loads post-FCP via dynamic().
-         */}
-        <ReducedMotionGate>
-          <Suspense fallback={null}>
-            {/*
-             * Fix 2: SentientCanvasScene is dynamically imported with ssr:false.
-             * Three.js (~500KB) now loads AFTER FCP — browser paints text content first.
-             * The fixed container is already in the DOM; canvas slot is reserved.
-             */}
-            <SentientCanvasScene />
-          </Suspense>
-        </ReducedMotionGate>
-      </div>
+      {/* Static gradient background always renders for instant visual feedback */}
+      <div className="fixed inset-0 -z-10 opacity-60 mix-blend-screen pointer-events-none bg-gradient-to-b from-neutral-950 via-neutral-900/80 to-neutral-950" aria-hidden="true" />
+      {/* WebGL canvas only renders after browser is idle (requestIdleCallback) */}
+      {showWebGL && (
+        <div className="fixed inset-0 -z-10 opacity-60 mix-blend-screen pointer-events-none">
+          {/*
+           * Perf: ReducedMotionGate checks window.matchMedia('prefers-reduced-motion').
+           * When active it returns a static gradient — Three.js never loads, zero WebGL
+           * cost.  For all other users SentientCanvasScene loads post-FCP via dynamic().
+           */}
+          <ReducedMotionGate>
+            <Suspense fallback={null}>
+              {/*
+               * Fix 2: SentientCanvasScene is dynamically imported with ssr:false.
+               * Three.js (~500KB) now loads AFTER FCP — browser paints text content first.
+               * The fixed container is already in the DOM; canvas slot is reserved.
+               */}
+              <SentientCanvasScene />
+            </Suspense>
+          </ReducedMotionGate>
+        </div>
+      )}
 
       {/* Phase 1: Custom magnetic cursor (desktop only) */}
       <MagneticReticle />
