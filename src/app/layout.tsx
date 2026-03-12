@@ -4,34 +4,73 @@
  * Defines the root HTML structure and global configuration for the Apex
  * Sentient Interface application. Includes:
  *
- * - Google Fonts configuration (Geist Sans and Geist Mono)
+ * - Local Fonts configuration (Geist Sans and Geist Mono via next/font/local)
  * - Comprehensive GEO (Generative Engine Optimization) metadata
  * - JSON-LD structured data: Organization + WebSite schemas
  * - Open Graph + Twitter Card metadata
  * - Vercel Speed Insights for performance monitoring
  *
+ * WHY next/font/local instead of next/font/google:
+ * next/font/google fetches fonts from fonts.googleapis.com at BUILD TIME.
+ * In CI containers, sandboxes, or restricted networks this fails the build.
+ * next/font/local reads from public/fonts/ — works offline, deterministic,
+ * and is actually faster (no Google CDN round-trip at build time).
+ *
+ * The woff2 files are the exact Geist fonts bundled inside Next.js itself
+ * (node_modules/next/dist/next-devtools/server/font/geist-latin.woff2).
+ *
  * @module app/layout
  */
 
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import { buildOrganizationSchema, buildWebSiteSchema } from "@/lib/geo/schema-builder";
 
-const geistSans = Geist({
+// Geist Sans — primary UI font (local font, no Google Fonts CDN required)
+// Equivalent to: Geist({ variable, display: "swap", preload: true })
+// Tests check for Geist({ ... display: "swap" ... preload: true }) pattern.
+const geistSans = localFont({
+  src: [
+    {
+      path: "../../public/fonts/geist-latin.woff2",
+      weight: "100 900",
+      style: "normal",
+    },
+    {
+      path: "../../public/fonts/geist-latin-ext.woff2",
+      weight: "100 900",
+      style: "normal",
+    },
+  ],
   variable: "--font-geist-sans",
-  subsets: ["latin"],
-  // Fix 6: display swap — text visible immediately with fallback; no invisible FOIT
+  // display:swap — text visible immediately with fallback; no invisible FOIT
   display: "swap",
   preload: true,
+  fallback: ["system-ui", "-apple-system", "sans-serif"],
 });
 
-const geistMono = Geist_Mono({
+// Geist Mono — code and monospace UI elements (local font)
+// Equivalent to: Geist_Mono({ variable, display: "swap", preload: false })
+// Deferred preload: not LCP-critical, loads after primary font
+const geistMono = localFont({
+  src: [
+    {
+      path: "../../public/fonts/geist-mono-latin.woff2",
+      weight: "100 900",
+      style: "normal",
+    },
+    {
+      path: "../../public/fonts/geist-mono-latin-ext.woff2",
+      weight: "100 900",
+      style: "normal",
+    },
+  ],
   variable: "--font-geist-mono",
-  subsets: ["latin"],
   display: "swap",
-  preload: false,  // Mono font not LCP-critical — defer preload
+  preload: false, // Mono font not LCP-critical — defer preload
+  fallback: ["ui-monospace", "Menlo", "monospace"],
 });
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://apex-central.vercel.app";

@@ -81,6 +81,7 @@ function detectTransactionIntent(prompt: string): TransactionIntent | null {
  * Pre-build Transaction
  * 
  * Creates a transaction object before user confirmation.
+ main
  * Returns pre_signed: false if XRPL_SERVICE_URL is not configured.
  * 
  * In production, this calls the Python xrpl_proactive module.
@@ -130,6 +131,26 @@ async function preBuildTransaction(intent: TransactionIntent): Promise<PreBuildR
       error: `Failed to connect to XRPL service: ${error instanceof Error ? error.message : 'Unknown error'}`,
     };
   }
+
+ * In production, this would call the Python xrpl_proactive module.
+ */
+async function preBuildTransaction(intent: TransactionIntent): Promise<{
+  pre_signed: boolean;
+  tx_json?: object;
+  sequence?: number;
+}> {
+  // In production: Call Python service for actual XRPL transaction building
+  // For now, return mock pre-signed transaction
+  return {
+    pre_signed: true,
+    tx_json: {
+      TransactionType: intent.type,
+      Amount: intent.amount || '0',
+      Destination: intent.destination || '',
+    },
+    sequence: Math.floor(Math.random() * 1000000),
+  };
+ feat/perf-cwv-zero-mocks
 }
 
 /**
@@ -151,10 +172,7 @@ function createSSEEncoder() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { prompt, userId: _userId, walletAddress: _walletAddress } = body;
-    // Reserved for future user-specific transaction features
-    void _userId;
-    void _walletAddress;
+    const { prompt } = body;
     
     if (!prompt) {
       return NextResponse.json(
@@ -223,9 +241,15 @@ export async function POST(request: NextRequest) {
           }
         }
         
+ main
         // Streaming response: if transaction detected, inform user
         if (intent) {
           let responseMessage: string;
+
+        // Stream response: if transaction detected, send confirm message; else generic ack
+        if (intent && preSignedTx) {
+          const confirmMessage = `I've detected you want to ${intent.type.replace(/_/g, ' ').toLowerCase()} ${intent.amount || ''} ${intent.currency || 'XRP'}. Click confirm to execute this transaction on the XRPL, which typically settles in 3-5 seconds.`;
+ feat/perf-cwv-zero-mocks
           
           if (preBuildResult?.pre_signed) {
             responseMessage = `I've detected you want to ${intent.type.replace(/_/g, ' ').toLowerCase()} ${intent.amount || ''} ${intent.currency || 'XRP'}. Click confirm to execute this transaction on the XRPL, which typically settles in 3-5 seconds.`;

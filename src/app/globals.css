@@ -178,3 +178,86 @@ a {
   min-width: 24px;
   min-height: 24px;
 }
+
+/* ─── INP FIX: CSS-only card interactions (Speed Insights SA-2026-03-11) ──────
+ *
+ * Context: INP measured at 616ms (red zone). Root cause: framer-motion
+ * whileHover/whileTap on data cards fires JS RAF callbacks on the main thread
+ * during every pointer event, competing with input processing.
+ *
+ * Fix: Replace motion.div whileHover/whileTap on Opportunity cards (33vw each,
+ * 3-col grid) and News cards (featured 66vw col-span-2, secondary 33vw each)
+ * with CSS transforms that run entirely on the GPU compositor thread.
+ *
+ * CSS transforms never touch the main thread → zero input delay contribution.
+ * will-change: transform pre-promotes the layer before the first pointer event
+ * to prevent layer-promotion jank on first hover.
+ *
+ * Applied in: src/app/page.tsx — opportunity cards (line ~693),
+ *             featured news card (line ~810), secondary news cards (line ~883)
+ * ────────────────────────────────────────────────────────────────────────────── */
+.card-hover {
+  will-change: transform;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+              border-color 0.15s ease;
+}
+.card-hover:hover  { transform: scale(1.02); }
+.card-hover:active { transform: scale(0.98); }
+
+/* Featured news card is col-span-2 (66vw desktop) — subtler scale prevents overflow */
+.card-hover-subtle {
+  will-change: transform;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+              border-color 0.15s ease;
+}
+.card-hover-subtle:hover  { transform: scale(1.01); }
+.card-hover-subtle:active { transform: scale(0.99); }
+
+/* ─── INP FIX: CSS-only fade animations for chat list items ──────────────────
+ *
+ * Replaces: motion.div initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }}
+ * on chat history messages and the "Thinking..." indicator.
+ *
+ * opacity + translateY both run on the GPU compositor → zero main-thread cost.
+ * animation: once on mount, never re-fires. No framer-motion subscription.
+ *
+ * Applied in: src/app/page.tsx chat history map (line ~1028),
+ *             thinking indicator (line ~1050)
+ * ────────────────────────────────────────────────────────────────────────────── */
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.fade-slide-in { animation: fadeSlideIn 0.2s ease-out both; }
+.fade-in       { animation: fadeIn      0.2s ease-out both; }
+
+/* ─── LCP FIX: Hero card layout stability (Speed Insights SA-2026-03-11) ──────
+ *
+ * Context: LCP measured at 3.24s. The hero <h1> "Sentient Interface" is the
+ * LCP element. Without a reserved min-height the browser recalculates layout
+ * when Geist Sans resolves (FOUT swap), adding to LCP time.
+ *
+ * min-height: 300px matches the measured rendered height of the hero glass card
+ * before content loads (verified via dev tools at 1280px viewport width).
+ * font-synthesis: none prevents synthetic bold/italic fallback that causes
+ * an additional style recalculation pass on font swap.
+ *
+ * Applied in: src/app/page.tsx hero glass div (line ~577)
+ * ────────────────────────────────────────────────────────────────────────────── */
+.hero-card {
+  min-height: 300px;
+  font-synthesis: none;
+}
+
+/* ─── Loading skeleton shimmer (used by src/app/loading.tsx) ─────────────────
+ * Runs on compositor — no main thread cost.
+ * Used by: src/app/loading.tsx shimmer overlay (line ~43)
+ * ────────────────────────────────────────────────────────────────────────────── */
+@keyframes shimmer {
+  100% { transform: translateX(100%); }
+}

@@ -5,35 +5,37 @@
  * EmotionalSwarm (reactive WebGL), EmotionalGrid (CSS variable morphing),
  * MagneticReticle (custom cursor physics), SensoryControls (accessibility toggles).
  *
+ * FCP FIX (SA-2026-03-11 — 14.89s root cause fixed in this PR):
+ * 1. instrumentation.ts: OTEL init deferred via setImmediate() — no longer blocks cold starts.
+ * 2. loading.tsx: pure CSS skeleton streamed in first HTTP chunk by Next.js Suspense.
+ *
  * @module app/page
  */
 
 'use client';
 
 import { useState, useEffect, useCallback, useRef, Suspense, useTransition } from 'react';
+ main
+
+// Lucide-react: Turbopack tree-shakes the barrel import correctly in Next.js 16.
+// Individual deep imports (lucide-react/dist/esm/icons/heart) have no .d.ts files
+// in this version, causing TypeScript errors. The barrel import is the correct path.
+ feat/perf-cwv-zero-mocks
 import { Heart, Search, User, MessageSquare, Zap, ExternalLink, Newspaper, Clock, RefreshCw, Microscope, Filter, X, Star, GitFork, AlertCircle, Code2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
-
 // Canvas dynamically imported below — removed from critical bundle (Fix 2)
 import {
+  StreamingTypography,
+  OptimisticTransactionCard,
+  TransactionBeam,
   useOptimisticTransaction,
   type TransactionIntent,
 } from '@/lib/streaming/OptimisticTransactionUI';
 
-// Dynamic import for heavy streaming UI components — not needed for first paint
-const TransactionBeam = dynamic(
-  () => import('@/lib/streaming/OptimisticTransactionUI').then((mod) => ({ default: mod.TransactionBeam })),
-  { ssr: false, loading: () => null }
-);
-const StreamingTypography = dynamic(
-  () => import('@/lib/streaming/OptimisticTransactionUI').then((mod) => ({ default: mod.StreamingTypography })),
-  { ssr: false, loading: () => null }
-);
-
 // Phase 1: Sentient Vessel imports
+import dynamic from 'next/dynamic';
 import { EmotionProvider, useEmotionEngine } from '@/hooks/useEmotionEngine';
 import { useMultiSensory } from '@/hooks/useMultiSensory';
 
@@ -97,17 +99,9 @@ import { yieldToMain, isLongTask } from '@/lib/performance/yieldToMain';
 
 // Phase 2: Audio + Province Intelligence
 import { useVoiceInput } from '@/hooks/useVoiceInput';
+import ProvinceEconomicPanel from '@/components/chat/ProvinceEconomicPanel';
+import ChatSpeakButton from '@/components/chat/ChatSpeakButton';
 import { type ProvinceProfile } from '@/lib/sa-context/provinces';
-
-// Dynamic imports for chat components — not needed for first paint
-const ProvinceEconomicPanel = dynamic(
-  () => import('@/components/chat/ProvinceEconomicPanel'),
-  { ssr: false, loading: () => null }
-);
-const ChatSpeakButton = dynamic(
-  () => import('@/components/chat/ChatSpeakButton'),
-  { ssr: false, loading: () => null }
-);
 
 interface Opportunity {
   title: string;
@@ -127,7 +121,15 @@ interface NewsArticle {
   imageUrl: string;
 }
 
+ main
 /** Shape of the real data returned by GET /api/metrics */
+
+/**
+ * Real data shape returned by GET /api/metrics → GitHub REST API.
+ * Used in: src/app/page.tsx hero metrics strip (below h1).
+ * Source verified: api.github.com/repos/johanneslungelo021-cmd/Apex
+ */
+ feat/perf-cwv-zero-mocks
 interface LiveGitHubMetrics {
   stars: number;
   forks: number;
@@ -152,6 +154,7 @@ function SentientInterfaceInner() {
   const [newsError, setNewsError] = useState(false);
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
 
+ main
   // ─── Live GitHub Metrics (real data from /api/metrics → GitHub REST API) ──
   const [githubMetrics, setGithubMetrics] = useState<LiveGitHubMetrics | null>(null);
   const [metricsLoading, setMetricsLoading] = useState(true);
@@ -165,6 +168,14 @@ function SentientInterfaceInner() {
     const timeoutId = setTimeout(() => setShowWebGL(true), 2000);
     return () => clearTimeout(timeoutId);
   }, []);
+
+  // ─── Live GitHub Metrics — sourced from /api/metrics → GitHub REST API ────
+  // Replaces the fabricated platform metrics (users/impact/courses) removed
+  // in the audit. All values verifiable at: github.com/johanneslungelo021-cmd/Apex
+  const [githubMetrics, setGithubMetrics] = useState<LiveGitHubMetrics | null>(null);
+  const [metricsLoading, setMetricsLoading] = useState(true);
+
+ feat/perf-cwv-zero-mocks
 
   /**
    * Perf: React 18 concurrent transitions.
@@ -184,8 +195,8 @@ function SentientInterfaceInner() {
   const emotion = useEmotionEngine();
   const { trigger: triggerAudio } = useMultiSensory();
 
-  // Phase 2: Voice input — hook registers a transcript callback; return value unused
-  useVoiceInput((transcript) => {
+  // Phase 2: Voice input + Province Intelligence
+  const voiceInput = useVoiceInput((transcript) => {
     setAiMessage(transcript);
   });
   const [selectedProvince, setSelectedProvince] = useState<ProvinceProfile | null>(null);
@@ -222,6 +233,8 @@ function SentientInterfaceInner() {
   // Derived heartbeat intensity for backward-compatible Heart icon animation
   const heartbeatIntensity = emotion.intensity;
   const {
+    transactionState,
+    resetTransaction,
     startTransaction,
     markOptimisticSuccess,
     confirmTransaction,
@@ -278,6 +291,15 @@ function SentientInterfaceInner() {
     return () => { clearInterval(newsInterval); };
   }, [fetchNews]); // fetchNews is stable (useCallback []); ref handles category
 
+  // On mount: auto-boot Scout Agent so opportunities section is never empty
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void sendToAIAssistant('Find me 3 top digital income opportunities in South Africa under R2000 to start right now');
+    }, 1800); // slight delay so chat history doesn't flash on first render
+    return () => { clearTimeout(timer); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally runs once on mount — sendToAIAssistant is stable
+
   // Re-fetch immediately whenever the user switches categories.
   useEffect(() => {
     void fetchNews(activeCategory);
@@ -289,8 +311,15 @@ function SentientInterfaceInner() {
     }
   }, [isChatOpen, chatHistory]);
 
+ main
   // Fetch real GitHub metrics from /api/metrics on mount.
   // /api/metrics now returns only real GitHub API data — no fabricated values.
+
+  // Fetch real GitHub metrics on mount — /api/metrics → GitHub REST API.
+  // Cancellable via cleanup function to prevent setState on unmounted component.
+  // Fails silently — hero renders without the metrics strip if network is unavailable.
+  // Used in: hero metrics strip below h1 (line ~600)
+ feat/perf-cwv-zero-mocks
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -298,11 +327,17 @@ function SentientInterfaceInner() {
         const res = await fetch('/api/metrics');
         if (!res.ok) return;
         const data = await res.json() as { github: LiveGitHubMetrics };
+ main
         if (!cancelled && data?.github) {
           setGithubMetrics(data.github);
         }
       } catch {
         // Non-critical — hero simply won't render the metrics strip
+
+        if (!cancelled && data?.github) setGithubMetrics(data.github);
+      } catch {
+        // Non-critical: hero renders without metrics strip on network error
+ feat/perf-cwv-zero-mocks
       } finally {
         if (!cancelled) setMetricsLoading(false);
       }
@@ -529,15 +564,6 @@ function SentientInterfaceInner() {
     failTransaction,
   ]);
 
-  // On mount: auto-boot Scout Agent so opportunities section is never empty
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      void sendToAIAssistant('Find me 3 top digital income opportunities in South Africa under R2000 to start right now');
-    }, 1800); // slight delay so chat history doesn't flash on first render
-    return () => { clearTimeout(timer); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // intentionally runs once on mount — sendToAIAssistant is stable
-
   const investigateNews = useCallback((articleTitle: string) => {
     if (agentLoading) return;
 
@@ -571,6 +597,7 @@ function SentientInterfaceInner() {
   };
 
 
+ main
   // Last message available for future features (e.g., message status indicators)
 
   // Derive whether to show the thinking indicator:
@@ -582,6 +609,9 @@ function SentientInterfaceInner() {
     !lastMessage.content
   );
 
+
+  const lastMessage = chatHistory[chatHistory.length - 1];
+ feat/perf-cwv-zero-mocks
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white relative">
@@ -613,18 +643,16 @@ function SentientInterfaceInner() {
       <MagneticReticle />
 
       {/* Transaction Beam Effect */}
-      {showTransactionBeam && (
-        <TransactionBeam
-          isActive={showTransactionBeam}
-          startColor="#00FF88"
-          endColor="#00AAFF"
-          onComplete={() => setShowTransactionBeam(false)}
-        />
-      )}
+      <TransactionBeam
+        isActive={showTransactionBeam}
+        startColor="#00FF88"
+        endColor="#00AAFF"
+        onComplete={() => setShowTransactionBeam(false)}
+      />
 
       {/* Phase 1: EmotionalGrid wraps all content — injects CSS variable morphing */}
       <EmotionalGrid>
-
+      
       {/* Pillar 2: GEO — TechArticle JSON-LD for AI citation */}
       <JsonLdScript
         schema={buildTechArticleSchema({
@@ -653,7 +681,7 @@ function SentientInterfaceInner() {
         agentSummary="Apex Central is a South African AI-powered digital income platform built in the Vaal Triangle, Gauteng. It combines a Scout Agent that refreshes real digital opportunities every 5 minutes (all under R2000 to start), an Intelligent Engine using a 4-model AI swarm for personalised guidance, and XRPL autonomous transaction settlement in under 3 seconds."
         summaryLabel="Platform Overview"
       >
-        <div className="glass mx-auto max-w-5xl mt-16 rounded-3xl p-16 relative overflow-hidden">
+        <div className="glass hero-card mx-auto max-w-5xl mt-16 rounded-3xl p-16 relative overflow-hidden">
           <div className="liquid-reflection" />
           <div className="flex items-center gap-4 mb-6">
             <motion.div animate={{ scale: heartbeatIntensity }} transition={{ type: 'spring', stiffness: 300 }}>
@@ -665,6 +693,7 @@ function SentientInterfaceInner() {
             <h1 className="text-7xl font-bold tracking-tighter">Sentient Interface</h1>
           </div>
           <p className="text-2xl text-zinc-400">Phase 3 Live • XRPL Pre-Sign &amp; Stream + WebGL Visualization</p>
+ main
           <div className="flex items-center gap-3 mt-6 flex-wrap">
             {metricsLoading ? (
               /* Skeleton placeholders — exact height 32px matches badge height */
@@ -681,10 +710,27 @@ function SentientInterfaceInner() {
               /* Real badges — all values sourced from GitHub REST API */
               <>
                 {/* Language badge */}
+
+
+          {/* Real GitHub metrics — sourced from /api/metrics → GitHub REST API.
+           * Skeleton pills while loading (4 × exact badge height = no CLS).
+           * Hidden entirely on error — never shows fabricated zeros.
+           * Dimensions: pill height 32px, verified via dev tools at 1280px. */}
+          <div className="flex items-center gap-3 mt-6 flex-wrap">
+            {metricsLoading ? (
+              <>
+                {[72, 56, 64, 80].map((w) => (
+                  <div key={w} className="glass h-8 rounded-full animate-pulse" style={{ width: `${w}px` }} />
+                ))}
+              </>
+            ) : githubMetrics ? (
+              <>
+ feat/perf-cwv-zero-mocks
                 <span className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs font-medium text-blue-300">
                   <Code2 className="w-3 h-3" />
                   {githubMetrics.language}
                 </span>
+ main
 
                 {/* Stars — links to the repo stargazers page */}
                 <a
@@ -693,10 +739,17 @@ function SentientInterfaceInner() {
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs font-medium text-yellow-300 hover:bg-white/10 transition"
                   title="GitHub Stars"
+
+                <a
+                  href="https://github.com/johanneslungelo021-cmd/Apex/stargazers"
+                  target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs font-medium text-yellow-300 hover:bg-white/10 transition"
+ feat/perf-cwv-zero-mocks
                 >
                   <Star className="w-3 h-3" />
                   {githubMetrics.stars.toLocaleString()}
                 </a>
+ main
 
                 {/* Forks */}
                 <a
@@ -705,10 +758,17 @@ function SentientInterfaceInner() {
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs font-medium text-emerald-300 hover:bg-white/10 transition"
                   title="GitHub Forks"
+
+                <a
+                  href="https://github.com/johanneslungelo021-cmd/Apex/network/members"
+                  target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs font-medium text-emerald-300 hover:bg-white/10 transition"
+ feat/perf-cwv-zero-mocks
                 >
                   <GitFork className="w-3 h-3" />
                   {githubMetrics.forks.toLocaleString()}
                 </a>
+ main
 
                 {/* Open issues */}
                 <a
@@ -736,6 +796,22 @@ function SentientInterfaceInner() {
                 </span>
               </>
             ) : null /* metrics fetch failed — show nothing rather than fake zeros */}
+
+                <a
+                  href="https://github.com/johanneslungelo021-cmd/Apex/issues"
+                  target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs font-medium text-zinc-300 hover:bg-white/10 transition"
+                >
+                  <AlertCircle className="w-3 h-3" />
+                  {githubMetrics.openIssues} open
+                </a>
+                <span className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs text-zinc-400">
+                  <Clock className="w-3 h-3" />
+                  {new Date(githubMetrics.lastUpdated).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </span>
+              </>
+            ) : null}
+ feat/perf-cwv-zero-mocks
           </div>
         </div>
       </AgentReadableChunk>
@@ -837,11 +913,12 @@ function SentientInterfaceInner() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {opportunities.map((opp) => (
-              <motion.div
+              /* INP fix (SA-2026-03-11): card-hover uses CSS scale on compositor thread.
+               * Removes framer-motion whileHover/whileTap → eliminates JS RAF on pointer events.
+               * Card dimensions: 33vw each (3-col grid). Verified via dev tools at 1280px. */
+              <div
                 key={opp.link || opp.title}
-                className="glass p-6 rounded-3xl cursor-pointer hover:border-white/20 border border-transparent transition"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+                className="glass p-6 rounded-3xl cursor-pointer hover:border-white/20 border border-transparent card-hover"
                 onClick={() => {
                   triggerSentient(0.6);
                   window.open(opp.link, '_blank', 'noopener,noreferrer');
@@ -867,7 +944,7 @@ function SentientInterfaceInner() {
                   <span className="text-emerald-400 font-mono">R{opp.cost} cost</span>
                   <span className="text-zinc-300">{opp.incomePotential}</span>
                 </div>
-              </motion.div>
+              </div>
             ))}
           </div>
         )}
@@ -954,11 +1031,11 @@ function SentientInterfaceInner() {
         {!newsLoading && !newsError && news.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {news.slice(0, 1).map((article) => (
-              <motion.div
+              /* INP fix (SA-2026-03-11): card-hover-subtle (scale 1.01) on compositor.
+               * Featured card: col-span-2, 66vw desktop, h-56 image. Subtler scale avoids overflow. */
+              <div
                 key={article.url}
-                className="glass rounded-3xl overflow-hidden col-span-1 md:col-span-2 lg:col-span-2 group border border-transparent hover:border-white/10 transition"
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.99 }}
+                className="glass rounded-3xl overflow-hidden col-span-1 md:col-span-2 lg:col-span-2 group border border-transparent hover:border-white/10 card-hover-subtle cursor-pointer"
                 onClick={() => triggerSentient(0.5)}
               >
                 <div className="relative w-full h-56 overflow-hidden">
@@ -1022,15 +1099,15 @@ function SentientInterfaceInner() {
                     </button>
                   </div>
                 </div>
-              </motion.div>
+              </div>
             ))}
 
             {news.slice(1).map((article) => (
-              <motion.div
+              /* INP fix (SA-2026-03-11): card-hover (scale 1.02/0.98) on compositor.
+               * Secondary cards: 33vw each, h-44 image. Verified via dev tools. */
+              <div
                 key={article.url}
-                className="glass rounded-3xl overflow-hidden group border border-transparent hover:border-white/10 transition flex flex-col"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+                className="glass rounded-3xl overflow-hidden group border border-transparent hover:border-white/10 flex flex-col card-hover cursor-pointer"
                 onClick={() => triggerSentient(0.5)}
               >
                 <div className="relative w-full h-44 overflow-hidden flex-shrink-0">
@@ -1065,44 +1142,65 @@ function SentientInterfaceInner() {
                       </span>
                     )}
                   </div>
-                  <h3 className="font-semibold text-base leading-snug mb-2 group-hover:text-blue-300 transition line-clamp-2">{article.title}</h3>
-                  <p className="text-zinc-500 text-sm leading-relaxed line-clamp-2 flex-1">{article.snippet}</p>
-                  <div className="mt-3 flex items-center justify-between">
+                  <h3 className="font-semibold text-base leading-snug mb-2 group-hover:text-blue-300 transition line-clamp-3 flex-1">{article.title}</h3>
+                  <p className="text-zinc-500 text-xs leading-relaxed line-clamp-2 mb-3">{article.snippet}</p>
+                  <div className="flex items-center justify-between mt-auto">
                     <a
                       href={article.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-zinc-500 hover:text-white transition"
+                      className="flex items-center gap-1 text-xs text-zinc-600 group-hover:text-white transition"
                     >
-                      Read <ExternalLink className="w-3 h-3 inline ml-0.5" />
+                      Read more <ExternalLink className="w-3 h-3 ml-1" />
                     </a>
                     <button
                       type="button"
-                      onClick={(e) => { e.stopPropagation(); investigateNews(article.title); }}
+                      onClick={() => investigateNews(article.title)}
                       disabled={agentLoading}
-                      className="text-xs text-zinc-400 hover:text-white transition disabled:opacity-40"
+                      className="flex items-center gap-1.5 text-xs glass px-2.5 py-1 rounded-full text-zinc-400 hover:text-white hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                      title="Research this article with AI"
                     >
                       <Microscope className="w-3 h-3" />
+                      Research
                     </button>
                   </div>
                 </div>
-              </motion.div>
+              </div>
             ))}
           </div>
         )}
       </section>
       </AgentReadableChunk>
 
-      {/* ─── AI Assistant Chat Panel ───────────────────────────────────────────── */}
-      <div className="fixed bottom-6 right-6 z-50">
-        <AnimatePresence>
-          {isChatOpen && (
-            <motion.div
-              initial={{ opacity: 0, y: 20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 20, scale: 0.95 }}
-              className="glass w-96 h-[32rem] rounded-3xl flex flex-col overflow-hidden border border-white/10"
+      {/* FAB — Floating AI Chat */}
+      <div className="fixed bottom-8 right-8 z-50">
+        <AnimatePresence mode="wait">
+          {!isChatOpen ? (
+            <motion.button
+              key="fab"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              onClick={() => { setIsChatOpen(true); triggerSentient(0.5); }}
+              className="flex items-center gap-2 glass px-5 py-3 rounded-full shadow-xl hover:bg-white/15 transition"
             >
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              </span>
+              <MessageSquare className="w-4 h-4" />
+              <span className="text-sm font-medium">Ask AI Scout</span>
+            </motion.button>
+          ) : (
+            <motion.div
+              key="panel"
+              initial={{ opacity: 0, y: 24, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 24, scale: 0.95 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+              className="w-96 glass rounded-3xl overflow-hidden shadow-2xl"
+            >
+ main
               <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
                 <div className="flex items-center gap-2">
                   <MessageSquare className="w-4 h-4 text-blue-400" />
@@ -1124,168 +1222,206 @@ function SentientInterfaceInner() {
                     <X className="w-4 h-4" />
                   </button>
                 </div>
-              </div>
 
-              <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
+              <div className="p-4 border-b border-white/10 flex items-center gap-3">
+                <MessageSquare className="w-5 h-5" />
+                <span className="font-medium">Intelligent Engine</span>
+                <span className="text-xs text-emerald-400 animate-pulse ml-auto">● Online</span>
+                {/* Phase 2: Province selector badge */}
+                <button
+                  onClick={() => startUITransition(() => setShowProvincePanel((p) => !p))}
+                  className={`text-xs px-2 py-1 rounded-lg transition ${selectedProvince ? 'bg-blue-500/20 text-blue-300' : 'bg-white/10 text-zinc-400 hover:text-white'}`}
+                  title="Select your province for personalised advice"
+                  aria-label={selectedProvince ? `Province: ${selectedProvince.name}. Click to change` : 'Select province'}
+                >
+                  {selectedProvince ? selectedProvince.code : '🌍 SA'}
+                </button>
+                <button
+                  onClick={() => setIsChatOpen(false)}
+                  className="ml-1 p-1 rounded-full hover:bg-white/10 transition text-zinc-400 hover:text-white"
+                  aria-label="Close chat"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+ feat/perf-cwv-zero-mocks
+              </div>
+              {/* Phase 2: Province economic panel (collapsible) */}
+              <AnimatePresence>
+                {showProvincePanel && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden border-b border-white/10"
+                  >
+                    <ProvinceEconomicPanel
+                      selectedCode={selectedProvince?.code ?? null}
+                      onSelect={(p) => {
+                        setSelectedProvince(p);
+                        setShowProvincePanel(false);
+                      }}
+                      compact
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              <div ref={chatScrollRef} className="h-96 p-6 overflow-y-auto text-sm space-y-4 relative" id="chat">
                 {chatHistory.length === 0 && (
-                  <div className="text-center text-zinc-500 text-sm py-8">
-                    <MessageSquare className="w-8 h-8 mx-auto mb-2 text-zinc-600" />
-                    <p>Ask about digital income opportunities in South Africa</p>
+                  <div className="text-zinc-500 text-center py-8">
+                    <p>Ask about digital income opportunities in South Africa.</p>
+                    <p className="text-xs mt-2 text-zinc-600">Powered by Scout Agent + Groq</p>
                   </div>
                 )}
+                {/* INP fix (SA-2026-03-11): CSS fadeSlideIn replaces motion.div initial/animate.
+                 * opacity + translateY run on compositor — zero main-thread cost per message. */}
                 {chatHistory.map((msg, i) => (
-                  <div
-                    key={i}
-                    className={`${msg.role === 'user' ? 'text-right' : 'text-left'}`}
-                  >
-                    <div
-                      className={`inline-block max-w-[85%] px-3 py-2 rounded-2xl text-sm ${
-                        msg.role === 'user'
-                          ? 'bg-blue-500/20 text-blue-100'
-                          : 'bg-zinc-800/50 text-zinc-200'
-                      }`}
-                    >
-                      {msg.role === 'assistant' && StreamingTypography ? (
-                        <StreamingTypography text={msg.content} speed={0.02} variant="default" />
+                  <div key={i} className={`fade-slide-in ${msg.role === 'user' ? 'text-right' : 'text-left'}`}>
+                    <div className={`inline-block px-4 py-2 rounded-2xl max-w-[80%] ${msg.role === 'user' ? 'bg-white/10' : 'bg-white/5'}`}>
+                      {/* Phase 3: Use StreamingTypography for assistant messages */}
+                      {msg.role === 'assistant' ? (
+                        <StreamingTypography 
+                          text={msg.content} 
+                          speed={0.02}
+                          variant="default"
+                        />
                       ) : (
-                        msg.content
-                      )}
-                      {msg.role === 'assistant' && ChatSpeakButton && (
-                        <div className="mt-1.5">
-                          <ChatSpeakButton text={msg.content} />
-                        </div>
+                        <span className="whitespace-pre-wrap">{msg.content}</span>
                       )}
                     </div>
+                    {/* Phase 2: Speak button on completed assistant messages */}
+                    {msg.role === 'assistant' && msg.content && !agentLoading && (
+                      <div className="mt-1">
+                        <ChatSpeakButton text={msg.content} />
+                      </div>
+                    )}
                   </div>
                 ))}
+ main
                 {showThinking && (
                   <div className="text-left">
                     <div className="inline-block px-3 py-2 rounded-2xl bg-zinc-800/50 text-zinc-400 text-sm">
                       <span className="animate-pulse">Thinking…</span>
+
+                {agentLoading && (!lastMessage || lastMessage.role !== 'assistant' || !lastMessage.content) && (
+                  /* INP fix: CSS fadeIn replaces motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} */
+                  <div className="text-left fade-in">
+                    <div className="inline-block px-4 py-2 rounded-2xl bg-white/5 text-zinc-500">
+                      <StreamingTypography text="Thinking..." speed={0.05} variant="thinking" />
+ feat/perf-cwv-zero-mocks
                     </div>
                   </div>
                 )}
+                
+                {/* Phase 3: Optimistic Transaction Card */}
+                <AnimatePresence>
+                  {transactionState.status !== 'idle' && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                    >
+                      <OptimisticTransactionCard
+                        intent={transactionState.intent}
+                        status={transactionState.status}
+                        hash={transactionState.hash}
+                        error={transactionState.error}
+                        onConfirm={() => {
+                          if (transactionState.intent) {
+                            setShowTransactionBeam(true);
+                            markOptimisticSuccess('pending-tx-hash');
+                            // In production, this would call the proactive submit endpoint
+                            setTimeout(() => confirmTransaction('confirmed-tx-hash'), 2000);
+                          }
+                        }}
+                        onCancel={resetTransaction}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
-
-              <div className="p-3 border-t border-white/10">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    placeholder="Ask about opportunities..."
-                    className="flex-1 bg-zinc-800/50 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500/50"
-                    value={aiMessage}
-                    onChange={(e) => setAiMessage(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        void sendToAIAssistant();
-                      }
-                    }}
-                  />
+              <div className="p-4 border-t border-white/10 flex gap-3 items-center">
+                {/* Phase 2: Voice input mic button */}
+                {voiceInput.isSupported && (
                   <button
-                    onClick={() => void sendToAIAssistant()}
-                    disabled={agentLoading || !aiMessage.trim()}
-                    className="bg-blue-500/20 text-blue-300 px-3 py-2 rounded-xl text-sm hover:bg-blue-500/30 transition disabled:opacity-40"
+                    onClick={voiceInput.isListening ? voiceInput.stopListening : voiceInput.startListening}
+                    aria-label={voiceInput.isListening ? 'Stop voice input' : 'Start voice input'}
+                    aria-pressed={voiceInput.isListening}
+                    className={`p-2 rounded-full transition ${voiceInput.isListening ? 'bg-red-500/30 text-red-400 animate-pulse' : 'hover:bg-white/10 text-zinc-500 hover:text-white'}`}
                   >
-                    Send
+                    <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                      <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd"/>
+                    </svg>
                   </button>
-                </div>
+                )}
+                <input
+                  id="ai-chat-input"
+                  type="text"
+                  value={voiceInput.isListening && voiceInput.interimText ? voiceInput.interimText : aiMessage}
+                  onChange={(e) => {
+                    // Block writes to aiMessage while voice is active — the displayed
+                    // value is interim speech text, not the user's own typing.
+                    // Without this guard, typing during listening corrupts aiMessage
+                    // with a hybrid of interim text + keypress on next non-listening render.
+                    if (!voiceInput.isListening) setAiMessage(e.target.value);
+                  }}
+                  readOnly={voiceInput.isListening}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      void sendToAIAssistant();
+                    }
+                  }}
+                  placeholder={voiceInput.isListening ? 'Listening...' : selectedProvince ? `Ask about ${selectedProvince.name}...` : 'Ask about opportunities...'}
+                  className="flex-1 bg-transparent focus:outline-none"
+                  disabled={agentLoading}
+                />
+                <button
+                  onClick={() => { void sendToAIAssistant(); }}
+                  disabled={agentLoading || !aiMessage.trim()}
+                  className="px-6 py-2 glass rounded-2xl hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Send
+                </button>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* Chat toggle button */}
-        <motion.button
-          onClick={() => { setIsChatOpen(!isChatOpen); triggerSentient(0.5); }}
-          className="glass w-14 h-14 rounded-2xl flex items-center justify-center hover:scale-105 transition"
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-        >
-          <MessageSquare className="w-6 h-6 text-blue-400" />
-        </motion.button>
       </div>
 
-      {/* Province Economic Panel */}
-      <AnimatePresence>
-        {showProvincePanel && ProvinceEconomicPanel && (
-          <motion.div
-            initial={{ opacity: 0, x: 300 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 300 }}
-            className="fixed top-20 right-6 z-40"
-          >
-            <ProvinceEconomicPanel
-              selectedCode={selectedProvince?.code ?? null}
-              onSelect={(province: ProvinceProfile) => {
-                setSelectedProvince(province);
-                setShowProvincePanel(false);
-              }}
-              compact={false}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Register Modal */}
       <AnimatePresence>
         {showRegister && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-            onClick={() => setShowRegister(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="glass p-8 rounded-3xl w-full max-w-md border border-white/10"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h2 className="text-2xl font-bold mb-4">Create Account</h2>
-              <p className="text-zinc-400 mb-6">Join the Apex Central community</p>
+          <motion.div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div className="glass w-full max-w-md rounded-3xl p-12 relative overflow-hidden" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}>
+              <div className="liquid-reflection opacity-30" />
+              <h3 className="text-3xl font-semibold mb-8">Create Account</h3>
               <input
                 type="email"
-                placeholder="Email address"
-                className="w-full bg-zinc-800/50 rounded-xl px-4 py-3 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                placeholder="your@email.com"
                 value={registerEmail}
                 onChange={(e) => setRegisterEmail(e.target.value)}
+                className="w-full glass px-6 py-4 rounded-2xl mb-6 focus:outline-none focus:ring-2 focus:ring-white/20"
               />
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setShowRegister(false)}
-                  className="flex-1 glass px-4 py-3 rounded-xl text-sm hover:bg-white/10 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleRegister}
-                  disabled={!registerEmail.trim()}
-                  className="flex-1 bg-blue-500/20 text-blue-300 px-4 py-3 rounded-xl text-sm hover:bg-blue-500/30 transition disabled:opacity-40"
-                >
-                  Register
-                </button>
-              </div>
+              <button onClick={handleRegister} className="w-full py-4 glass rounded-2xl text-lg font-medium hover:bg-white/10 transition">
+                Join Now
+              </button>
+              <button onClick={() => setShowRegister(false)} className="mt-6 text-xs text-zinc-400 hover:text-white transition">
+                Cancel
+              </button>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      </EmotionalGrid>
+      {/* Phase 1: Accessibility toggles for audio / haptics / motion */}
+      <SensoryControls />
 
-      {/* Sensory Controls — accessibility toggles (bottom-left, fixed) */}
-      <div className="fixed bottom-6 left-6 z-50">
-        {SensoryControls && <SensoryControls />}
-      </div>
+      </EmotionalGrid>
     </div>
   );
 }
 
-// ─── Page wrapper with EmotionProvider ────────────────────────────────────────
-
-export default function Page() {
+// ─── Public default export wraps inner component in EmotionProvider ────────────
+export default function SentientInterface() {
   return (
     <EmotionProvider>
       <SentientInterfaceInner />

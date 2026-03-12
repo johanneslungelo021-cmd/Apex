@@ -419,9 +419,14 @@ export function useNDJSONStream(
       } else if (data.type === 'transaction_confirmed') {
         onTransactionConfirmed?.(data.hash);
       }
+ main
       // Not JSON, just text chunk — intentionally ignored
     } catch {
       // Not JSON, just text chunk
+
+    } catch {
+      // Non-JSON line in stream — treat as plain text chunk
+ feat/perf-cwv-zero-mocks
       setChunks(prev => prev + line);
     }
   }, [onTransactionReady, onTransactionConfirmed]);

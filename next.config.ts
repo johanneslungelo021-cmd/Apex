@@ -99,12 +99,12 @@ const nextConfig: NextConfig = {
    *
    * Impact: initial JS −80–120 KB, FCP −0.3–0.5 s across all routes.
    *
-   * Note: optimizePackageImports was removed in Next.js 16. Tree-shaking
-   * now happens automatically via Turbopack's built-in optimization.
-   * The packages listed below are already optimized by their maintainers
-   * for tree-shaking (using ES modules with named exports).
+   * optimizePackageImports was reintroduced in Next.js 15.3+ / 16.
+   * Next.js will rewrite barrel imports to per-file imports at build time.
    */
-
+  experimental: {
+    optimizePackageImports: ['lucide-react', 'framer-motion', '@react-three/drei'],
+  },
   /**
    * Perf: Enable Brotli/gzip for all server responses.
    * Brotli is 15–25 % better than gzip on JS bundles.

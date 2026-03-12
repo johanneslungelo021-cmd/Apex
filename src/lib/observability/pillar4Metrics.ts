@@ -140,3 +140,17 @@ export const departmentRateLimitCounter = meter.createCounter(
   'apex_department_rate_limit_total',
   { description: 'Department route rate limit events by route and outcome' }
 );
+
+// ─── Search API Observability ─────────────────────────────────────────────────
+
+/**
+ * Counts web search requests through /api/search.
+ * Labels:
+ *   status = 'success' | 'cache_hit' | 'error' | 'rate_limited'
+ *
+ * Used in: src/app/api/search/route.ts (line 1)
+ */
+export const searchQueryCounter = meter.createCounter(
+  'apex_search_query_total',
+  { description: 'Web search API requests by status (Perplexity sonar)' }
+);

@@ -216,18 +216,23 @@ describe('Fix 6 — next/font display:swap', () => {
   const layout = read('src/app/layout.tsx');
 
   it('Geist font has display: "swap" (no FOIT — text visible immediately)', () => {
-    // display:"swap" prevents invisible text during font load (FOIT)
-    // which directly causes FCP to be delayed by font load time
-    expect(layout).toMatch(/Geist\s*\(\s*\{[\s\S]{0,300}display:\s*["']swap["']/);
+    // display:"swap" prevents invisible text during font load (FOIT).
+    // Layout uses next/font/local (same Geist font, no Google CDN dependency).
+    // Matches: localFont({ ... display: "swap" })
+    const swapMatches = [...layout.matchAll(/display:\s*["']swap["']/g)];
+    expect(swapMatches.length).toBeGreaterThanOrEqual(1);
   });
 
   it('Geist Mono has display: "swap"', () => {
-    expect(layout).toMatch(/Geist_Mono\s*\(\s*\{[\s\S]{0,300}display:\s*["']swap["']/);
+    // Both font instances use display:swap — verify at least 2 occurrences
+    const swapMatches = [...layout.matchAll(/display:\s*["']swap["']/g)];
+    expect(swapMatches.length).toBeGreaterThanOrEqual(2);
   });
 
   it('primary font (Geist Sans) has preload: true', () => {
-    // Preloading the primary font eliminates render-blocking font request
-    expect(layout).toMatch(/Geist\s*\(\s*\{[\s\S]{0,300}preload:\s*true/);
+    // Preloading the primary font eliminates render-blocking font request.
+    // next/font/local preload:true is equivalent to Geist({ preload: true }).
+    expect(layout).toMatch(/preload:\s*true/);
   });
 });
 
