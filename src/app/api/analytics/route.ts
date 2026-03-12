@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+
 /**
  * Analytics API Route — fire-and-forget page view counter
  */

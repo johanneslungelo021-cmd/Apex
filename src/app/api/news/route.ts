@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+
 import { departmentRateLimitCounter } from '@/lib/observability/pillar4Metrics';
 /**
  * News API Route — Category-Aware

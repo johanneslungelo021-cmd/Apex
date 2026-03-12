@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+
 /**
  * Logout — POST /api/auth/logout
  * Clears the session cookie.

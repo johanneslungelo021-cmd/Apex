@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+
 /**
  * Full Registration — email + password + display name
  * 

@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+
 /**
  * Metrics API Route
  *

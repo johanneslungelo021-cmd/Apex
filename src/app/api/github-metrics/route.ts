@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+
 /**
  * GitHub Metrics API Route
  * 

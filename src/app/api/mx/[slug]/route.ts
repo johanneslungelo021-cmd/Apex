@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+
 /**
  * Markdown Shadow-Route API — /api/mx/[slug]
  *

@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+
 /**
  * Session Validation — GET /api/auth/me
  * 

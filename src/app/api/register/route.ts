@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+
 /**
  * User Registration API Route
  * 

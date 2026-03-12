@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+
 /**
  * AI Agent API Endpoint — Phase 2 · Streaming + Tiered Model Routing
  *

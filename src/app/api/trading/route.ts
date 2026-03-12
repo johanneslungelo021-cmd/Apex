@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+
 /**
  * Trading API — Real ZAR market data via Perplexity Sonar
  *

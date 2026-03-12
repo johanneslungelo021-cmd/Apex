@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+
 /**
  * Reels API — SA Creator Economy Video Ideas via Perplexity Sonar
  *

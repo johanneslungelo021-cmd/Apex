@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+
 // src/app/api/health/route.ts
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';

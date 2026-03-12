@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+
 /**
  * Social Media API — SA Brand Content Generation
  *

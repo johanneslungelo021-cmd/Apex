@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+
 /**
  * Login Endpoint — email + password → JWT session cookie
  * 

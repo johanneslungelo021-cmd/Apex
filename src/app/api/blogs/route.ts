@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+
 /**
  * Blogs API — SA Digital Economy Articles via Perplexity Sonar
  *
