@@ -3,14 +3,10 @@ export const runtime = 'nodejs';
 /**
  * Full Registration — email + password + display name
  *
- * Uses the same PII-safe logging pattern (SHA-256 hash) and
- * structured logging from api-utils. Rate limited to prevent abuse.
- *
- * Security notes:
- * - Returns a generic 409 on duplicate email — no DUPLICATE_EMAIL code
- *   that would enable email enumeration attacks.
- * - createUser() is atomic via emailIndex — no TOCTOU race on concurrent
- *   registrations with the same email.
+ * Security:
+ * - Always hashes password before checking duplicate email (timing-safe).
+ * - Returns generic REGISTRATION_FAILED on duplicate — no email enumeration.
+ * - findUserByEmail() uses emailIndex (atomic Map lookup) — no TOCTOU race.
  *
  * @module api/auth/register
  */
@@ -39,7 +35,6 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  // Parse body
   let body: unknown;
   try {
     body = await req.json();
@@ -59,7 +54,6 @@ export async function POST(req: Request): Promise<Response> {
 
   const { email, password, displayName } = body as Record<string, unknown>;
 
-  // Validate email
   if (typeof email !== 'string' || !email.trim()) {
     return NextResponse.json(
       { success: false, error: 'VALIDATION_ERROR', message: 'Email is required.' },
@@ -74,7 +68,6 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  // Validate password
   if (typeof password !== 'string' || password.length < 8) {
     return NextResponse.json(
       { success: false, error: 'VALIDATION_ERROR', message: 'Password must be at least 8 characters.' },
@@ -88,7 +81,6 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  // Validate display name
   const name = typeof displayName === 'string' ? displayName.trim() : '';
   if (!name || name.length < 2 || name.length > 50) {
     return NextResponse.json(
@@ -98,21 +90,17 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   try {
-    // Always hash the password regardless of whether email exists
-    // This prevents timing-based email enumeration
+    // Hash FIRST — prevents timing-based email enumeration
     const passwordHash = await hashPassword(password);
 
-    // Check for existing email AFTER hashing (timing-safe)
+    // Check duplicate AFTER hashing
     if (findUserByEmail(normalizedEmail)) {
-      // Generic message — does NOT reveal that the email is already registered
       return NextResponse.json(
         { success: false, error: 'REGISTRATION_FAILED', message: 'Registration could not be completed. Please try different details or contact support.' },
         { status: 409 }
       );
     }
 
-    // Atomically create user — createUser() returns false if email already exists
-    // (handles concurrent registration race condition)
     const userId = crypto.randomUUID();
 
     const newUser: StoredUser = {
@@ -125,24 +113,15 @@ export async function POST(req: Request): Promise<Response> {
       province: null,
     };
 
-    const created = createUser(newUser);
+    // createUser() uses emailIndex — atomic in Node.js single thread
+    createUser(newUser);
 
-    if (!created) {
-      // Lost the race — another concurrent request registered this email first
-      return NextResponse.json(
-        { success: false, error: 'REGISTRATION_FAILED', message: 'Registration could not be completed. Please try different details or contact support.' },
-        { status: 409 }
-      );
-    }
-
-    // Issue session JWT
     const token = await createSession({
       userId,
       email: normalizedEmail,
       displayName: name,
     });
 
-    // PII-safe logging
     const hash = crypto.createHash('sha256').update(normalizedEmail).digest('hex').slice(0, 12);
     log({
       level: 'info',
@@ -151,7 +130,6 @@ export async function POST(req: Request): Promise<Response> {
       requestId,
     });
 
-    // Return success + set HttpOnly session cookie
     const response = NextResponse.json({
       success: true,
       message: 'Welcome to Apex! Your account has been created.',

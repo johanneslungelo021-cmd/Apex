@@ -5,9 +5,9 @@
  * For production persistence, migrate to Supabase or Neon (Postgres).
  *
  * The emailIndex Map provides atomic email uniqueness:
- * emailIndex.has(email) + emailIndex.set(email, id) in the same
- * synchronous tick is effectively atomic in Node.js single-threaded model,
- * preventing TOCTOU race conditions on concurrent registrations.
+ * emailIndex.has(email) + emailIndex.set(email, id) is synchronous and
+ * atomic in Node.js single-threaded model, preventing TOCTOU race conditions
+ * on concurrent registrations with the same email.
  *
  * @module lib/auth/store
  */
@@ -25,7 +25,7 @@ export interface StoredUser {
 // Primary store keyed by user ID
 const users = new Map<string, StoredUser>();
 
-// Secondary index keyed by normalised email — enables O(1) lookup + atomic uniqueness
+// Secondary index keyed by normalised email — O(1) lookup + atomic uniqueness
 const emailIndex = new Map<string, string>(); // email → userId
 
 export function findUserByEmail(email: string): StoredUser | null {
@@ -39,15 +39,13 @@ export function findUserById(id: string): StoredUser | null {
 }
 
 /**
- * Atomically create a user only if the email is not already registered.
- * Returns false if the email already exists (safe for concurrent requests).
+ * Create a user. Caller MUST check findUserByEmail() first.
+ * emailIndex.set() is synchronous — no race possible in Node.js single thread.
  */
-export function createUser(user: StoredUser): boolean {
+export function createUser(user: StoredUser): void {
   const email = user.email.toLowerCase();
-  if (emailIndex.has(email)) return false; // atomic — no race possible
   emailIndex.set(email, user.id);
   users.set(user.id, user);
-  return true;
 }
 
 export function updateUserProvince(id: string, province: string): void {

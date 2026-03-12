@@ -1,17 +1,11 @@
 /**
  * Phase 3: Pre-Sign & Stream Edge API Route
  *
- * This Edge function implements the "Pre-Sign & Stream" architecture
- * for achieving Ripple transaction finality in ~3.5 seconds.
+ * Implements the "Pre-Sign & Stream" architecture for XRPL transaction
+ * finality in ~3.5 seconds via Server-Sent Events.
  *
- * Key Features:
- * - Runs on Vercel Edge runtime for <50ms TTFB
- * - Integrates with existing streaming AI agent
- * - Proactive transaction detection and pre-building
- * - Real-time transaction status via Server-Sent Events
- *
- * NOTE: XRPL integration requires XRPL_SERVICE_URL environment variable.
- * Without it, transaction intents are detected but not executed.
+ * NOTE: XRPL integration requires XRPL_SERVICE_URL env var.
+ * Without it, intents are detected but not executed.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -41,12 +35,8 @@ interface PreBuildResult {
   error?: string;
 }
 
-/**
- * Analyzes user prompt for XRPL transaction intent.
- */
 function detectTransactionIntent(prompt: string): TransactionIntent | null {
   const lowerPrompt = prompt.toLowerCase();
-
   const patterns = [
     { regex: /send\s+(\d+(?:\.\d+)?)\s*(xrp|ripple)/i, type: 'SEND_XRP' },
     { regex: /send\s+(\d+(?:\.\d+)?)\s*rl?usd/i, type: 'SEND_RLUSD' },
@@ -56,7 +46,6 @@ function detectTransactionIntent(prompt: string): TransactionIntent | null {
     { regex: /swap\s+.*?(xrp|rlusd)/i, type: 'OFFER_CREATE' },
     { regex: /place\s+order/i, type: 'OFFER_CREATE' },
   ];
-
   for (const pattern of patterns) {
     const match = lowerPrompt.match(pattern.regex);
     if (match) {
@@ -67,17 +56,16 @@ function detectTransactionIntent(prompt: string): TransactionIntent | null {
       };
     }
   }
-
   return null;
 }
 
 /**
  * Pre-build a transaction via the external XRPL Python service.
- * Returns pre_signed: false if XRPL_SERVICE_URL is not configured.
+ * Uses try/finally to guarantee timer cleanup on all exit paths.
+ * Uses return await so local catch handles JSON parse failures.
  */
 async function preBuildTransaction(intent: TransactionIntent): Promise<PreBuildResult> {
   const xrplServiceUrl = process.env.XRPL_SERVICE_URL;
-
   if (!xrplServiceUrl) {
     return {
       pre_signed: false,
@@ -85,10 +73,10 @@ async function preBuildTransaction(intent: TransactionIntent): Promise<PreBuildR
     };
   }
 
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
 
+  try {
     const res = await fetch(`${xrplServiceUrl}/prebuild`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -101,8 +89,6 @@ async function preBuildTransaction(intent: TransactionIntent): Promise<PreBuildR
       signal: controller.signal,
     });
 
-    clearTimeout(timeoutId);
-
     if (!res.ok) {
       return {
         pre_signed: false,
@@ -110,12 +96,18 @@ async function preBuildTransaction(intent: TransactionIntent): Promise<PreBuildR
       };
     }
 
-    return res.json();
+    // return await so this catch block handles JSON parse errors
+    return await res.json() as PreBuildResult;
   } catch (error) {
     return {
       pre_signed: false,
-      error: `Failed to connect to XRPL service: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error: `Failed to connect to XRPL service: ${
+        error instanceof Error ? error.message : 'Unknown error'
+      }`,
     };
+  } finally {
+    // Always clear the timer — even if fetch throws or json() rejects
+    clearTimeout(timeoutId);
   }
 }
 
@@ -145,7 +137,7 @@ export async function POST(request: NextRequest) {
 
         const initialEvent: TransactionEvent = {
           type: 'transaction_ready',
-          intent: intent || undefined,
+          intent: intent ?? undefined,
           timestamp: Date.now(),
         };
         controller.enqueue(textEncoder.encode(sseEncoder.encode(initialEvent)));
@@ -162,7 +154,6 @@ export async function POST(request: NextRequest) {
 
           try {
             preBuildResult = await preBuildTransaction(intent);
-
             const statusEvent: TransactionEvent = {
               type: 'transaction_ready',
               intent,
@@ -182,18 +173,23 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // Stream text response to client
         const responseMessage = intent
           ? preBuildResult?.pre_signed
-            ? `I've detected you want to ${intent.type.replace(/_/g, ' ').toLowerCase()} ${intent.amount ?? ''} ${intent.currency ?? 'XRP'}. Click confirm to execute this transaction on the XRPL, which typically settles in 3-5 seconds.`
-            : `I've detected a transaction intent (${intent.type.replace(/_/g, ' ').toLowerCase()}), but the XRPL service is not currently configured. Please contact support to enable blockchain transactions.`
+            ? `I've detected you want to ${intent.type.replace(/_/g, ' ').toLowerCase()} ${
+                intent.amount ?? ''
+              } ${intent.currency ?? 'XRP'}. Click confirm to execute this transaction on the XRPL, which typically settles in 3-5 seconds.`
+            : `I've detected a transaction intent (${
+                intent.type.replace(/_/g, ' ').toLowerCase()
+              }), but the XRPL service is not currently configured. Please contact support to enable blockchain transactions.`
           : 'Processing your request...';
 
         for (const char of responseMessage) {
           controller.enqueue(
-            textEncoder.encode(`data: ${JSON.stringify({ type: 'text', content: char })}\n\n`)
+            textEncoder.encode(
+              `data: ${JSON.stringify({ type: 'text', content: char })}\n\n`
+            )
           );
-          await new Promise((resolve) => setTimeout(resolve, intent ? 20 : 30));
+          await new Promise<void>((resolve) => setTimeout(resolve, intent ? 20 : 30));
         }
 
         controller.enqueue(
