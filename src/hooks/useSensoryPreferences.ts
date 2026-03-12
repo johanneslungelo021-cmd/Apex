@@ -14,21 +14,21 @@ export interface SensoryPrefs {
 const KEY = 'apex-sensory';
 
 /**
- * Load initial value from localStorage (client-side only).
- * Returns the stored value or the default.
+ * Read the combined preferences object from localStorage.
+ * Written by the persistence useEffect as { audio, haptics, motion }.
  */
-function getStoredValue<T>(key: string, defaultValue: T): T {
-  if (typeof window === 'undefined') return defaultValue;
+function getStoredPrefs(): { audio: boolean; haptics: boolean; motion: boolean } | null {
+  if (typeof window === 'undefined') return null;
   try {
-    const stored = localStorage.getItem(key);
+    const stored = localStorage.getItem(KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      if (typeof parsed === typeof defaultValue) return parsed;
+      if (parsed && typeof parsed === 'object') return parsed;
     }
   } catch {
     // private browsing or corrupted data — ignore
   }
-  return defaultValue;
+  return null;
 }
 
 /**
@@ -40,19 +40,29 @@ function checkTouchDevice(): boolean {
 }
 
 export function useSensoryPreferences(): SensoryPrefs {
-  // Use lazy initializers to read from localStorage on first client render
-  // This avoids calling setState in useEffect
-  const [audio, setAudio] = useState<boolean>(() => getStoredValue('apex-audio', true));
-  const [haptics, setHaptics] = useState<boolean>(() => getStoredValue('apex-haptics', true));
+  // Read from the same KEY that the persistence useEffect writes to.
+  // Previously read from individual keys (apex-audio, apex-haptics) that
+  // were never written — causing preferences to reset on every page load.
+  const [audio, setAudio] = useState<boolean>(() => {
+    const prefs = getStoredPrefs();
+    return prefs?.audio ?? true;
+  });
+
+  const [haptics, setHaptics] = useState<boolean>(() => {
+    const prefs = getStoredPrefs();
+    return prefs?.haptics ?? true;
+  });
+
   const [motion, setMotion] = useState<boolean>(() => {
-    // Check reduced motion preference on init
+    // Honour OS reduced-motion preference on first load
     if (typeof window !== 'undefined') {
       const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       if (reducedMotion) return false;
     }
-    return getStoredValue('apex-motion', true);
+    const prefs = getStoredPrefs();
+    return prefs?.motion ?? true;
   });
-  
+
   // Touch device status is static, compute once
   const isTouchDevice = useMemo(() => checkTouchDevice(), []);
 
@@ -66,7 +76,8 @@ export function useSensoryPreferences(): SensoryPrefs {
     return () => mq.removeEventListener('change', handler);
   }, []);
 
-  // Persist preferences on change
+  // Persist preferences to localStorage on every change
+  // Writes to KEY = 'apex-sensory' as { audio, haptics, motion }
   useEffect(() => {
     try {
       localStorage.setItem(KEY, JSON.stringify({ audio, haptics, motion }));

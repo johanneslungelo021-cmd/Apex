@@ -2,10 +2,16 @@ export const runtime = 'nodejs';
 
 /**
  * Full Registration — email + password + display name
- * 
+ *
  * Uses the same PII-safe logging pattern (SHA-256 hash) and
  * structured logging from api-utils. Rate limited to prevent abuse.
- * 
+ *
+ * Security notes:
+ * - Returns a generic 409 on duplicate email — no DUPLICATE_EMAIL code
+ *   that would enable email enumeration attacks.
+ * - createUser() is atomic via emailIndex — no TOCTOU race on concurrent
+ *   registrations with the same email.
+ *
  * @module api/auth/register
  */
 
@@ -92,18 +98,22 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   try {
-    // Check duplicate - timing-safe: hash password anyway
+    // Always hash the password regardless of whether email exists
+    // This prevents timing-based email enumeration
+    const passwordHash = await hashPassword(password);
+
+    // Check for existing email AFTER hashing (timing-safe)
     if (findUserByEmail(normalizedEmail)) {
-      await hashPassword(password); // Prevent timing attack
+      // Generic message — does NOT reveal that the email is already registered
       return NextResponse.json(
-        { success: false, error: 'DUPLICATE_EMAIL', message: 'An account with this email already exists.' },
+        { success: false, error: 'REGISTRATION_FAILED', message: 'Registration could not be completed. Please try different details or contact support.' },
         { status: 409 }
       );
     }
 
-    // Create user
+    // Atomically create user — createUser() returns false if email already exists
+    // (handles concurrent registration race condition)
     const userId = crypto.randomUUID();
-    const passwordHash = await hashPassword(password);
 
     const newUser: StoredUser = {
       id: userId,
@@ -115,13 +125,21 @@ export async function POST(req: Request): Promise<Response> {
       province: null,
     };
 
-    createUser(newUser);
+    const created = createUser(newUser);
+
+    if (!created) {
+      // Lost the race — another concurrent request registered this email first
+      return NextResponse.json(
+        { success: false, error: 'REGISTRATION_FAILED', message: 'Registration could not be completed. Please try different details or contact support.' },
+        { status: 409 }
+      );
+    }
 
     // Issue session JWT
-    const token = await createSession({ 
-      userId, 
-      email: normalizedEmail, 
-      displayName: name 
+    const token = await createSession({
+      userId,
+      email: normalizedEmail,
+      displayName: name,
     });
 
     // PII-safe logging

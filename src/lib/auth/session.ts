@@ -1,14 +1,14 @@
 /**
  * JWT Session Management — jose (Edge-compatible)
- * 
+ *
  * Uses HS256 symmetric signing with AUTH_SECRET from env.
  * Tokens are stored in HttpOnly, Secure, SameSite=Lax cookies
  * so they're invisible to client-side JS (XSS-proof).
- * 
+ *
  * Works with the existing CSP headers from Pillar 4:
  * - Strict-Transport-Security ensures HTTPS
  * - HttpOnly prevents document.cookie access
- * 
+ *
  * @module lib/auth/session
  */
 
@@ -25,10 +25,16 @@ export interface SessionPayload extends JWTPayload {
 
 /**
  * Get the signing secret as a Uint8Array for jose.
- * Falls back to a dev-only secret if AUTH_SECRET is not set.
+ * AUTH_SECRET MUST be set in environment — throws in production if missing.
  */
 function getSecret(): Uint8Array {
-  const secret = process.env.AUTH_SECRET || 'apex-dev-secret-change-in-production';
+  const secret = process.env.AUTH_SECRET;
+  if (!secret) {
+    throw new Error(
+      'AUTH_SECRET environment variable is required. ' +
+      'Set a random 32+ character string in Vercel Dashboard → Settings → Environment Variables.'
+    );
+  }
   return new TextEncoder().encode(secret);
 }
 
@@ -78,7 +84,7 @@ export function buildSessionCookie(token: string): string {
     'Path=/',
     'HttpOnly',
     'SameSite=Lax',
-    `Max-Age=${7 * 24 * 60 * 60}`, // 7 days
+    `Max-Age=${7 * 24 * 60 * 60}`,
     isProduction ? 'Secure' : '',
   ]
     .filter(Boolean)
