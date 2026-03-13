@@ -1,13 +1,16 @@
 /**
- * User Store — In-memory for MVP, swap for SQLite/Prisma later.
- * 
- * IMPORTANT: This store resets on every Vercel cold start.
- * For production persistence, migrate to:
- *   - db/custom.db via better-sqlite3, OR
- *   - Vercel Postgres / Supabase
- * 
+ * User Store — Supabase Postgres backend.
+ *
+ * Replaces the in-memory Map that reset on every Vercel cold start.
+ * All operations go through the service-role Supabase client which
+ * bypasses RLS — only called from Vercel API routes, never the browser.
+ *
+ * Table: public.users  (created by supabase/migrations/001_users.sql)
+ *
  * @module lib/auth/store
  */
+
+import { getSupabaseClient } from '@/lib/supabase';
 
 export interface StoredUser {
   id: string;
@@ -19,38 +22,102 @@ export interface StoredUser {
   province: string | null;
 }
 
-// In-memory store — survives within a single serverless invocation lifetime
-const users = new Map<string, StoredUser>();
+// ─── Row shape from Supabase (snake_case) ────────────────────────────────────
+interface UserRow {
+  id: string;
+  email: string;
+  password_hash: string;
+  display_name: string;
+  created_at: string;
+  last_login_at: string | null;
+  province: string | null;
+}
 
-export function findUserByEmail(email: string): StoredUser | null {
-  for (const user of users.values()) {
-    if (user.email === email) return user;
+function rowToUser(row: UserRow): StoredUser {
+  return {
+    id: row.id,
+    email: row.email,
+    passwordHash: row.password_hash,
+    displayName: row.display_name,
+    createdAt: row.created_at,
+    lastLoginAt: row.last_login_at,
+    province: row.province,
+  };
+}
+
+// ─── Public API (matches the old in-memory interface exactly) ────────────────
+
+export async function findUserByEmail(email: string): Promise<StoredUser | null> {
+  const db = getSupabaseClient();
+  const { data, error } = await db
+    .from('users')
+    .select('*')
+    .eq('email', email.toLowerCase().trim())
+    .maybeSingle();
+
+  if (error) throw new Error(`[store] findUserByEmail: ${error.message}`);
+  return data ? rowToUser(data as UserRow) : null;
+}
+
+export async function findUserById(id: string): Promise<StoredUser | null> {
+  const db = getSupabaseClient();
+  const { data, error } = await db
+    .from('users')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (error) throw new Error(`[store] findUserById: ${error.message}`);
+  return data ? rowToUser(data as UserRow) : null;
+}
+
+export async function createUser(user: StoredUser): Promise<void> {
+  const db = getSupabaseClient();
+  const { error } = await db.from('users').insert({
+    id: user.id,
+    email: user.email.toLowerCase().trim(),
+    password_hash: user.passwordHash,
+    display_name: user.displayName,
+    province: user.province ?? null,
+    created_at: user.createdAt,
+    last_login_at: user.lastLoginAt ?? null,
+  });
+
+  if (error) {
+    // Unique violation — email already exists
+    if (error.code === '23505') {
+      throw new Error('DUPLICATE_EMAIL');
+    }
+    throw new Error(`[store] createUser: ${error.message}`);
   }
-  return null;
 }
 
-export function findUserById(id: string): StoredUser | null {
-  return users.get(id) ?? null;
+export async function updateUserProvince(id: string, province: string): Promise<void> {
+  const db = getSupabaseClient();
+  const { error } = await db
+    .from('users')
+    .update({ province })
+    .eq('id', id);
+
+  if (error) throw new Error(`[store] updateUserProvince: ${error.message}`);
 }
 
-export function createUser(user: StoredUser): void {
-  users.set(user.id, user);
+export async function updateLastLogin(id: string): Promise<void> {
+  const db = getSupabaseClient();
+  const { error } = await db
+    .from('users')
+    .update({ last_login_at: new Date().toISOString() })
+    .eq('id', id);
+
+  if (error) throw new Error(`[store] updateLastLogin: ${error.message}`);
 }
 
-export function updateUserProvince(id: string, province: string): void {
-  const user = users.get(id);
-  if (user) {
-    user.province = province;
-  }
-}
+export async function getUserCount(): Promise<number> {
+  const db = getSupabaseClient();
+  const { count, error } = await db
+    .from('users')
+    .select('*', { count: 'exact', head: true });
 
-export function updateLastLogin(id: string): void {
-  const user = users.get(id);
-  if (user) {
-    user.lastLoginAt = new Date().toISOString();
-  }
-}
-
-export function getUserCount(): number {
-  return users.size;
+  if (error) throw new Error(`[store] getUserCount: ${error.message}`);
+  return count ?? 0;
 }
