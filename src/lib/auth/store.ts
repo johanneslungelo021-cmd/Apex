@@ -45,7 +45,9 @@ function rowToUser(row: UserRow): StoredUser {
   };
 }
 
-// ─── Public API (matches the old in-memory interface exactly) ────────────────
+// ─── Public async API ────────────────────────────────────────────────
+// All exported functions return Promises — always await at the call site.
+// (Breaking change from the previous synchronous in-memory Map API.)
 
 export async function findUserByEmail(email: string): Promise<StoredUser | null> {
   const db = getSupabaseClient();
@@ -57,8 +59,7 @@ export async function findUserByEmail(email: string): Promise<StoredUser | null>
 
   if (error) throw new Error(`[store] findUserByEmail: ${error.message}`);
   // Supabase returns an untyped Json union when no Database generic is provided.
-  // The double cast (unknown → UserRow) is intentional and safe: the shape is
-  // guaranteed by the migration in supabase/migrations/001_users.sql.
+  // The double cast (unknown → UserRow) is intentional: shape guaranteed by migration.
   return data ? rowToUser(data as unknown as UserRow) : null;
 }
 
@@ -71,7 +72,7 @@ export async function findUserById(id: string): Promise<StoredUser | null> {
     .maybeSingle();
 
   if (error) throw new Error(`[store] findUserById: ${error.message}`);
-  // Same intentional double-cast as findUserByEmail — see comment above.
+  // Same intentional double-cast as findUserByEmail.
   return data ? rowToUser(data as unknown as UserRow) : null;
 }
 
@@ -88,8 +89,13 @@ export async function createUser(user: StoredUser): Promise<void> {
   });
 
   if (error) {
-    // Unique violation — email already exists (citext enforces case-insensitive uniqueness)
-    if (error.code === '23505') {
+    // Only map to DUPLICATE_EMAIL when the violated constraint is the email
+    // unique index. A primary-key collision (also code 23505) would have
+    // error.details containing '(id)' not '(email)' and must not be swallowed.
+    if (
+      error.code === '23505' &&
+      error.details?.toLowerCase().includes('(email)')
+    ) {
       throw new Error('DUPLICATE_EMAIL');
     }
     throw new Error(`[store] createUser: ${error.message}`);

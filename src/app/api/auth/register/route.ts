@@ -92,9 +92,11 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   try {
-    // Check duplicate - timing-safe: hash password anyway
+    // Optimistic duplicate check (best-effort — not a hard guarantee).
+    // A concurrent registration may pass this check and hit the DB constraint;
+    // that race is handled in the catch block below.
     if (await findUserByEmail(normalizedEmail)) {
-      await hashPassword(password); // Prevent timing attack
+      await hashPassword(password); // timing-safe: prevent email enumeration
       return NextResponse.json(
         { success: false, error: 'DUPLICATE_EMAIL', message: 'An account with this email already exists.' },
         { status: 409 }
@@ -147,6 +149,16 @@ export async function POST(req: Request): Promise<Response> {
     return response;
 
   } catch (error) {
+    // Handle the TOCTOU race: two concurrent requests may both pass the
+    // findUserByEmail check above, then the second createUser hits the DB
+    // unique constraint and throws DUPLICATE_EMAIL. Return 409, not 500.
+    if (error instanceof Error && error.message === 'DUPLICATE_EMAIL') {
+      return NextResponse.json(
+        { success: false, error: 'DUPLICATE_EMAIL', message: 'An account with this email already exists.' },
+        { status: 409 }
+      );
+    }
+
     log({
       level: 'error',
       service: SERVICE,

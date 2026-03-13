@@ -2,7 +2,9 @@
  * Supabase singleton client — server-side only.
  *
  * Uses the SERVICE ROLE key so it bypasses Row Level Security.
- * This file must NEVER be imported from client components.
+ * The `server-only` import below enforces this at build time: Next.js will
+ * throw a hard error if this module is ever accidentally imported into a
+ * Client Component or a browser bundle.
  *
  * Environment variables (set in Vercel Dashboard, never committed):
  *   SUPABASE_URL          — e.g. https://xdkojaigrjhzjkqxguxh.supabase.co
@@ -11,6 +13,7 @@
  * @module lib/supabase
  */
 
+import 'server-only';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 if (!process.env.SUPABASE_URL) {
@@ -20,7 +23,7 @@ if (!process.env.SUPABASE_SECRET_KEY) {
   throw new Error('[supabase] SUPABASE_SECRET_KEY is not set. Add it to Vercel Environment Variables.');
 }
 
-// Global singleton — reused across invocations in the same warm instance.
+// Global singleton — reused across invocations in the same warm serverless instance.
 let _client: SupabaseClient | null = null;
 
 export function getSupabaseClient(): SupabaseClient {
@@ -30,8 +33,8 @@ export function getSupabaseClient(): SupabaseClient {
     process.env.SUPABASE_SECRET_KEY!,
     {
       auth: {
-        // Server-side: we manage sessions ourselves via jose JWTs.
-        // Disable Supabase's built-in auth helpers to avoid confusion.
+        // Server-side: sessions are managed via jose JWTs in HttpOnly cookies.
+        // Disable Supabase Auth helpers to avoid confusion with our own session layer.
         persistSession: false,
         autoRefreshToken: false,
         detectSessionInUrl: false,
