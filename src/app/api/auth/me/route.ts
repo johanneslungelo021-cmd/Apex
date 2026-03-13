@@ -11,10 +11,14 @@ export const runtime = 'nodejs';
  */
 
 import { NextResponse } from 'next/server';
+import { generateRequestId, log } from '@/lib/api-utils';
 import { getTokenFromRequest, verifySession } from '@/lib/auth/session';
 import { findUserById } from '@/lib/auth/store';
 
+const SERVICE = 'auth-me';
+
 export async function GET(req: Request): Promise<Response> {
+  const requestId = generateRequestId();
   const token = getTokenFromRequest(req);
 
   if (!token) {
@@ -32,8 +36,25 @@ export async function GET(req: Request): Promise<Response> {
     );
   }
 
-  // Verify user still exists in Supabase
-  const user = await findUserById(session.userId);
+  // findUserById is now async Supabase I/O — wrap in try/catch so a transient
+  // DB/network error returns a stable JSON response instead of an opaque 500.
+  let user;
+  try {
+    // Narrow projection: profile-only fields, password_hash intentionally excluded.
+    user = await findUserById(session.userId);
+  } catch (error) {
+    log({
+      level: 'error',
+      service: SERVICE,
+      message: `Supabase lookup failed: ${error instanceof Error ? error.message : 'Unknown'}`,
+      requestId,
+    });
+    return NextResponse.json(
+      { error: 'service_unavailable', message: 'Auth service temporarily unavailable.' },
+      { status: 503 }
+    );
+  }
+
   if (!user) {
     return NextResponse.json(
       { authenticated: false, user: null },

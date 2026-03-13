@@ -33,6 +33,16 @@ interface UserRow {
   province: string | null;
 }
 
+// Profile-only row (no password_hash) — used in /api/auth/me and register existence checks.
+interface ProfileRow {
+  id: string;
+  email: string;
+  display_name: string;
+  created_at: string;
+  last_login_at: string | null;
+  province: string | null;
+}
+
 function rowToUser(row: UserRow): StoredUser {
   return {
     id: row.id,
@@ -45,35 +55,52 @@ function rowToUser(row: UserRow): StoredUser {
   };
 }
 
-// ─── Public async API ────────────────────────────────────────────────
+function profileRowToUser(row: ProfileRow): StoredUser {
+  return {
+    id: row.id,
+    email: row.email,
+    passwordHash: '', // intentionally empty — not fetched
+    displayName: row.display_name,
+    createdAt: row.created_at,
+    lastLoginAt: row.last_login_at,
+    province: row.province,
+  };
+}
+
+// ─── Public async API ─────────────────────────────────────────────────────────
 // All exported functions return Promises — always await at the call site.
 // (Breaking change from the previous synchronous in-memory Map API.)
 
+/**
+ * Credential lookup — includes password_hash for bcrypt verification.
+ * Only use in auth/login. Never expose the result to the client.
+ */
 export async function findUserByEmail(email: string): Promise<StoredUser | null> {
   const db = getSupabaseClient();
   const { data, error } = await db
     .from('users')
-    .select('*')
+    .select('id, email, password_hash, display_name, created_at, last_login_at, province')
     .eq('email', email.toLowerCase().trim())
     .maybeSingle();
 
   if (error) throw new Error(`[store] findUserByEmail: ${error.message}`);
-  // Supabase returns an untyped Json union when no Database generic is provided.
-  // The double cast (unknown → UserRow) is intentional: shape guaranteed by migration.
   return data ? rowToUser(data as unknown as UserRow) : null;
 }
 
+/**
+ * Profile lookup — does NOT include password_hash.
+ * Safe to use in /api/auth/me and register duplicate-email checks.
+ */
 export async function findUserById(id: string): Promise<StoredUser | null> {
   const db = getSupabaseClient();
   const { data, error } = await db
     .from('users')
-    .select('*')
+    .select('id, email, display_name, created_at, last_login_at, province')
     .eq('id', id)
     .maybeSingle();
 
   if (error) throw new Error(`[store] findUserById: ${error.message}`);
-  // Same intentional double-cast as findUserByEmail.
-  return data ? rowToUser(data as unknown as UserRow) : null;
+  return data ? profileRowToUser(data as unknown as ProfileRow) : null;
 }
 
 export async function createUser(user: StoredUser): Promise<void> {

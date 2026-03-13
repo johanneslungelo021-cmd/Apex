@@ -98,12 +98,22 @@ export async function POST(req: Request): Promise<Response> {
       );
     }
 
-    // Issue session
-    await updateLastLogin(user.id);
+    // Issue session first — updateLastLogin is audit metadata only.
+    // A transient Supabase failure here must NOT reject a valid login.
     const token = await createSession({
       userId: user.id,
       email: user.email,
       displayName: user.displayName,
+    });
+
+    // Fire-and-forget: log failure but never block the response.
+    updateLastLogin(user.id).catch((err: unknown) => {
+      log({
+        level: 'warn',
+        service: SERVICE,
+        message: `Last-login update failed for user_${user.id.slice(0, 8)}: ${err instanceof Error ? err.message : 'Unknown'}`,
+        requestId,
+      });
     });
 
     log({
