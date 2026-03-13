@@ -1,8 +1,8 @@
--- ══════════════════════════════════════════════════════════════
+-- ══════════════════════════════════════════════════════════
 -- Apex — Users table migration
--- Project: xdkojaigrjhzjkqxguxh (West EU — Ireland)
+-- Region: West EU (Ireland)
 -- Run once in Supabase Dashboard → SQL Editor.
--- ══════════════════════════════════════════════════════════════
+-- ══════════════════════════════════════════════════════════
 
 -- citext gives case-insensitive UNIQUE on email without a separate index.
 -- The UNIQUE constraint itself creates the B-tree index; no extra CREATE INDEX needed.
