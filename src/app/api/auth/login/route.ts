@@ -2,9 +2,9 @@ export const runtime = 'nodejs';
 
 /**
  * Login Endpoint — email + password → JWT session cookie
- * 
+ *
  * Rate limited to 10 attempts per 15 minutes per IP to prevent brute force.
- * 
+ *
  * @module api/auth/login
  */
 
@@ -72,7 +72,7 @@ export async function POST(req: Request): Promise<Response> {
 
   try {
     // Find user
-    const user = findUserByEmail(normalizedEmail);
+    const user = await findUserByEmail(normalizedEmail);
 
     if (!user) {
       // Timing-safe: hash a dummy password to prevent email enumeration
@@ -99,7 +99,7 @@ export async function POST(req: Request): Promise<Response> {
     }
 
     // Issue session
-    updateLastLogin(user.id);
+    await updateLastLogin(user.id);
     const token = await createSession({
       userId: user.id,
       email: user.email,

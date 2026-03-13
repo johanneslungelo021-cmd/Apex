@@ -2,11 +2,11 @@ export const runtime = 'nodejs';
 
 /**
  * Session Validation — GET /api/auth/me
- * 
+ *
  * Reads the HttpOnly session cookie, verifies the JWT,
  * and returns the current user. Used by the client to
  * check if a user is logged in on page load.
- * 
+ *
  * @module api/auth/me
  */
 
@@ -32,8 +32,8 @@ export async function GET(req: Request): Promise<Response> {
     );
   }
 
-  // Verify user still exists in store
-  const user = findUserById(session.userId);
+  // Verify user still exists in Supabase
+  const user = await findUserById(session.userId);
   if (!user) {
     return NextResponse.json(
       { authenticated: false, user: null },

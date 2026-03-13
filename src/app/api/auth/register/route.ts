@@ -2,10 +2,10 @@ export const runtime = 'nodejs';
 
 /**
  * Full Registration — email + password + display name
- * 
+ *
  * Uses the same PII-safe logging pattern (SHA-256 hash) and
  * structured logging from api-utils. Rate limited to prevent abuse.
- * 
+ *
  * @module api/auth/register
  */
 
@@ -93,7 +93,7 @@ export async function POST(req: Request): Promise<Response> {
 
   try {
     // Check duplicate - timing-safe: hash password anyway
-    if (findUserByEmail(normalizedEmail)) {
+    if (await findUserByEmail(normalizedEmail)) {
       await hashPassword(password); // Prevent timing attack
       return NextResponse.json(
         { success: false, error: 'DUPLICATE_EMAIL', message: 'An account with this email already exists.' },
@@ -115,13 +115,13 @@ export async function POST(req: Request): Promise<Response> {
       province: null,
     };
 
-    createUser(newUser);
+    await createUser(newUser);
 
     // Issue session JWT
-    const token = await createSession({ 
-      userId, 
-      email: normalizedEmail, 
-      displayName: name 
+    const token = await createSession({
+      userId,
+      email: normalizedEmail,
+      displayName: name,
     });
 
     // PII-safe logging
