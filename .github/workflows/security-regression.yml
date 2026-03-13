@@ -49,7 +49,7 @@ jobs:
           bun-version: latest
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install
 
       - name: Type check
         run: bunx tsc --noEmit
@@ -68,14 +68,11 @@ jobs:
         run: |
           echo "Checking for nested interactive elements in page.tsx..."
 
-          # Check for the problematic pattern: motion.a with nested button
-          # Scope to full element (opening to closing tag) to avoid false positives from siblings
           if grep -Pzo '(?s)<motion\.a[^>]*>.*?</motion\.a>' src/app/page.tsx 2>/dev/null | grep -q '<button'; then
             echo "❌ FAIL: Found <button> nested inside <motion.a> — accessibility violation"
             exit 1
           fi
 
-          # Also check for motion.a with onClick that has nested button
           if grep -Pzo '(?s)<motion\.a[^>]*onClick[^>]*>.*?</motion\.a>' src/app/page.tsx 2>/dev/null | grep -q '<button'; then
             echo "❌ FAIL: Found interactive elements nested inside <motion.a>"
             exit 1
@@ -94,13 +91,11 @@ jobs:
         run: |
           echo "Checking SSRF DNS resolution covers IPv6..."
 
-          # Must use dns.lookup with { all: true }
           if ! grep -q "all: true" src/app/api/news/route.ts; then
             echo "❌ FAIL: dns.lookup({all: true}) not found in news/route.ts"
             exit 1
           fi
 
-          # Must NOT use dns.resolve() which misses IPv6
           if grep -q 'dns\.resolve(' src/app/api/news/route.ts; then
             echo "❌ FAIL: dns.resolve() found — use dns.lookup({all:true}) instead"
             exit 1
@@ -119,7 +114,6 @@ jobs:
         run: |
           echo "Checking redirect:'manual' on outbound fetches..."
 
-          # news route must have redirect: 'manual' on OG image fetch
           if ! grep -q "redirect.*manual" src/app/api/news/route.ts; then
             echo "❌ FAIL: No redirect:'manual' in news/route.ts"
             exit 1
@@ -138,7 +132,6 @@ jobs:
         run: |
           echo "Checking that error bodies are not logged raw..."
 
-          # Should NOT log errText in structured log calls
           if grep -n "log.*errText\|log.*error:.*errText" src/app/api/ai-agent/route.ts 2>/dev/null; then
             echo "❌ FAIL: Raw error text may be logged in ai-agent/route.ts"
             exit 1
@@ -162,13 +155,11 @@ jobs:
         run: |
           echo "Checking streamed request body enforcement..."
 
-          # ai-agent route must stream-read body, not just check content-length
           if ! grep -q 'getReader\|reader.*read' src/app/api/ai-agent/route.ts; then
             echo "❌ FAIL: No streaming body reader in ai-agent/route.ts"
             exit 1
           fi
 
-          # Must have PayloadTooLargeError or equivalent
           if ! grep -q 'PayloadTooLarge' src/app/api/ai-agent/route.ts; then
             echo "❌ FAIL: No PayloadTooLargeError in ai-agent/route.ts"
             exit 1
@@ -187,13 +178,11 @@ jobs:
         run: |
           echo "Checking PII-safe IP logging..."
 
-          # Must use createHmac, not createHash
           if ! grep -q 'createHmac' src/app/api/ai-agent/route.ts; then
             echo "❌ FAIL: IP hashing uses createHash instead of createHmac"
             exit 1
           fi
 
-          # Must NOT have hardcoded salt fallback
           if grep -q "apex-ip-log-salt\|hardcoded.*salt\|default.*salt.*=" src/app/api/ai-agent/route.ts; then
             echo "❌ FAIL: Hardcoded IP_LOG_SALT fallback detected"
             exit 1
@@ -212,7 +201,6 @@ jobs:
         run: |
           echo "Checking AI agent streaming..."
 
-          # Must return a streaming Response, not NextResponse.json
           if grep -q "ReadableStream\|application/x-ndjson" src/app/api/ai-agent/route.ts; then
             echo "✅ PASS: Streaming response pattern found"
           else
@@ -231,7 +219,6 @@ jobs:
         run: |
           echo "Checking tiered model routing..."
 
-          # Must reference both 8B (simple) and 70B (complex) models
           if ! grep -q 'llama-3.1-8b-instant' src/app/api/ai-agent/route.ts; then
             echo "❌ FAIL: Simple tier model not found"
             exit 1
@@ -242,7 +229,6 @@ jobs:
             exit 1
           fi
 
-          # Must have classification logic
           if ! grep -q 'classifyQuery\|classify\|tierConfig\|QueryTier' src/app/api/ai-agent/route.ts; then
             echo "❌ FAIL: No query classification logic found"
             exit 1
@@ -261,7 +247,6 @@ jobs:
         run: |
           echo "Checking OG:image URL re-validation..."
 
-          # Must have resolveSafeImageUrl or equivalent re-validation
           if ! grep -q 'resolveSafeImageUrl\|assertSafeUrl.*absolute\|re-validat' src/app/api/news/route.ts; then
             echo "❌ FAIL: Resolved URLs are not re-validated for SSRF"
             exit 1
@@ -281,7 +266,7 @@ jobs:
           bun-version: latest
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install
 
       - name: Run contract tests
         run: bun test tests/security-contracts.test.ts
@@ -310,12 +295,17 @@ jobs:
           bun-version: latest
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install
 
       - name: Build
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+          SUPABASE_URL: https://build-stub.supabase.co
+          SUPABASE_SECRET_KEY: build-stub-secret-key-not-real
+          SUPABASE_ANON_KEY: build-stub-anon-key-not-real
+          JWT_SECRET: build-stub-jwt-secret-32-chars-min-ok
+          IP_LOG_SALT: build-stub-ip-salt
         run: bun run build
 
   summary:

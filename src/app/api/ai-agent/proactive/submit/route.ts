@@ -21,7 +21,10 @@ export async function POST(request: NextRequest): Promise<Response> {
     );
   }
 
-  let tid: NodeJS.Timeout | undefined;
+  // ReturnType<typeof setTimeout> works in both Node.js and Edge runtimes.
+  // NodeJS.Timeout is Node-specific and unavailable in the edge runtime.
+  let tid: ReturnType<typeof setTimeout> | undefined;
+
   try {
     const body: SubmitTransactionBody = await request.json();
     const { intent, amount, currency, destination, userId } = body;
@@ -55,7 +58,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       const result = await res.json();
       return NextResponse.json(result);
     } finally {
-      if (tid) clearTimeout(tid);
+      if (tid !== undefined) clearTimeout(tid);
     }
 
   } catch (error: unknown) {
@@ -66,7 +69,6 @@ export async function POST(request: NextRequest): Promise<Response> {
       );
     }
 
-    console.error('[proactive/submit] error:', error);
     return NextResponse.json(
       { error: 'Transaction submission failed', details: String(error) },
       { status: 500 }

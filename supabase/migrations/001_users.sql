@@ -1,14 +1,27 @@
--- Enable the citext extension for case-insensitive string types
-CREATE EXTENSION IF NOT EXISTS citext;
+-- ══════════════════════════════════════════════════════════
+-- Apex — Users table migration
+-- Region: West EU (Ireland)
+-- Run once in Supabase Dashboard → SQL Editor.
+-- ══════════════════════════════════════════════════════════
 
--- Create users table with CITEXT for the email column
-CREATE TABLE IF NOT EXISTS users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email CITEXT UNIQUE NOT NULL,
-    display_name TEXT,
-    password_hash TEXT NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+-- citext gives case-insensitive UNIQUE on email without a separate index.
+-- The UNIQUE constraint itself creates the B-tree index; no extra CREATE INDEX needed.
+create extension if not exists citext;
+
+create table if not exists public.users (
+  id            uuid        primary key default gen_random_uuid(),
+  email         citext      unique not null,
+  password_hash text        not null,
+  display_name  text        not null check (char_length(display_name) between 2 and 50),
+  province      text        null,
+  created_at    timestamptz not null default now(),
+  last_login_at timestamptz null
 );
 
--- Ensure a functional unique index is also present as a fallback/best practice
-CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_idx ON users (lower(email));
+-- Row Level Security: all reads/writes go through the service-role key
+-- from Vercel API routes, never directly from the browser.
+alter table public.users enable row level security;
+
+-- No RLS policies are defined here intentionally.
+-- The service-role key (used by src/lib/supabase.ts) bypasses RLS entirely.
+-- Add targeted policies here only if you introduce client-side Supabase calls.
