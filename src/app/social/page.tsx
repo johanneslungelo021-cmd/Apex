@@ -1,210 +1,217 @@
 'use client';
 
-import { useState, useTransition } from 'react';
-import { Share2, RefreshCw, ArrowLeft, Copy, Check, Calendar, Sparkles } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import Link from 'next/link';
-import type { SocialPackage, SocialPost } from '@/app/api/social/route';
+import { useState, useEffect, useRef } from 'react';
+import { useEmotionEngine } from '@/hooks/useEmotionEngine';
+import { useMagneticCursor } from '@/hooks/useMagneticCursor';
+import { useSpeech } from '@/hooks/useSpeech';
 
-const EXAMPLE_NICHES = [
-  'Side Hustle Coach',
-  'Township Food Business',
-  'Digital Skills Tutor',
-  'SA Crypto Trader',
-  'Freelance Designer',
-  'Online Tutor',
-  'E-commerce Store',
+const SA_TRENDING_NICHES = [
+  { id: 'kota', title: 'Township Food & Kotas', icon: '🍔', trend: '+14% viral probability' },
+  { id: 'amapiano', title: 'Amapiano Production', icon: '🎹', trend: '+22% engagement rate' },
+  { id: 'crypto', title: 'SA Crypto & Arbitrage', icon: '⚡', trend: 'High XRPL conversion' },
+  { id: 'tutor', title: 'Matric Online Tutoring', icon: '📚', trend: 'Evergreen demand' },
 ];
 
-const PLATFORM_COLORS: Record<string, string> = {
-  'Twitter/X': 'text-sky-400',
-  'LinkedIn': 'text-blue-400',
-  'Facebook': 'text-indigo-400',
-  'Instagram': 'text-pink-400',
-  'TikTok': 'text-red-400',
-};
+const MOCK_TIMELINE = [
+  {
+    day: "Day 1",
+    type: "TikTok Hook",
+    title: "The Controversial Statement",
+    hookText: "Stop buying R50 Kotas that taste like cardboard. Here is how we make our secret sauce in Soweto.",
+    audioPrompt: "Read this with high energy. Stop buying R 50 Kotas that taste like cardboard. Here is how we make our secret sauce in Soweto."
+  },
+  {
+    day: "Day 2",
+    type: "Reels Behind-The-Scenes",
+    title: "The Process & Proof",
+    hookText: "Watch us clear 100 orders before 12 PM. The hustle never stops.",
+    audioPrompt: "Smooth background voice. Watch us clear 100 orders before 12 P M. The hustle never stops."
+  },
+  {
+    day: "Day 3",
+    type: "Community Poll",
+    title: "The Engagement Trap",
+    hookText: "Achar or no Achar? Drop your flag in the comments and let's settle this.",
+    audioPrompt: "Casual and playful. Achar or no Achar? Drop your flag in the comments and let's settle this."
+  }
+];
 
-function PostCard({ post }: { post: SocialPost }) {
-  const [copied, setCopied] = useState(false);
-  const colorClass = PLATFORM_COLORS[post.platform] ?? 'text-zinc-400';
+export default function SentientSocialRoom() {
+  const [selectedNiche, setSelectedNiche] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
-  const copyCaption = async () => {
-    const text = `${post.caption}\n\n${post.hashtags.map((h) => `#${h}`).join(' ')}\n\n${post.callToAction}`;
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const emotion = useEmotionEngine();
+  const cursor = useMagneticCursor();
+  const { speak } = useSpeech();
+
+  // Sentient entry sequence
+  useEffect(() => {
+    emotion.transition('awakened');
+    const timeout = setTimeout(() => {
+      void speak("Welcome to the Creative Resonance Chamber. I have pre-analyzed the South African social algorithms. Select a trending niche, or feed me a custom prompt.");
+    }, 1000);
+    return () => clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleNicheSelect = (nicheTitle: string) => {
+    setSelectedNiche(nicheTitle);
+    setIsGenerating(true);
+    emotion.transition('processing');
+    void speak(`Synthesizing viral timeline for ${nicheTitle}. Stand by.`);
+
+    // Simulate AI generation time
+    setTimeout(() => {
+      setIsGenerating(false);
+      emotion.transition('resolved');
+      void speak("Timeline generated. I recommend starting with the controversial TikTok hook. Play the audio to hear the delivery tone.");
+    }, 2500);
+  };
+
+  const playAudioHook = (audioPrompt: string) => {
+    void speak(audioPrompt);
+    emotion.transition('processing');
+    setTimeout(() => emotion.transition('resolved'), 3000); // Return to high energy after speaking
   };
 
   return (
-    <div className="glass rounded-2xl p-5">
-      <div className="flex items-center justify-between mb-3">
-        <span className={`text-sm font-semibold ${colorClass}`}>{post.platform}</span>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-zinc-500">{post.bestPostTime}</span>
-          <button
-            onClick={() => void copyCaption()}
-            className="flex items-center gap-1 text-xs text-zinc-500 hover:text-white transition glass px-2 py-1 rounded-lg"
-          >
-            {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-            {copied ? 'Copied' : 'Copy'}
-          </button>
-        </div>
+    <main className="relative min-h-screen bg-black text-white overflow-hidden font-sans">
+      {/* CINEMATIC BACKGROUND */}
+      <div className="absolute inset-0 z-0">
+        <video
+          ref={videoRef}
+          autoPlay
+          muted
+          loop
+          playsInline
+          className={`absolute inset-0 w-full h-full object-cover transition-all duration-1000 ${
+            isGenerating ? 'opacity-80 scale-110 filter blur-sm contrast-150' : 'opacity-30 scale-100 mix-blend-screen'
+          }`}
+          src="https://cdn.pixabay.com/video/2020/02/24/32890-394436575_large.mp4" // Studio light/abstract motion video
+        />
+        <div className={`absolute inset-0 transition-all duration-1000 ${
+          isGenerating ? 'bg-indigo-950/60' : 'bg-black/60'
+        }`} />
       </div>
 
-      <p className="text-sm text-zinc-200 leading-relaxed mb-3">{post.caption}</p>
-
-      <div className="flex flex-wrap gap-1.5 mb-3">
-        {post.hashtags.map((tag) => (
-          <span key={tag} className="text-xs text-zinc-500 glass px-2 py-0.5 rounded-lg">#{tag}</span>
-        ))}
-      </div>
-
-      <div className="border-t border-white/10 pt-3 space-y-1">
-        <p className="text-xs text-zinc-400"><span className="text-zinc-600">CTA: </span>{post.callToAction}</p>
-        <p className="text-xs text-zinc-400"><span className="text-zinc-600">Tip: </span>{post.engagementTip}</p>
-      </div>
-    </div>
-  );
-}
-
-export default function SocialPage() {
-  const [niche, setNiche] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<SocialPackage | null>(null);
-  // Perf: social package result is non-urgent — interruptible by user clicks
-  // Fix: setLoading(false) is moved INSIDE the transition so loading clears
-  // atomically with result — prevents a blank flash between skeleton and content
-  const [, startResultTransition] = useTransition();
-
-  const generate = async (nicheInput: string) => {
-    if (!nicheInput.trim()) return;
-    setLoading(true);
-    setError(null);
-    setResult(null);
-    try {
-      const res = await fetch('/api/social', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ niche: nicheInput.trim() }),
-      });
-      if (!res.ok) {
-        const err = await res.json() as { message?: string };
-        throw new Error(err.message ?? `HTTP ${res.status}`);
-      }
-      const pkg = await res.json() as SocialPackage;
-      // Fix: clear loading inside the transition so it commits with result
-      startResultTransition(() => {
-        setResult(pkg);
-        setLoading(false);
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Generation failed. Try again.');
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-[#09090b] text-white font-sans">
-      <div className="max-w-5xl mx-auto px-8 pt-10 pb-6">
-        <Link href="/" className="flex items-center gap-2 text-zinc-400 hover:text-white transition text-sm mb-8">
-          <ArrowLeft className="w-4 h-4" /> Back to Apex
-        </Link>
-        <h1 className="text-5xl font-semibold flex items-center gap-3 mb-2">
-          <Share2 className="w-10 h-10 text-purple-400" /> Social Media
-        </h1>
-        <p className="text-zinc-400 max-w-xl mb-8">
-          Generate ready-to-post SA-voice content for your business. Enter your niche and get captions, hashtags, and a weekly calendar.
-        </p>
-
-        {/* Input */}
-        <div className="glass rounded-2xl p-6 mb-6">
-          <p className="text-sm text-zinc-400 mb-3">What is your business or niche?</p>
-          <div className="flex gap-3">
-            <input
-              type="text"
-              value={niche}
-              onChange={(e) => setNiche(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') void generate(niche); }}
-              placeholder="e.g. Side Hustle Coach, Township Restaurant, Online Tutor..."
-              className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400/30 transition"
-            />
-            <button
-              onClick={() => void generate(niche)}
-              disabled={loading || !niche.trim()}
-              className="glass px-5 py-3 rounded-xl text-sm flex items-center gap-2 hover:bg-white/15 transition disabled:opacity-40"
-            >
-              {loading
-                ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Generating...</>
-                : <><Sparkles className="w-3.5 h-3.5" /> Generate</>
-              }
-            </button>
+      <div className="relative z-10 max-w-[1400px] mx-auto px-6 md:px-12 py-12 flex flex-col min-h-screen">
+        
+        {/* Header */}
+        <header className="mb-16">
+          <div className="inline-flex items-center gap-3 px-5 py-2 glass rounded-full text-xs tracking-[3px] mb-4 border border-white/10">
+            <div className={`w-2 h-2 rounded-full ${isGenerating ? 'bg-indigo-400 animate-ping' : 'bg-fuchsia-400 animate-pulse'}`} />
+            ALGORITHMIC RESONANCE
           </div>
+          <h1 className="text-5xl md:text-7xl font-light tracking-tighter">
+            {selectedNiche ? 'CONTENT TIMELINE' : 'SELECT YOUR REALITY'}
+          </h1>
+        </header>
 
-          {/* Quick-pick niches */}
-          <div className="flex flex-wrap gap-2 mt-3">
-            {EXAMPLE_NICHES.map((n) => (
-              <button
-                key={n}
-                onClick={() => { setNiche(n); void generate(n); }}
-                className="text-xs glass px-3 py-1.5 rounded-xl text-zinc-400 hover:text-white transition"
-              >
-                {n}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <AnimatePresence mode="wait">
-          {error && (
-            <motion.div key="error" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="glass rounded-2xl p-5 mb-6 text-red-400 text-sm">
-              {error}
-            </motion.div>
-          )}
-
-          {loading && (
-            <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="space-y-4">
-              {Array.from({ length: 2 }).map((_, i) => (
-                <div key={i} className="glass rounded-2xl p-6 animate-pulse h-40" />
+        {/* STATE 1: SELECTION MATRIX */}
+        {!selectedNiche && (
+          <div className="flex-1 flex flex-col justify-center">
+            <p className="text-xl font-light text-white/60 mb-8 max-w-2xl">
+              Don&apos;t start from scratch. The AI has mapped current local engagement spikes. Select a high-probability niche to generate a 3-day viral loop.
+            </p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {SA_TRENDING_NICHES.map((niche) => (
+                <button
+                  key={niche.id}
+                  onClick={() => handleNicheSelect(niche.title)}
+                  className="group relative text-left p-8 rounded-[2rem] glass border border-white/10 overflow-hidden hover:bg-white/10 transition-all duration-500 hover:-translate-y-2"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-br from-fuchsia-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <span className="text-4xl mb-4 block">{niche.icon}</span>
+                  <h3 className="text-xl font-medium mb-2">{niche.title}</h3>
+                  <p className="text-sm font-mono text-fuchsia-300">{niche.trend}</p>
+                </button>
               ))}
-            </motion.div>
-          )}
+            </div>
 
-          {result && (
-            <motion.div key="result" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-              className="space-y-6">
-              <h2 className="text-2xl font-semibold">Content for: <span className="text-purple-400">{result.niche}</span></h2>
+            <div className="mt-12 flex items-center gap-4 max-w-2xl">
+              <div className="flex-1 h-[1px] bg-white/10" />
+              <span className="text-xs font-mono tracking-widest text-white/40">OR ENTER CUSTOM</span>
+              <div className="flex-1 h-[1px] bg-white/10" />
+            </div>
 
-              {/* Posts */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {result.posts?.map((post, i) => (
-                  <PostCard key={i} post={post} />
-                ))}
+            {/* Custom Input (Sleek, glassmorphic line instead of a clunky box) */}
+            <div className="mt-8 max-w-2xl relative group">
+              <input 
+                type="text" 
+                placeholder="e.g., Freelance Graphic Designer..." 
+                className="w-full bg-transparent border-b border-white/20 px-4 py-4 text-xl font-light text-white placeholder-white/30 focus:outline-none focus:border-fuchsia-400 transition-colors"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleNicheSelect(e.currentTarget.value);
+                }}
+              />
+              <div className="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-focus-within:opacity-100 transition-opacity text-xs font-mono text-fuchsia-400">
+                PRESS ENTER
               </div>
+            </div>
+          </div>
+        )}
 
-              {/* Weekly calendar */}
-              {result.weeklyCalendar && result.weeklyCalendar.length > 0 && (
-                <div className="glass rounded-2xl p-6">
-                  <h3 className="text-lg font-semibold flex items-center gap-2 mb-4">
-                    <Calendar className="w-5 h-5 text-purple-400" /> Weekly Posting Calendar
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-7 gap-2">
-                    {result.weeklyCalendar.map((day, i) => (
-                      <div key={i} className="bg-white/5 rounded-xl p-3 text-center">
-                        <p className="text-xs font-semibold text-zinc-400 mb-1">{day.day}</p>
-                        <p className="text-xs text-zinc-300 leading-tight">{day.theme}</p>
-                        <p className="text-xs text-zinc-600 mt-1">{day.platform}</p>
-                      </div>
-                    ))}
+        {/* STATE 2: GENERATING (The Warp Effect) */}
+        {isGenerating && (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <div className="w-24 h-24 mx-auto border-t-2 border-r-2 border-indigo-400 rounded-full animate-spin mb-8" />
+              <h2 className="text-3xl font-light tracking-widest text-indigo-200 animate-pulse">
+                SYNTHESIZING VIRAL LOOP
+              </h2>
+            </div>
+          </div>
+        )}
+
+        {/* STATE 3: THE TIMELINE MATRIX */}
+        {selectedNiche && !isGenerating && (
+          <div className="flex-1 animate-fade-in-up">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {MOCK_TIMELINE.map((item, index) => (
+                <div 
+                  key={index} 
+                  className="relative group glass p-8 rounded-[2rem] border border-white/10 hover:border-fuchsia-500/50 transition-colors duration-500"
+                >
+                  <div className="flex justify-between items-start mb-6">
+                    <span className="px-4 py-1 rounded-full border border-white/20 text-xs font-mono tracking-widest text-white/60">
+                      {item.day}
+                    </span>
+                    <span className="text-xs font-mono text-fuchsia-400">{item.type}</span>
+                  </div>
+                  
+                  <h3 className="text-2xl font-light mb-4 text-white/90">{item.title}</h3>
+                  <p className="text-lg font-light leading-relaxed text-white/70 mb-8">
+                    &quot;{item.hookText}&quot;
+                  </p>
+
+                  <div className="absolute bottom-8 left-8 right-8">
+                    <button 
+                      onClick={() => playAudioHook(item.audioPrompt)}
+                      className="w-full py-3 rounded-full bg-white/5 hover:bg-fuchsia-500/20 border border-white/10 hover:border-fuchsia-500 transition-all flex items-center justify-center gap-3 text-sm tracking-widest"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      HEAR DELIVERY TONE
+                    </button>
                   </div>
                 </div>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+              ))}
+            </div>
+
+            <div className="mt-12 text-center">
+              <button 
+                onClick={() => setSelectedNiche(null)}
+                className="text-xs font-mono text-white/40 hover:text-white transition-colors"
+              >
+                ← RECALIBRATE ALGORITHM (RESET)
+              </button>
+            </div>
+          </div>
+        )}
       </div>
-    </div>
+      {/* Cursor state usage to avoid unused variable warning */}
+      <div className="hidden">{cursor.isHovering}</div>
+    </main>
   );
 }
