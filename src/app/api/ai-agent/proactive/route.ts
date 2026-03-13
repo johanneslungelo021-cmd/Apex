@@ -1,26 +1,18 @@
 /**
  * Phase 3: Pre-Sign & Stream Edge API Route
- * 
- * This Edge function implements the "Pre-Sign & Stream" architecture
- * for achieving Ripple transaction finality in ~3.5 seconds.
- * 
- * Key Features:
- * - Runs on Vercel Edge runtime for <50ms TTFB
- * - Integrates with existing streaming AI agent
- * - Proactive transaction detection and pre-building
- * - Real-time transaction status via Server-Sent Events
- * 
+ *
+ * Implements the Pre-Sign & Stream architecture for XRPL transaction
+ * finality in ~3.5 seconds.
+ *
  * NOTE: XRPL integration requires XRPL_SERVICE_URL environment variable.
  * Without it, transaction intents are detected but not executed.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 
-// Edge runtime configuration
 export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 
-// Type definitions for transaction handling
 interface TransactionIntent {
   type: string;
   amount?: string;
@@ -43,17 +35,10 @@ interface PreBuildResult {
   error?: string;
 }
 
-/**
- * Intent Detection Helper
- * 
- * Analyzes user prompt for transaction intent to enable pre-building.
- * In production, this would integrate with the Scout Pre-run system.
- */
 function detectTransactionIntent(prompt: string): TransactionIntent | null {
   const lowerPrompt = prompt.toLowerCase();
-  
-  // Pattern matching for common XRPL transactions
-  const patterns = [
+
+  const patterns: Array<{ regex: RegExp; type: string }> = [
     { regex: /send\s+(\d+(?:\.\d+)?)\s*(xrp|ripple)/i, type: 'SEND_XRP' },
     { regex: /send\s+(\d+(?:\.\d+)?)\s*rl?usd/i, type: 'SEND_RLUSD' },
     { regex: /send\s+(\d+(?:\.\d+)?)\s*usd/i, type: 'SEND_RLUSD' },
@@ -62,46 +47,35 @@ function detectTransactionIntent(prompt: string): TransactionIntent | null {
     { regex: /swap\s+.*?(xrp|rlusd)/i, type: 'OFFER_CREATE' },
     { regex: /place\s+order/i, type: 'OFFER_CREATE' },
   ];
-  
+
   for (const pattern of patterns) {
     const match = lowerPrompt.match(pattern.regex);
     if (match) {
       return {
         type: pattern.type,
-        amount: match[1] || undefined,
+        amount: match[1] ?? undefined,
         currency: pattern.type === 'SEND_RLUSD' ? 'RLUSD' : 'XRP',
       };
     }
   }
-  
+
   return null;
 }
 
-/**
- * Pre-build Transaction
- * 
- * Creates a transaction object before user confirmation.
- * Returns pre_signed: false if XRPL_SERVICE_URL is not configured.
- * 
- * In production, this calls the Python xrpl_proactive module.
- */
 async function preBuildTransaction(intent: TransactionIntent): Promise<PreBuildResult> {
   const xrplServiceUrl = process.env.XRPL_SERVICE_URL;
-  
+
   if (!xrplServiceUrl) {
-    // No XRPL service configured — return unsigned stub
-    // UI can still show intent but cannot execute
-    return { 
+    return {
       pre_signed: false,
       error: 'XRPL service not configured. Set XRPL_SERVICE_URL environment variable.',
     };
   }
 
   try {
-    // Delegate to the external XRPL Python service
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
-    
+
     const res = await fetch(`${xrplServiceUrl}/prebuild`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -113,28 +87,22 @@ async function preBuildTransaction(intent: TransactionIntent): Promise<PreBuildR
       }),
       signal: controller.signal,
     });
-    
+
     clearTimeout(timeoutId);
 
     if (!res.ok) {
-      return { 
-        pre_signed: false, 
-        error: `XRPL service error: HTTP ${res.status}`,
-      };
+      return { pre_signed: false, error: `XRPL service error: HTTP ${res.status}` };
     }
 
-    return res.json();
+    return res.json() as Promise<PreBuildResult>;
   } catch (error) {
-    return { 
-      pre_signed: false, 
+    return {
+      pre_signed: false,
       error: `Failed to connect to XRPL service: ${error instanceof Error ? error.message : 'Unknown error'}`,
     };
   }
 }
 
-/**
- * SSE Encoder for streaming responses
- */
 function createSSEEncoder() {
   return {
     encode(event: TransactionEvent): string {
@@ -143,118 +111,66 @@ function createSSEEncoder() {
   };
 }
 
-/**
- * POST Handler - Main streaming endpoint
- * 
- * Handles streaming AI responses with proactive XRPL transaction support.
- */
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<Response> {
   try {
-    const body = await request.json();
+    const body = await request.json() as { prompt?: string };
     const { prompt } = body;
-    
+
     if (!prompt) {
       return NextResponse.json(
         { error: 'Prompt is required' },
         { status: 400 }
       );
     }
-    
-    // Detect transaction intent from prompt
+
     const intent = detectTransactionIntent(prompt);
-    
-    // Create SSE stream
     const sseEncoder = createSSEEncoder();
+
     const stream = new ReadableStream({
       async start(controller) {
-        const textEncoder = new TextEncoder();
-        
-        // Send initial response - AI is thinking
-        const initialEvent: TransactionEvent = {
-          type: 'transaction_ready',
-          intent: intent || undefined,
-          timestamp: Date.now(),
-        };
-        controller.enqueue(textEncoder.encode(sseEncoder.encode(initialEvent)));
-        
-        // If transaction detected, attempt to pre-build
+        const enc = new TextEncoder();
+
+        const send = (event: TransactionEvent) =>
+          controller.enqueue(enc.encode(sseEncoder.encode(event)));
+
+        send({ type: 'transaction_ready', intent: intent ?? undefined, timestamp: Date.now() });
+
         let preBuildResult: PreBuildResult | null = null;
+
         if (intent) {
-          // Send "analyzing transaction" status
-          const analyzingEvent: TransactionEvent = {
-            type: 'transaction_ready',
-            message: 'Transaction intent detected. Analyzing...',
-            timestamp: Date.now(),
-          };
-          controller.enqueue(textEncoder.encode(sseEncoder.encode(analyzingEvent)));
-          
+          send({ type: 'transaction_ready', message: 'Transaction intent detected. Analyzing...', timestamp: Date.now() });
+
           try {
             preBuildResult = await preBuildTransaction(intent);
-            
+
             if (preBuildResult.pre_signed) {
-              // Successfully pre-built
-              const readyEvent: TransactionEvent = {
-                type: 'transaction_ready',
-                intent,
-                message: 'Transaction pre-built and ready for confirmation',
-                timestamp: Date.now(),
-              };
-              controller.enqueue(textEncoder.encode(sseEncoder.encode(readyEvent)));
+              send({ type: 'transaction_ready', intent, message: 'Transaction pre-built and ready for confirmation', timestamp: Date.now() });
             } else {
-              // Pre-build failed or service not configured
-              const warnEvent: TransactionEvent = {
-                type: 'transaction_ready',
-                intent,
-                message: preBuildResult.error || 'Transaction intent detected but XRPL service unavailable.',
-                timestamp: Date.now(),
-              };
-              controller.enqueue(textEncoder.encode(sseEncoder.encode(warnEvent)));
+              send({ type: 'transaction_ready', intent, message: preBuildResult.error ?? 'XRPL service unavailable.', timestamp: Date.now() });
             }
           } catch (error) {
-            const errorEvent: TransactionEvent = {
-              type: 'error',
-              message: `Failed to pre-build transaction: ${error}`,
-              timestamp: Date.now(),
-            };
-            controller.enqueue(textEncoder.encode(sseEncoder.encode(errorEvent)));
+            send({ type: 'error', message: `Failed to pre-build: ${error instanceof Error ? error.message : String(error)}`, timestamp: Date.now() });
           }
         }
-        
-        // Streaming response: if transaction detected, inform user
-        if (intent) {
-          let responseMessage: string;
 
-          if (preBuildResult?.pre_signed) {
-            responseMessage = `I've detected you want to ${intent.type.replace(/_/g, ' ').toLowerCase()} ${intent.amount || ''} ${intent.currency || 'XRP'}. Click confirm to execute this transaction on the XRPL, which typically settles in 3-5 seconds.`;
-          } else {
-            responseMessage = `I've detected a transaction intent (${intent.type.replace(/_/g, ' ').toLowerCase()}), but the XRPL service is not currently configured. Please contact support to enable blockchain transactions.`;
-          }
-          
-          for (const char of responseMessage) {
-            controller.enqueue(textEncoder.encode(
-              `data: ${JSON.stringify({ type: 'text', content: char })}\n\n`
-            ));
-            await new Promise(resolve => setTimeout(resolve, 20));
-          }
-        } else {
-          const normalMessage = 'Processing your request...';
-          for (const char of normalMessage) {
-            controller.enqueue(textEncoder.encode(
-              `data: ${JSON.stringify({ type: 'text', content: char })}\n\n`
-            ));
-            await new Promise(resolve => setTimeout(resolve, 30));
-          }
+        const responseMessage = intent
+          ? preBuildResult?.pre_signed
+            ? `I've detected you want to ${intent.type.replace(/_/g, ' ').toLowerCase()} ${intent.amount ?? ''} ${intent.currency ?? 'XRP'}. Click confirm to execute on XRPL (~3-5 seconds to settle).`
+            : `I've detected a transaction intent (${intent.type.replace(/_/g, ' ').toLowerCase()}), but the XRPL service is not configured. Contact support to enable blockchain transactions.`
+          : 'Processing your request...';
+
+        for (const char of responseMessage) {
+          controller.enqueue(enc.encode(
+            `data: ${JSON.stringify({ type: 'text', content: char })}\n\n`
+          ));
+          await new Promise((resolve) => setTimeout(resolve, intent ? 20 : 30));
         }
-        
-        // End of stream
-        controller.enqueue(textEncoder.encode(
-          `data: ${JSON.stringify({ type: 'done' })}\n\n`
-        ));
-        
+
+        controller.enqueue(enc.encode(`data: ${JSON.stringify({ type: 'done' })}\n\n`));
         controller.close();
       },
     });
-    
+
     return new Response(stream, {
       headers: {
         'Content-Type': 'text/event-stream',
@@ -262,22 +178,18 @@ export async function POST(request: NextRequest) {
         'Connection': 'keep-alive',
       },
     });
-    
+
   } catch (error) {
-    console.error('Error in proactive transaction endpoint:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }
 }
 
-/**
- * GET Handler - Health check
- */
-export async function GET() {
+export async function GET(): Promise<Response> {
   const xrplConfigured = !!process.env.XRPL_SERVICE_URL;
-  
+
   return NextResponse.json({
     status: 'healthy',
     version: '3.0.0-phase3',

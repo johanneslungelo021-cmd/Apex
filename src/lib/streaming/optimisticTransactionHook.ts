@@ -9,16 +9,22 @@
  * remain in OptimisticTransactionUI.tsx which is dynamic-imported.
  */
 
-export {
+import {
   useOptimisticTransaction,
   type TransactionIntent,
   type TransactionEvent,
 } from './OptimisticTransactionUI';
 
+export { useOptimisticTransaction, type TransactionIntent, type TransactionEvent };
+
 /**
- * OptimisticTransactionState — convenience re-export so callers can type
- * the return value of useOptimisticTransaction without importing the full UI module.
+ * OptimisticTransactionState — convenience type so callers can annotate
+ * the `transactionState` slice of useOptimisticTransaction without importing
+ * the full heavy UI module.
+ *
+ * Derived via ReturnType of the hook itself (no dynamic import() in type position,
+ * which is forbidden under isolatedModules:true).
  */
 export type OptimisticTransactionState = ReturnType<
-  typeof import('./OptimisticTransactionUI').useOptimisticTransaction
+  typeof useOptimisticTransaction
 >['transactionState'];
