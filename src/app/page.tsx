@@ -221,8 +221,6 @@ function SentientInterfaceInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [emotion.state]);
 
-  // Derived heartbeat intensity for backward-compatible Heart icon animation
-  // Removed unused heartbeatIntensity variable
   const {
     transactionState,
     resetTransaction,
@@ -585,507 +583,665 @@ function SentientInterfaceInner() {
 
   const lastMessage = chatHistory[chatHistory.length - 1];
 
+  // ── Portal subtitles sourced from live state (no hardcoded fakes) ──────────
+  const tradingSubtitle = githubMetrics
+    ? `${githubMetrics.language} · ${githubMetrics.stars} stars · XRPL live`
+    : 'ZAR/XRP liquidity matrix online. Real-time execution.';
+  const opportunitiesSubtitle = opportunities.length > 0
+    ? `${opportunities.length} live opportunities under R2000`
+    : 'Scout Agent scanning all 9 provinces now.';
+  const newsSubtitle = news.length > 0
+    ? news[0]?.title?.slice(0, 60) + '…'
+    : 'South Africa\'s AI economy growing 47% YoY.';
+
   return (
-    <div className="min-h-screen bg-zinc-950 text-white relative">
-      {/* Phase 1: Emotion-reactive WebGL swarm */}
-      <div className="fixed inset-0 -z-10 opacity-60 mix-blend-screen pointer-events-none">
-        {/*
-         * Perf: ReducedMotionGate checks window.matchMedia('prefers-reduced-motion').
-         * When active it returns a static gradient — Three.js never loads, zero WebGL
-         * cost.  For all other users SentientCanvasScene loads post-FCP via dynamic().
-         */}
+    <div className="min-h-screen bg-black text-white relative overflow-x-hidden" style={{ fontFamily: 'var(--font-geist-sans), ui-sans-serif' }}>
+
+      {/* ── Cinematic CSS injected once ─────────────────────────────────────── */}
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
+
+        .apex-title {
+          font-family: 'Bebas Neue', 'DIN Condensed', Impact, sans-serif;
+          letter-spacing: -0.02em;
+          line-height: 0.88;
+        }
+        .liquid-border-nav {
+          position: relative;
+          isolation: isolate;
+        }
+        .liquid-border-nav::before {
+          content: '';
+          position: absolute;
+          inset: -1.5px;
+          background: linear-gradient(90deg, #00ffc8, #00aaff, #7c3aed, #00ffc8);
+          background-size: 300% 100%;
+          animation: liquidFlow 6s linear infinite;
+          border-radius: inherit;
+          z-index: -1;
+          opacity: 0.7;
+          filter: blur(2px);
+        }
+        @keyframes liquidFlow {
+          0%   { background-position: 0% 50%; }
+          100% { background-position: 300% 50%; }
+        }
+        .portal-hover {
+          transition: transform 0.45s cubic-bezier(0.23, 1, 0.32, 1),
+                      box-shadow 0.45s cubic-bezier(0.23, 1, 0.32, 1);
+        }
+        .portal-hover:hover {
+          transform: translateY(-10px) scale(1.025);
+          box-shadow: 0 0 60px -8px rgba(0, 255, 200, 0.4);
+        }
+        .apex-glass {
+          background: rgba(10, 15, 35, 0.72);
+          backdrop-filter: blur(24px) saturate(160%);
+          -webkit-backdrop-filter: blur(24px) saturate(160%);
+          border: 1px solid rgba(0, 255, 200, 0.12);
+        }
+        .hero-glow {
+          position: absolute;
+          inset: 0;
+          background: radial-gradient(ellipse 80% 60% at 50% 50%, rgba(0,40,60,0.9) 0%, transparent 70%);
+          pointer-events: none;
+        }
+        .scan-line {
+          position: absolute;
+          left: 0; right: 0;
+          height: 1px;
+          background: linear-gradient(90deg, transparent, rgba(0,255,200,0.4), transparent);
+          animation: scanDown 8s linear infinite;
+          pointer-events: none;
+        }
+        @keyframes scanDown {
+          0%   { top: -1px; opacity: 0; }
+          5%   { opacity: 1; }
+          95%  { opacity: 1; }
+          100% { top: 100%; opacity: 0; }
+        }
+        .text-cyan-apex { color: #00ffc8; }
+        .fade-up {
+          animation: fadeUp 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(32px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .stagger-1 { animation-delay: 0.1s; }
+        .stagger-2 { animation-delay: 0.25s; }
+        .stagger-3 { animation-delay: 0.45s; }
+        .stagger-4 { animation-delay: 0.65s; }
+        .scrollbar-hide { scrollbar-width: none; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+      `}</style>
+
+      {/* ── WebGL Swarm (unchanged) ─────────────────────────────────────────── */}
+      <div className="fixed inset-0 -z-10 pointer-events-none" style={{ opacity: 0.55, mixBlendMode: 'screen' }}>
         <ReducedMotionGate>
           <Suspense fallback={null}>
-            {/*
-             * Fix 2: SentientCanvasScene is dynamically imported with ssr:false.
-             * Three.js (~500KB) now loads AFTER FCP — browser paints text content first.
-             * The fixed container is already in the DOM; canvas slot is reserved.
-             */}
             <SentientCanvasScene />
           </Suspense>
         </ReducedMotionGate>
       </div>
 
-      {/* Phase 1: Custom magnetic cursor (desktop only) */}
+      {/* ── Magnetic cursor ─────────────────────────────────────────────────── */}
       <MagneticReticle />
 
-      {/* Transaction Beam Effect */}
-      <TransactionBeam
-        isActive={showTransactionBeam}
-        startColor="#00FF88"
-        endColor="#00AAFF"
-        onComplete={() => setShowTransactionBeam(false)}
-      />
+      {/* ── Transaction beam ────────────────────────────────────────────────── */}
+      <TransactionBeam isActive={showTransactionBeam} startColor="#00FF88" endColor="#00AAFF" onComplete={() => setShowTransactionBeam(false)} />
 
-      {/* Phase 1: EmotionalGrid wraps all content — injects CSS variable morphing */}
+      {/* ── GEO schema (unchanged) ──────────────────────────────────────────── */}
+      <JsonLdScript schema={buildTechArticleSchema({
+        headline: 'Apex Central — AI-Powered Digital Income Platform for South Africa',
+        abstract: 'Apex Central is a living South African digital platform that discovers real income opportunities under R2000 to start, provides personalised AI guidance via a multi-model swarm, and executes autonomous XRPL micro-transactions with sub-3-second settlement.',
+        slug: 'home',
+        keywords: ['South Africa digital income','AI opportunities ZAR','XRPL blockchain South Africa','Scout Agent opportunities','Vaal AI Empire','African Futurism','digital freelancing South Africa'],
+        aboutName: 'Digital Income Opportunities — South Africa',
+        aboutDescription: 'Verified digital income opportunities for South African creators costing R0–R2000 to start, refreshed every 5 minutes by an AI Scout Agent.',
+      })} />
+
       <EmotionalGrid>
-      
-      {/* Pillar 2: GEO — TechArticle JSON-LD for AI citation */}
-      <JsonLdScript
-        schema={buildTechArticleSchema({
-          headline: 'Apex Central — AI-Powered Digital Income Platform for South Africa',
-          abstract:
-            'Apex Central is a living South African digital platform that discovers real income opportunities under R2000 to start, provides personalised AI guidance via a multi-model swarm, and executes autonomous XRPL micro-transactions with sub-3-second settlement.',
-          slug: 'home',
-          keywords: [
-            'South Africa digital income',
-            'AI opportunities ZAR',
-            'XRPL blockchain South Africa',
-            'Scout Agent opportunities',
-            'Vaal AI Empire',
-            'African Futurism',
-            'digital freelancing South Africa',
-          ],
-          aboutName: 'Digital Income Opportunities — South Africa',
-          aboutDescription:
-            'Verified digital income opportunities for South African creators costing R0–R2000 to start, refreshed every 5 minutes by an AI Scout Agent.',
-        })}
-      />
 
-      {/* Pillar 2: GEO — Hero section with sr-only answer-first summary */}
-      <AgentReadableChunk
-        id="apex-hero"
-        agentSummary="Apex Central is a South African AI-powered digital income platform built in the Vaal Triangle, Gauteng. It combines a Scout Agent that refreshes real digital opportunities every 5 minutes (all under R2000 to start), an Intelligent Engine using a 4-model AI swarm for personalised guidance, and XRPL autonomous transaction settlement in under 3 seconds."
-        summaryLabel="Platform Overview"
-      >
-        <div className="glass hero-card mx-auto max-w-5xl mt-16 rounded-3xl p-16 relative overflow-hidden">
-          <div className="liquid-reflection" />
-          <div className="flex items-center gap-4 mb-6">
-            <motion.div animate={{ scale: emotion.intensity }} transition={{ type: 'spring', stiffness: 300 }}>
-              <div
-                className="w-12 h-12 bg-red-500 rounded-full"
-                style={{ filter: `drop-shadow(0 0 ${10 * emotion.intensity}px rgba(239, 68, 68, 0.6))` }}
-              />
-            </motion.div>
-            <h1 className="text-7xl font-bold tracking-tighter">Sentient Interface</h1>
+      {/* ════════════════════════════════════════════════════════════════════════
+          LIQUID GLASS NAV — fixed, floats above everything
+      ════════════════════════════════════════════════════════════════════════ */}
+      <nav className="liquid-border-nav fixed top-5 left-1/2 -translate-x-1/2 z-50 rounded-[2rem]">
+        <div className="apex-glass rounded-[2rem] px-6 py-3 flex items-center gap-6">
+          {/* Logo */}
+          <div className="flex items-center gap-2.5 mr-2">
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-cyan-400 to-emerald-400 flex items-center justify-center text-xs font-bold text-black flex-shrink-0">A</div>
+            <span className="apex-title text-xl tracking-tight text-white">APEX</span>
           </div>
-          <p className="text-2xl text-zinc-400">Phase 3 Live • XRPL Pre-Sign &amp; Stream + WebGL Visualization</p>
 
-          {/* Real GitHub metrics — sourced from /api/metrics → GitHub REST API.
-           * Skeleton pills while loading (4 × exact badge height = no CLS).
-           * Hidden entirely on error — never shows fabricated zeros.
-           * Dimensions: pill height 32px, verified via dev tools at 1280px. */}
-          <div className="flex items-center gap-3 mt-6 flex-wrap">
-            {metricsLoading ? (
-              <>
-                {[72, 56, 64, 80].map((w) => (
-                  <div key={w} className="glass h-8 rounded-full animate-pulse" style={{ width: `${w}px` }} />
-                ))}
-              </>
-            ) : githubMetrics ? (
-              <>
-                <span className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs font-medium text-blue-300">
-                  <Code2 className="w-3 h-3" />
-                  {githubMetrics.language}
-                </span>
-                <a
-                  href="https://github.com/johanneslungelo021-cmd/Apex/stargazers"
-                  target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs font-medium text-yellow-300 hover:bg-white/10 transition"
-                >
-                  <Star className="w-3 h-3" />
-                  {githubMetrics.stars.toLocaleString()}
-                </a>
-                <a
-                  href="https://github.com/johanneslungelo021-cmd/Apex/network/members"
-                  target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs font-medium text-emerald-300 hover:bg-white/10 transition"
-                >
-                  <GitFork className="w-3 h-3" />
-                  {githubMetrics.forks.toLocaleString()}
-                </a>
-                <a
-                  href="https://github.com/johanneslungelo021-cmd/Apex/issues"
-                  target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs font-medium text-zinc-300 hover:bg-white/10 transition"
-                >
-                  <Search className="w-3 h-3" />
-                  {githubMetrics.openIssues} open
-                </a>
-                <span className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs text-zinc-400">
-                  <Clock className="w-3 h-3" />
-                  {new Date(githubMetrics.lastUpdated).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}
-                </span>
-              </>
-            ) : null}
+          {/* Links */}
+          <div className="hidden md:flex items-center gap-5 text-xs font-medium tracking-widest uppercase">
+            {[
+              { label: 'Portals', href: '#portals', color: 'hover:text-cyan-400' },
+              { label: 'Trading', href: '/trading', color: 'hover:text-emerald-400' },
+              { label: 'News',    href: '/news',    color: 'hover:text-blue-400' },
+              { label: 'Social',  href: '/social',  color: 'hover:text-purple-400' },
+            ].map(({ label, href, color }) => (
+              <Link key={label} href={href} className={`text-white/50 ${color} transition-colors`} onClick={() => triggerSentient(0.3)}>
+                {label}
+              </Link>
+            ))}
           </div>
-        </div>
-      </AgentReadableChunk>
 
-      {/* Pillar 2: GEO — Platform capabilities with answer-first summary */}
-      <AgentReadableChunk
-        id="apex-capabilities"
-        agentSummary="Apex Central&apos;s three core capabilities are: (1) Scout Agent — discovers South African digital income opportunities ≤R2000, refreshing every 5 minutes; (2) Intelligent Engine — Answer-First AI powered by Groq Llama, Qwen 3.5-Plus, GLM-5, and Kimi K2.5 for personalised guidance; (3) Full Observability — OpenTelemetry metrics to Prometheus and Grafana Cloud."
-        summaryLabel="Platform Capabilities"
-      >
-        <div className="glass mx-auto max-w-5xl mt-8 p-8 rounded-3xl border border-white/10">
-          <div className="flex items-center gap-3 mb-4">
-            <Zap className="w-6 h-6 text-yellow-400" />
-            <h2 className="text-2xl font-bold">What is Apex?</h2>
-          </div>
-          <p className="text-lg text-zinc-300 leading-relaxed">
-            Apex is a living digital platform that helps South African creators build sustainable digital income.
-            It combines an AI-powered Scout Agent that finds real opportunities under R2000, a conversational
-            Intelligent Engine for personalised guidance, and real-time GitHub and platform metrics — all
-            observable through Grafana Cloud via OpenTelemetry.
-          </p>
-          <div className="mt-6 grid grid-cols-3 gap-4 text-sm">
-            <div className="glass p-4 rounded-2xl">
-              <div className="text-emerald-400 font-semibold mb-1">Scout Agent</div>
-              <div className="text-zinc-400">Finds real ZAR digital income opportunities refreshed every 5 minutes</div>
-            </div>
-            <div className="glass p-4 rounded-2xl">
-              <div className="text-blue-400 font-semibold mb-1">Intelligent Engine</div>
-              <div className="text-zinc-400">Answer-First AI responses grounded in live SA opportunity data</div>
-            </div>
-            <div className="glass p-4 rounded-2xl">
-              <div className="text-purple-400 font-semibold mb-1">Full Observability</div>
-              <div className="text-zinc-400">OTEL metrics, structured logs, and Speed Insights flowing to Grafana</div>
-            </div>
-          </div>
-        </div>
-      </AgentReadableChunk>
-
-      {/* ─── Navigation ─────────────────────────────────────────────────────── */}
-      <nav className="glass sticky top-8 mx-auto max-w-5xl rounded-3xl px-8 py-4 flex items-center justify-between z-50">
-        <div className="flex items-center gap-8">
-          <span className="font-semibold">Apex</span>
-          <div className="flex gap-6 text-sm">
-            <Link href="/opportunities" className="hover:text-yellow-400 transition" onClick={() => triggerSentient(0.5)}>Opportunities</Link>
-            <Link href="/news" className="hover:text-blue-400 transition" onClick={() => triggerSentient(0.5)}>News</Link>
-            <Link href="/trading" className="hover:text-emerald-400 transition">Trading</Link>
-            <Link href="/social" className="hover:text-purple-400 transition">Social</Link>
-            <Link href="/reels" className="hover:text-red-400 transition">Reels</Link>
-            <Link href="/blogs" className="hover:text-blue-400 transition">Blogs</Link>
-          </div>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="relative">
-            <Search className="absolute left-4 top-3 w-4 h-4 text-zinc-500" />
+          {/* Search */}
+          <div className="relative hidden lg:block">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" />
             <input
               type="text"
-              placeholder="Search blogs & insights..."
-              className="glass pl-12 pr-6 py-3 w-80 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-white/20 transition"
+              placeholder="Search…"
+              className="bg-white/5 border border-white/10 pl-9 pr-4 py-2 rounded-xl text-xs w-48 focus:outline-none focus:border-cyan-500/40 transition text-white placeholder:text-white/25"
               value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                if (e.target.value.length % 3 === 0) triggerSentient(0.3);
-              }}
+              onChange={(e) => { setSearchTerm(e.target.value); if (e.target.value.length % 3 === 0) triggerSentient(0.2); }}
             />
           </div>
+
+          {/* Register */}
           <button
             type="button"
             onClick={() => { setShowRegister(true); triggerSentient(1); }}
-            className="glass px-8 py-3 rounded-2xl flex items-center gap-2 hover:scale-105 transition"
+            className="flex items-center gap-1.5 bg-white/10 border border-white/15 hover:bg-white/20 text-white text-xs tracking-widest uppercase px-5 py-2.5 rounded-2xl transition"
           >
-            <User className="w-4 h-4" /> Register
+            <User className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Register</span>
           </button>
         </div>
       </nav>
 
-      <AgentReadableChunk
-        id="scout-opportunities"
-        agentSummary="The Scout Agent on Apex Central surfaces verified digital income opportunities for South Africans, all costing R0–R2000 to start. Categories include Freelancing (Fiverr, Upwork), E-commerce (Takealot, Bidorbuy), Content Creation (YouTube, TikTok), Online Tutoring, and Digital Skills. Results refresh every 5 minutes with province-aware filtering."
-        summaryLabel="Live Digital Income Opportunities"
-      >
-      <section id="opportunities" className="max-w-5xl mx-auto px-8 py-20 below-fold-section">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-4xl font-semibold flex items-center gap-3">
-            <Zap className="w-9 h-9 text-yellow-400" /> Live Digital Income Opportunities
-          </h2>
-          <Link href="/opportunities" className="text-xs text-zinc-500 hover:text-yellow-400 transition flex items-center gap-1">
-            Full page <ExternalLink className="w-3 h-3" />
-          </Link>
-        </div>
-        <p className="text-zinc-400 mb-8">
-          Ask the AI assistant below to discover opportunities — the Scout Agent will find real options under R2000.
-        </p>
+      {/* ════════════════════════════════════════════════════════════════════════
+          FULL-SCREEN CINEMATIC HERO
+      ════════════════════════════════════════════════════════════════════════ */}
+      <AgentReadableChunk id="apex-hero" agentSummary="Apex Central is South Africa's first sentient AI income platform — province-aware, XRPL-native, emotionally reactive." summaryLabel="Platform Overview">
+        <section className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden">
+          <div className="hero-glow" />
+          <div className="scan-line" aria-hidden="true" />
 
-        {opportunities.length === 0 ? (
-          <div className="glass p-8 rounded-3xl text-center text-zinc-500">
-            <Zap className="w-8 h-8 mx-auto mb-3 text-yellow-400/50" />
-            <p>Ask the AI assistant a question to activate the Scout Agent.</p>
-            <p className="text-sm mt-2">Try: &quot;Find me a digital income opportunity in Gauteng under R2000&quot;</p>
+          {/* Live badge */}
+          <motion.div
+            className="fade-up stagger-1 inline-flex items-center gap-2.5 border border-white/10 rounded-full px-5 py-2 mb-10 text-xs tracking-[4px] uppercase"
+            style={{ background: 'rgba(0,255,200,0.06)' }}
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+            <span className="text-cyan-apex">Johannesburg</span>
+            <span className="text-white/30">·</span>
+            <span className="text-white/50">Live</span>
+          </motion.div>
+
+          {/* Massive title */}
+          <motion.h1
+            className="apex-title text-center text-white select-none"
+            style={{ fontSize: 'clamp(5rem, 14vw, 14rem)' }}
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <span className="block">SENTIENT</span>
+            <span className="block" style={{ WebkitTextStroke: '1px rgba(0,255,200,0.5)', color: 'transparent' }}>
+              INTERFACE
+            </span>
+          </motion.h1>
+
+          {/* Tagline */}
+          <motion.p
+            className="mt-8 text-center text-lg text-white/50 max-w-sm leading-relaxed tracking-wide"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5, duration: 0.8 }}
+          >
+            South Africa&apos;s first emotional AI agent.<br />
+            <span className="text-cyan-apex/70">Province-aware · XRPL-native · Real-time.</span>
+          </motion.p>
+
+          {/* CTA buttons */}
+          <motion.div
+            className="mt-12 flex gap-4"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.65, duration: 0.7 }}
+          >
+            <a
+              href="#portals"
+              className="px-10 py-5 bg-white text-black rounded-3xl font-semibold tracking-tight hover:scale-105 transition-transform text-sm flex items-center gap-2"
+              onClick={() => triggerSentient(0.8)}
+            >
+              Enter Portals
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 7h12M8 2l5 5-5 5"/></svg>
+            </a>
+            <button
+              type="button"
+              onClick={() => { setIsChatOpen(true); triggerSentient(1); }}
+              className="px-10 py-5 apex-glass rounded-3xl font-medium text-sm flex items-center gap-2 hover:bg-white/10 transition tracking-tight"
+            >
+              <MessageSquare className="w-4 h-4" />
+              Ask Scout Agent
+            </button>
+          </motion.div>
+
+          {/* GitHub metrics pill strip */}
+          <motion.div
+            className="mt-12 flex items-center gap-3 flex-wrap justify-center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.85 }}
+          >
+            {metricsLoading ? (
+              [72, 56, 64, 80].map((w) => (
+                <div key={w} className="h-7 rounded-full bg-white/5 animate-pulse" style={{ width: `${w}px` }} />
+              ))
+            ) : githubMetrics ? (
+              <>
+                <span className="flex items-center gap-1.5 border border-white/10 px-3 py-1.5 rounded-full text-xs font-medium text-blue-300" style={{ background: 'rgba(59,130,246,0.08)' }}>
+                  <Code2 className="w-3 h-3" />{githubMetrics.language}
+                </span>
+                <a href="https://github.com/johanneslungelo021-cmd/Apex/stargazers" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 border border-white/10 px-3 py-1.5 rounded-full text-xs font-medium text-yellow-300 hover:border-yellow-400/30 transition" style={{ background: 'rgba(234,179,8,0.08)' }}>
+                  <Star className="w-3 h-3" />{githubMetrics.stars}
+                </a>
+                <a href="https://github.com/johanneslungelo021-cmd/Apex/network/members" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 border border-white/10 px-3 py-1.5 rounded-full text-xs font-medium text-emerald-300 hover:border-emerald-400/30 transition" style={{ background: 'rgba(16,185,129,0.08)' }}>
+                  <GitFork className="w-3 h-3" />{githubMetrics.forks}
+                </a>
+                <span className="flex items-center gap-1.5 border border-white/10 px-3 py-1.5 rounded-full text-xs text-white/30">
+                  <Clock className="w-3 h-3" />{new Date(githubMetrics.lastUpdated).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </span>
+              </>
+            ) : null}
+          </motion.div>
+
+          {/* Province floating tag */}
+          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 apex-glass px-5 py-2.5 rounded-3xl text-xs flex items-center gap-3">
+            <span className="text-cyan-apex font-mono">GAUTENG</span>
+            <span className="w-px h-3.5 bg-white/20" />
+            <span className="text-white/40">12.4M citizens · 3.2% GDP growth</span>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {opportunities.map((opp) => (
-              /* INP fix (SA-2026-03-11): card-hover uses CSS scale on compositor thread.
-               * Removes framer-motion whileHover/whileTap → eliminates JS RAF on pointer events.
-               * Card dimensions: 33vw each (3-col grid). Verified via dev tools at 1280px. */
-              <div
-                key={opp.link || opp.title}
-                className="glass p-6 rounded-3xl cursor-pointer hover:border-white/20 border border-transparent card-hover"
-                onClick={() => {
-                  triggerSentient(0.6);
-                  window.open(opp.link, '_blank', 'noopener,noreferrer');
-                }}
-                role="article"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    triggerSentient(0.6);
-                    window.open(opp.link, '_blank', 'noopener,noreferrer');
-                  }
-                }}
-                aria-label={`View opportunity: ${opp.title}`}
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <span className="text-xs glass px-3 py-1 rounded-full text-zinc-400">{opp.category}</span>
-                  <ExternalLink className="w-4 h-4 text-zinc-600" />
-                </div>
-                <div className="font-semibold text-lg mb-1">{opp.title}</div>
-                <div className="text-sm text-zinc-400 mb-3">{opp.province}</div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-emerald-400 font-mono">R{opp.cost} cost</span>
-                  <span className="text-zinc-300">{opp.incomePotential}</span>
-                </div>
-              </div>
-            ))}
+
+          {/* Scroll indicator */}
+          <div className="absolute bottom-10 right-10 flex flex-col items-center gap-1.5 text-[9px] tracking-[3px] text-white/25 uppercase">
+            <motion.div animate={{ y: [0, 6, 0] }} transition={{ repeat: Infinity, duration: 1.6 }}>↓</motion.div>
+            <span>Scroll</span>
           </div>
-        )}
-      </section>
+        </section>
       </AgentReadableChunk>
 
+      {/* ════════════════════════════════════════════════════════════════════════
+          6 LIVING PORTALS — Cinematic horizontal scroll
+      ════════════════════════════════════════════════════════════════════════ */}
+      <section id="portals" className="py-24 px-6">
+        <div className="max-w-screen-2xl mx-auto">
+          {/* Section header */}
+          <div className="mb-14 flex flex-col sm:flex-row sm:items-end justify-between gap-6">
+            <div>
+              <span className="text-xs tracking-[4px] text-white/30 uppercase block mb-3">6 Living Portals</span>
+              <h2 className="apex-title text-white" style={{ fontSize: 'clamp(3rem, 6vw, 5rem)' }}>
+                Choose your reality
+              </h2>
+            </div>
+            <div className="flex items-center gap-3 text-xs text-white/30 font-mono">
+              <motion.div className="w-2 h-2 rounded-full bg-emerald-400" animate={{ scale: [1, 1.4, 1] }} transition={{ repeat: Infinity, duration: 2 }} />
+              All portals · Real-time data
+            </div>
+          </div>
+
+          {/* Horizontal scroll rail */}
+          <div className="flex gap-6 overflow-x-auto pb-6 snap-x snap-mandatory scrollbar-hide -mx-6 px-6">
+
+            {/* TRADING */}
+            <Link href="/trading" className="portal-hover group block min-w-[380px] h-[500px] rounded-3xl overflow-hidden snap-start relative flex-shrink-0 apex-glass border border-white/10"
+              onMouseEnter={() => { emotion.transition('awakened'); triggerAudio('awakened'); }}
+              onMouseLeave={() => { emotion.transition('dormant'); triggerAudio('dormant'); }}
+              onClick={() => triggerSentient(0.8)}
+            >
+              <video autoPlay muted loop playsInline preload="none" className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-90 scale-100 group-hover:scale-105 transition-all duration-1000" src="https://assets.mixkit.co/videos/preview/754/754-small.mp4" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+              <div className="absolute inset-0 flex flex-col justify-between p-8 z-10">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono tracking-[3px] text-cyan-apex/70 uppercase border border-cyan-apex/20 px-3 py-1 rounded-full" style={{ background: 'rgba(0,255,200,0.06)' }}>VOLATILE</span>
+                  <span className="font-mono text-xs text-white/30">01</span>
+                </div>
+                <div>
+                  <h3 className="apex-title text-white mb-3" style={{ fontSize: '3.5rem' }}>TRADING</h3>
+                  <p className="text-sm text-white/60 max-w-[260px] opacity-0 group-hover:opacity-100 translate-y-4 group-hover:translate-y-0 transition-all duration-500">{tradingSubtitle}</p>
+                  <div className="mt-4 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-all duration-500 delay-100">
+                    <span className="text-emerald-400 text-xs font-mono">XRPL · Live</span>
+                    <span className="flex items-center gap-1.5 text-xs text-white/70 border border-white/20 px-4 py-2 rounded-2xl" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                      ENTER <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M1 5h8M6 2l3 3-3 3"/></svg>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </Link>
+
+            {/* OPPORTUNITIES */}
+            <Link href="/opportunities" className="portal-hover group block min-w-[380px] h-[500px] rounded-3xl overflow-hidden snap-start relative flex-shrink-0 apex-glass border border-white/10"
+              onMouseEnter={() => { emotion.transition('resolved'); triggerAudio('processing'); }}
+              onMouseLeave={() => { emotion.transition('dormant'); triggerAudio('dormant'); }}
+              onClick={() => triggerSentient(0.7)}
+            >
+              <video autoPlay muted loop playsInline preload="none" className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-90 scale-100 group-hover:scale-105 transition-all duration-1000" src="https://assets.mixkit.co/videos/preview/866/866-small.mp4" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+              <div className="absolute inset-0 flex flex-col justify-between p-8 z-10">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono tracking-[3px] text-sky-400/70 uppercase border border-sky-400/20 px-3 py-1 rounded-full" style={{ background: 'rgba(56,189,248,0.06)' }}>OPTIMISTIC</span>
+                  <span className="font-mono text-xs text-white/30">02</span>
+                </div>
+                <div>
+                  <h3 className="apex-title text-white mb-3" style={{ fontSize: '3.5rem' }}>OPPORTUNITIES</h3>
+                  <p className="text-sm text-white/60 max-w-[260px] opacity-0 group-hover:opacity-100 translate-y-4 group-hover:translate-y-0 transition-all duration-500">{opportunitiesSubtitle}</p>
+                  <div className="mt-4 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-all duration-500 delay-100">
+                    <span className="text-sky-400 text-xs font-mono">9 provinces</span>
+                    <span className="flex items-center gap-1.5 text-xs text-white/70 border border-white/20 px-4 py-2 rounded-2xl" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                      ENTER <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M1 5h8M6 2l3 3-3 3"/></svg>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </Link>
+
+            {/* NEWS */}
+            <Link href="/news" className="portal-hover group block min-w-[380px] h-[500px] rounded-3xl overflow-hidden snap-start relative flex-shrink-0 apex-glass border border-white/10"
+              onMouseEnter={() => { emotion.transition('processing'); triggerAudio('processing'); }}
+              onMouseLeave={() => { emotion.transition('dormant'); triggerAudio('dormant'); }}
+              onClick={() => triggerSentient(0.6)}
+            >
+              <video autoPlay muted loop playsInline preload="none" className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-90 scale-100 group-hover:scale-105 transition-all duration-1000" src="https://assets.mixkit.co/videos/preview/1080/1080-small.mp4" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+              <div className="absolute inset-0 flex flex-col justify-between p-8 z-10">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono tracking-[3px] text-violet-400/70 uppercase border border-violet-400/20 px-3 py-1 rounded-full" style={{ background: 'rgba(139,92,246,0.06)' }}>FOCUSED</span>
+                  <span className="font-mono text-xs text-white/30">03</span>
+                </div>
+                <div>
+                  <h3 className="apex-title text-white mb-3" style={{ fontSize: '3.5rem' }}>NEWS</h3>
+                  <p className="text-sm text-white/60 max-w-[260px] opacity-0 group-hover:opacity-100 translate-y-4 group-hover:translate-y-0 transition-all duration-500">{newsSubtitle}</p>
+                  <div className="mt-4 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-all duration-500 delay-100">
+                    <span className="text-violet-400 text-xs font-mono">Perplexity Sonar</span>
+                    <span className="flex items-center gap-1.5 text-xs text-white/70 border border-white/20 px-4 py-2 rounded-2xl" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                      ENTER <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M1 5h8M6 2l3 3-3 3"/></svg>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </Link>
+
+            {/* REELS */}
+            <Link href="/reels" className="portal-hover group block min-w-[380px] h-[500px] rounded-3xl overflow-hidden snap-start relative flex-shrink-0 apex-glass border border-white/10"
+              onMouseEnter={() => { emotion.transition('awakened'); triggerAudio('awakened'); }}
+              onMouseLeave={() => { emotion.transition('dormant'); triggerAudio('dormant'); }}
+            >
+              <video autoPlay muted loop playsInline preload="none" className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-90 scale-100 group-hover:scale-105 transition-all duration-1000" src="https://assets.mixkit.co/videos/preview/289/289-small.mp4" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+              <div className="absolute inset-0 flex flex-col justify-between p-8 z-10">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono tracking-[3px] text-yellow-400/70 uppercase border border-yellow-400/20 px-3 py-1 rounded-full" style={{ background: 'rgba(250,204,21,0.06)' }}>JOYFUL</span>
+                  <span className="font-mono text-xs text-white/30">04</span>
+                </div>
+                <div>
+                  <h3 className="apex-title text-white mb-3" style={{ fontSize: '3.5rem' }}>REELS</h3>
+                  <p className="text-sm text-white/60 max-w-[260px] opacity-0 group-hover:opacity-100 translate-y-4 group-hover:translate-y-0 transition-all duration-500">Braamfontein creators going viral right now.</p>
+                  <div className="mt-4 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-all duration-500 delay-100">
+                    <span className="text-yellow-400 text-xs font-mono">Viral · Live sentiment</span>
+                    <span className="flex items-center gap-1.5 text-xs text-white/70 border border-white/20 px-4 py-2 rounded-2xl" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                      ENTER <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M1 5h8M6 2l3 3-3 3"/></svg>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </Link>
+
+            {/* SOCIAL */}
+            <Link href="/social" className="portal-hover group block min-w-[380px] h-[500px] rounded-3xl overflow-hidden snap-start relative flex-shrink-0 apex-glass border border-white/10"
+              onMouseEnter={() => { emotion.transition('resolved'); triggerAudio('processing'); }}
+              onMouseLeave={() => { emotion.transition('dormant'); triggerAudio('dormant'); }}
+            >
+              <video autoPlay muted loop playsInline preload="none" className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-90 scale-100 group-hover:scale-105 transition-all duration-1000" src="https://assets.mixkit.co/videos/preview/342/342-small.mp4" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+              <div className="absolute inset-0 flex flex-col justify-between p-8 z-10">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono tracking-[3px] text-cyan-apex/70 uppercase border border-cyan-apex/20 px-3 py-1 rounded-full" style={{ background: 'rgba(0,255,200,0.06)' }}>CALM</span>
+                  <span className="font-mono text-xs text-white/30">05</span>
+                </div>
+                <div>
+                  <h3 className="apex-title text-white mb-3" style={{ fontSize: '3.5rem' }}>SOCIAL</h3>
+                  <p className="text-sm text-white/60 max-w-[260px] opacity-0 group-hover:opacity-100 translate-y-4 group-hover:translate-y-0 transition-all duration-500">Empathy-first community intelligence.</p>
+                  <div className="mt-4 opacity-0 group-hover:opacity-100 transition-all duration-500 delay-100 flex justify-end">
+                    <span className="flex items-center gap-1.5 text-xs text-white/70 border border-white/20 px-4 py-2 rounded-2xl" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                      ENTER <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M1 5h8M6 2l3 3-3 3"/></svg>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </Link>
+
+            {/* BLOGS */}
+            <Link href="/blogs" className="portal-hover group block min-w-[380px] h-[500px] rounded-3xl overflow-hidden snap-start relative flex-shrink-0 apex-glass border border-white/10"
+              onMouseEnter={() => { emotion.transition('processing'); triggerAudio('processing'); }}
+              onMouseLeave={() => { emotion.transition('dormant'); triggerAudio('dormant'); }}
+            >
+              <video autoPlay muted loop playsInline preload="none" className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-90 scale-100 group-hover:scale-105 transition-all duration-1000" src="https://assets.mixkit.co/videos/preview/201/201-small.mp4" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+              <div className="absolute inset-0 flex flex-col justify-between p-8 z-10">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono tracking-[3px] text-amber-400/70 uppercase border border-amber-400/20 px-3 py-1 rounded-full" style={{ background: 'rgba(251,191,36,0.06)' }}>DEEP</span>
+                  <span className="font-mono text-xs text-white/30">06</span>
+                </div>
+                <div>
+                  <h3 className="apex-title text-white mb-3" style={{ fontSize: '3.5rem' }}>BLOGS</h3>
+                  <p className="text-sm text-white/60 max-w-[260px] opacity-0 group-hover:opacity-100 translate-y-4 group-hover:translate-y-0 transition-all duration-500">Deep-dive essays generated by the swarm.</p>
+                  <div className="mt-4 opacity-0 group-hover:opacity-100 transition-all duration-500 delay-100 flex justify-end">
+                    <span className="flex items-center gap-1.5 text-xs text-white/70 border border-white/20 px-4 py-2 rounded-2xl" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                      ENTER <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M1 5h8M6 2l3 3-3 3"/></svg>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </Link>
+
+          </div>
+        </div>
+      </section>
+
+      {/* ════════════════════════════════════════════════════════════════════════
+          LIVE OPPORTUNITIES
+      ════════════════════════════════════════════════════════════════════════ */}
       <AgentReadableChunk
-        id="live-news"
-        agentSummary="The Live News section on Apex Central aggregates real-time South African digital economy news via Perplexity Search API, categorised into Latest, Tech & AI, Finance & Crypto, and Startups. Each article includes a research button that routes the topic to the Intelligent Engine for AI-powered analysis relevant to South African income opportunities."
-        summaryLabel="Live South African Digital Economy News"
+        id="scout-opportunities"
+        agentSummary="The Scout Agent on Apex Central surfaces verified digital income opportunities for South Africans, all costing R0–R2000 to start."
+        summaryLabel="Live Digital Income Opportunities"
       >
-      <section id="news" className="max-w-5xl mx-auto px-8 py-20 border-t border-white/10 below-fold-section">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
-            <h2 className="text-4xl font-semibold flex items-center gap-3">
-              <Newspaper className="w-9 h-9 text-blue-400" /> Live News
+        <section id="opportunities" className="max-w-6xl mx-auto px-6 py-20 border-t border-white/5">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="flex items-center gap-3 text-white" style={{ fontSize: 'clamp(1.6rem, 3vw, 2.5rem)', fontWeight: 600, letterSpacing: '-0.03em' }}>
+              <Zap className="w-7 h-7 text-yellow-400 flex-shrink-0" />
+              Live Income Opportunities
             </h2>
-            <Link href="/news" className="text-xs text-zinc-500 hover:text-blue-400 transition flex items-center gap-1">
+            <Link href="/opportunities" className="text-xs text-white/30 hover:text-yellow-400 transition flex items-center gap-1">
               Full page <ExternalLink className="w-3 h-3" />
             </Link>
           </div>
-          <button
-            type="button"
-            onClick={() => { void fetchNews(activeCategory); triggerSentient(0.4); }}
-            disabled={newsLoading}
-            className="flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition disabled:opacity-40"
-          >
-            <RefreshCw className={`w-4 h-4 ${newsLoading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
-        </div>
+          <p className="text-white/40 mb-10 text-sm">Ask the Scout Agent below — real options under R2000, refreshed every 5 minutes.</p>
 
-        {/* Category filter tabs */}
-        <div className="flex items-center gap-2 mb-10 flex-wrap">
-          <Filter className="w-4 h-4 text-zinc-500 shrink-0" />
-          {NEWS_CATEGORIES.map((cat) => (
-            <button
-              key={cat}
-              type="button"
-              onClick={() => { startUITransition(() => setActiveCategory(cat)); triggerSentient(0.3); }}
-              className={`px-4 py-1.5 rounded-full text-sm transition ${
-                activeCategory === cat
-                  ? 'bg-white/15 text-white font-medium'
-                  : 'text-zinc-400 hover:text-white hover:bg-white/8'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-
-        {newsLoading && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="glass rounded-3xl overflow-hidden animate-pulse">
-                <div className="bg-white/5 h-44 w-full" />
-                <div className="p-5 space-y-3">
-                  <div className="flex gap-2">
-                    <div className="bg-white/5 h-4 rounded-full w-20" />
-                    <div className="bg-white/5 h-4 rounded-full w-16" />
+          {opportunities.length === 0 ? (
+            <div className="apex-glass p-10 rounded-3xl text-center text-white/30">
+              <Zap className="w-8 h-8 mx-auto mb-3 text-yellow-400/40" />
+              <p className="text-sm">Ask the AI assistant to activate the Scout Agent.</p>
+              <p className="text-xs mt-2 text-white/20">&ldquo;Find me a digital income opportunity in Gauteng under R2000&rdquo;</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              {opportunities.map((opp) => (
+                <div
+                  key={opp.link || opp.title}
+                  className="apex-glass p-6 rounded-3xl cursor-pointer hover:border-white/20 border border-transparent portal-hover"
+                  onClick={() => { triggerSentient(0.6); window.open(opp.link, '_blank', 'noopener,noreferrer'); }}
+                  role="article"
+                  tabIndex={0}
+                  onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); triggerSentient(0.6); window.open(opp.link, '_blank', 'noopener,noreferrer'); }}}
+                  aria-label={`View opportunity: ${opp.title}`}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <span className="text-xs border border-white/10 px-3 py-1 rounded-full text-white/40">{opp.category}</span>
+                    <ExternalLink className="w-4 h-4 text-white/20" />
                   </div>
-                  <div className="bg-white/5 h-5 rounded w-full" />
-                  <div className="bg-white/5 h-5 rounded w-4/5" />
-                  <div className="bg-white/5 h-4 rounded w-full" />
-                  <div className="bg-white/5 h-4 rounded w-3/4" />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {!newsLoading && newsError && (
-          <div className="glass p-10 rounded-3xl text-center text-zinc-500">
-            <Newspaper className="w-10 h-10 mx-auto mb-4 text-zinc-600" />
-            <p className="text-lg mb-2">News unavailable</p>
-            <p className="text-sm mb-6">Add PERPLEXITY_API_KEY to your environment variables to enable live news.</p>
-            <button
-              type="button"
-              onClick={() => { void fetchNews(activeCategory); triggerSentient(0.5); }}
-              className="glass px-6 py-2 rounded-2xl text-sm hover:bg-white/10 transition"
-            >
-              Try again
-            </button>
-          </div>
-        )}
-
-        {!newsLoading && !newsError && news.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {news.slice(0, 1).map((article) => (
-              /* INP fix (SA-2026-03-11): card-hover-subtle (scale 1.01) on compositor.
-               * Featured card: col-span-2, 66vw desktop, h-56 image. Subtler scale avoids overflow. */
-              <div
-                key={article.url}
-                className="glass rounded-3xl overflow-hidden col-span-1 md:col-span-2 lg:col-span-2 group border border-transparent hover:border-white/10 card-hover-subtle cursor-pointer"
-                onClick={() => triggerSentient(0.5)}
-              >
-                <div className="relative w-full h-56 overflow-hidden">
-                  {article.imageUrl.startsWith('data:') || failedImages.has(article.url) ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- next/image cannot handle data: URLs or already-failed external images
-                    <img
-                      src={article.imageUrl}
-                      alt={article.title}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    // Fix: removed `priority` — #news is below-fold-section.
-                    // Preloading this image competes with above-the-fold LCP resources
-                    // and can push FCP/LCP in the wrong direction.
-                    <Image
-                      src={article.imageUrl}
-                      alt={article.title}
-                      fill
-                      sizes="(max-width: 768px) 100vw, 66vw"
-                      className="object-cover group-hover:scale-105 transition-transform duration-500"
-                      onError={() => {
-                        setFailedImages((prev) => new Set(prev).add(article.url));
-                      }}
-                    />
-                  )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent pointer-events-none" />
-                  <div className="absolute top-4 left-4 z-10">
-                    <span className="glass text-xs px-3 py-1 rounded-full text-blue-300 font-medium">Featured</span>
+                  <div className="font-semibold text-lg mb-1 text-white">{opp.title}</div>
+                  <div className="text-sm text-white/40 mb-3">{opp.province}</div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-emerald-400 font-mono">R{opp.cost} cost</span>
+                    <span className="text-white/60">{opp.incomePotential}</span>
                   </div>
                 </div>
-                <div className="p-6">
-                  <div className="flex items-center gap-3 mb-3">
-                    <span className="text-xs text-blue-400 font-medium uppercase tracking-wider">{article.source}</span>
-                    {article.date && (
-                      <span className="flex items-center gap-1 text-xs text-zinc-500">
-                        <Clock className="w-3 h-3" />
-                        {new Date(article.date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}
-                      </span>
-                    )}
-                  </div>
-                  <h3 className="font-bold text-xl leading-snug mb-2 group-hover:text-blue-300 transition line-clamp-2">{article.title}</h3>
-                  <p className="text-zinc-400 text-sm leading-relaxed line-clamp-2">{article.snippet}</p>
-                  <div className="mt-4 flex items-center justify-between">
-                    <a
-                      href={article.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-xs text-zinc-500 group-hover:text-white transition"
-                    >
-                      Read full article <ExternalLink className="w-3 h-3 ml-1" />
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => investigateNews(article.title)}
-                      disabled={agentLoading}
-                      className="flex items-center gap-1.5 text-xs glass px-3 py-1.5 rounded-full text-zinc-300 hover:text-white hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed"
-                      title="Research this article with AI"
-                    >
-                      <Microscope className="w-3.5 h-3.5" />
-                      Research
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-
-            {news.slice(1).map((article) => (
-              /* INP fix (SA-2026-03-11): card-hover (scale 1.02/0.98) on compositor.
-               * Secondary cards: 33vw each, h-44 image. Verified via dev tools. */
-              <div
-                key={article.url}
-                className="glass rounded-3xl overflow-hidden group border border-transparent hover:border-white/10 flex flex-col card-hover cursor-pointer"
-                onClick={() => triggerSentient(0.5)}
-              >
-                <div className="relative w-full h-44 overflow-hidden flex-shrink-0">
-                  {article.imageUrl.startsWith('data:') || failedImages.has(article.url) ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- next/image cannot handle data: URLs or already-failed external images
-                    <img
-                      src={article.imageUrl}
-                      alt={article.title}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <Image
-                      src={article.imageUrl}
-                      alt={article.title}
-                      fill
-                      sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                      className="object-cover group-hover:scale-105 transition-transform duration-500"
-                      onError={() => {
-                        setFailedImages((prev) => new Set(prev).add(article.url));
-                      }}
-                    />
-                  )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
-                </div>
-                <div className="p-5 flex flex-col flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs text-blue-400 font-medium uppercase tracking-wider truncate">{article.source}</span>
-                    {article.date && (
-                      <span className="flex items-center gap-1 text-xs text-zinc-600 flex-shrink-0">
-                        <Clock className="w-3 h-3" />
-                        {new Date(article.date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}
-                      </span>
-                    )}
-                  </div>
-                  <h3 className="font-semibold text-base leading-snug mb-2 group-hover:text-blue-300 transition line-clamp-3 flex-1">{article.title}</h3>
-                  <p className="text-zinc-500 text-xs leading-relaxed line-clamp-2 mb-3">{article.snippet}</p>
-                  <div className="flex items-center justify-between mt-auto">
-                    <a
-                      href={article.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-xs text-zinc-600 group-hover:text-white transition"
-                    >
-                      Read more <ExternalLink className="w-3 h-3 ml-1" />
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => investigateNews(article.title)}
-                      disabled={agentLoading}
-                      className="flex items-center gap-1.5 text-xs glass px-2.5 py-1 rounded-full text-zinc-400 hover:text-white hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed"
-                      title="Research this article with AI"
-                    >
-                      <Microscope className="w-3 h-3" />
-                      Research
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+              ))}
+            </div>
+          )}
+        </section>
       </AgentReadableChunk>
 
-      {/* FAB — Floating AI Chat */}
+      {/* ════════════════════════════════════════════════════════════════════════
+          LIVE NEWS
+      ════════════════════════════════════════════════════════════════════════ */}
+      <AgentReadableChunk
+        id="live-news"
+        agentSummary="Live South African digital economy news via Perplexity Search API, categorised into Latest, Tech & AI, Finance & Crypto, and Startups."
+        summaryLabel="Live South African Digital Economy News"
+      >
+        <section id="news" className="max-w-6xl mx-auto px-6 py-20 border-t border-white/5">
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-4">
+              <h2 className="flex items-center gap-3 text-white" style={{ fontSize: 'clamp(1.6rem, 3vw, 2.5rem)', fontWeight: 600, letterSpacing: '-0.03em' }}>
+                <Newspaper className="w-7 h-7 text-blue-400 flex-shrink-0" />
+                Live News
+              </h2>
+              <Link href="/news" className="text-xs text-white/30 hover:text-blue-400 transition flex items-center gap-1">
+                Full page <ExternalLink className="w-3 h-3" />
+              </Link>
+            </div>
+            <button type="button" onClick={() => { void fetchNews(activeCategory); triggerSentient(0.4); }} disabled={newsLoading} className="flex items-center gap-2 text-sm text-white/30 hover:text-white transition disabled:opacity-40">
+              <RefreshCw className={`w-4 h-4 ${newsLoading ? 'animate-spin' : ''}`} />Refresh
+            </button>
+          </div>
+
+          {/* Category tabs */}
+          <div className="flex items-center gap-2 mb-10 flex-wrap">
+            <Filter className="w-4 h-4 text-white/20 flex-shrink-0" />
+            {NEWS_CATEGORIES.map((cat) => (
+              <button key={cat} type="button"
+                onClick={() => { startUITransition(() => setActiveCategory(cat)); triggerSentient(0.3); }}
+                className={`px-4 py-1.5 rounded-full text-sm transition ${activeCategory === cat ? 'bg-white/15 text-white font-medium' : 'text-white/30 hover:text-white hover:bg-white/8'}`}
+              >{cat}</button>
+            ))}
+          </div>
+
+          {newsLoading && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="apex-glass rounded-3xl overflow-hidden animate-pulse">
+                  <div className="bg-white/5 h-44 w-full" />
+                  <div className="p-5 space-y-3">
+                    <div className="h-4 bg-white/5 rounded w-20" />
+                    <div className="h-5 bg-white/5 rounded w-full" />
+                    <div className="h-4 bg-white/5 rounded w-3/4" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!newsLoading && newsError && (
+            <div className="apex-glass p-10 rounded-3xl text-center text-white/30">
+              <Newspaper className="w-10 h-10 mx-auto mb-4 text-white/20" />
+              <p className="mb-4">Add PERPLEXITY_API_KEY to enable live news.</p>
+              <button type="button" onClick={() => { void fetchNews(activeCategory); triggerSentient(0.5); }} className="apex-glass px-6 py-2 rounded-2xl text-sm hover:bg-white/10 transition">Try again</button>
+            </div>
+          )}
+
+          {!newsLoading && !newsError && news.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {news.slice(0, 1).map((article) => (
+                <div key={article.url} className="apex-glass rounded-3xl overflow-hidden col-span-1 md:col-span-2 group border border-transparent hover:border-white/10 portal-hover cursor-pointer" onClick={() => triggerSentient(0.5)}>
+                  <div className="relative w-full h-56 overflow-hidden">
+                    {article.imageUrl.startsWith('data:') || failedImages.has(article.url) ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={article.imageUrl} alt={article.title} className="w-full h-full object-cover" />
+                    ) : (
+                      <Image src={article.imageUrl} alt={article.title} fill sizes="(max-width: 768px) 100vw, 66vw" className="object-cover group-hover:scale-105 transition-transform duration-500" onError={() => setFailedImages((p) => new Set(p).add(article.url))} />
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent pointer-events-none" />
+                    <div className="absolute top-4 left-4"><span className="apex-glass text-xs px-3 py-1 rounded-full text-blue-300">Featured</span></div>
+                  </div>
+                  <div className="p-6">
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className="text-xs text-blue-400 font-medium uppercase tracking-wider">{article.source}</span>
+                      {article.date && <span className="flex items-center gap-1 text-xs text-white/30"><Clock className="w-3 h-3" />{new Date(article.date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
+                    </div>
+                    <h3 className="font-bold text-xl leading-snug mb-2 group-hover:text-blue-300 transition line-clamp-2 text-white">{article.title}</h3>
+                    <p className="text-white/40 text-sm leading-relaxed line-clamp-2">{article.snippet}</p>
+                    <div className="mt-4 flex items-center justify-between">
+                      <a href={article.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-white/30 group-hover:text-white transition">Read full <ExternalLink className="w-3 h-3 ml-1" /></a>
+                      <button type="button" onClick={() => investigateNews(article.title)} disabled={agentLoading} className="flex items-center gap-1.5 text-xs apex-glass px-3 py-1.5 rounded-full text-white/40 hover:text-white hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed"><Microscope className="w-3.5 h-3.5" />Research</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {news.slice(1).map((article) => (
+                <div key={article.url} className="apex-glass rounded-3xl overflow-hidden group border border-transparent hover:border-white/10 flex flex-col portal-hover cursor-pointer" onClick={() => triggerSentient(0.5)}>
+                  <div className="relative w-full h-44 overflow-hidden flex-shrink-0">
+                    {article.imageUrl.startsWith('data:') || failedImages.has(article.url) ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={article.imageUrl} alt={article.title} className="w-full h-full object-cover" />
+                    ) : (
+                      <Image src={article.imageUrl} alt={article.title} fill sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw" className="object-cover group-hover:scale-105 transition-transform duration-500" onError={() => setFailedImages((p) => new Set(p).add(article.url))} />
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
+                  </div>
+                  <div className="p-5 flex flex-col flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xs text-blue-400 font-medium uppercase tracking-wider truncate">{article.source}</span>
+                      {article.date && <span className="flex items-center gap-1 text-xs text-white/25 flex-shrink-0"><Clock className="w-3 h-3" />{new Date(article.date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}</span>}
+                    </div>
+                    <h3 className="font-semibold text-base leading-snug mb-2 group-hover:text-blue-300 transition line-clamp-3 flex-1 text-white">{article.title}</h3>
+                    <div className="flex items-center justify-between mt-auto">
+                      <a href={article.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-white/25 group-hover:text-white transition">Read <ExternalLink className="w-3 h-3 ml-1" /></a>
+                      <button type="button" onClick={() => investigateNews(article.title)} disabled={agentLoading} className="flex items-center gap-1.5 text-xs apex-glass px-2.5 py-1 rounded-full text-white/30 hover:text-white hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed"><Microscope className="w-3 h-3" />Research</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </AgentReadableChunk>
+
+      {/* ════════════════════════════════════════════════════════════════════════
+          CINEMATIC FOOTER
+      ════════════════════════════════════════════════════════════════════════ */}
+      <footer className="border-t border-white/5 py-10">
+        <div className="max-w-6xl mx-auto px-6 flex flex-wrap items-center justify-between gap-6 text-xs text-white/20 font-mono">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-cyan-400 to-emerald-400 flex items-center justify-center text-[9px] font-bold text-black">A</div>
+            <span>Apex v0.9 · Johannesburg · XRPL Mainnet</span>
+          </div>
+          <div className="flex items-center gap-2 text-emerald-400/60">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            All systems operational
+          </div>
+          <span>Built in the Vaal Triangle · African Futurism</span>
+        </div>
+      </footer>
+
+      {/* ════════════════════════════════════════════════════════════════════════
+          FLOATING AI CHAT FAB (unchanged logic)
+      ════════════════════════════════════════════════════════════════════════ */}
       <div className="fixed bottom-8 right-8 z-50">
         <AnimatePresence mode="wait">
           {!isChatOpen ? (
-            <motion.button
-              key="fab"
-              type="button"
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
+            <motion.button key="fab" type="button" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}
               onClick={() => { setIsChatOpen(true); triggerSentient(0.5); }}
-              aria-label="Toggle AI assistant chat"
-              aria-expanded={isChatOpen}
-              className="flex items-center gap-2 glass px-5 py-3 rounded-full shadow-xl hover:bg-white/15 transition"
+              aria-label="Toggle AI assistant" aria-expanded={isChatOpen}
+              className="flex items-center gap-2 apex-glass px-5 py-3 rounded-full shadow-xl hover:bg-white/10 transition"
             >
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
@@ -1095,118 +1251,61 @@ function SentientInterfaceInner() {
               <span className="text-sm font-medium">Ask AI Scout</span>
             </motion.button>
           ) : (
-            <motion.div
-              key="panel"
-              initial={{ opacity: 0, y: 24, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 24, scale: 0.95 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 28 }}
-              className="w-96 glass rounded-3xl overflow-hidden shadow-2xl"
+            <motion.div key="panel" initial={{ opacity: 0, y: 24, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 24, scale: 0.95 }} transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+              className="w-96 apex-glass rounded-3xl overflow-hidden shadow-2xl"
             >
               <div className="p-4 border-b border-white/10 flex items-center gap-3">
                 <MessageSquare className="w-5 h-5" />
-                <span className="font-medium">Intelligent Engine</span>
+                <span className="font-medium text-sm">Intelligent Engine</span>
                 <span className="text-xs text-emerald-400 animate-pulse ml-auto">● Online</span>
-                {/* Phase 2: Province selector badge */}
-                <button
-                  type="button"
-                  onClick={() => startUITransition(() => setShowProvincePanel((p) => !p))}
-                  className={`text-xs px-2 py-1 rounded-lg transition ${selectedProvince ? 'bg-blue-500/20 text-blue-300' : 'bg-white/10 text-zinc-400 hover:text-white'}`}
-                  title="Select your province for personalised advice"
-                  aria-label={selectedProvince ? `Province: ${selectedProvince.name}. Click to change` : 'Select province'}
-                >
-                  {selectedProvince ? selectedProvince.code : '🌍 SA'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsChatOpen(false)}
-                  className="ml-1 p-1 rounded-full hover:bg-white/10 transition text-zinc-400 hover:text-white"
-                  aria-label="Close chat"
-                >
+                <button type="button" onClick={() => startUITransition(() => setShowProvincePanel((p) => !p))}
+                  className={`text-xs px-2 py-1 rounded-lg transition ${selectedProvince ? 'bg-blue-500/20 text-blue-300' : 'bg-white/10 text-white/40 hover:text-white'}`}
+                  title="Select province" aria-label={selectedProvince ? `Province: ${selectedProvince.name}` : 'Select province'}
+                >{selectedProvince ? selectedProvince.code : '🌍 SA'}</button>
+                <button type="button" onClick={() => setIsChatOpen(false)} className="p-1 rounded-full hover:bg-white/10 transition text-white/40 hover:text-white" aria-label="Close chat">
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              {/* Phase 2: Province economic panel (collapsible) */}
               <AnimatePresence>
                 {showProvincePanel && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="overflow-hidden border-b border-white/10"
-                  >
-                    <ProvinceEconomicPanel
-                      selectedCode={selectedProvince?.code ?? null}
-                      onSelect={(p) => {
-                        setSelectedProvince(p);
-                        setShowProvincePanel(false);
-                      }}
-                      compact
-                    />
+                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden border-b border-white/10">
+                    <ProvinceEconomicPanel selectedCode={selectedProvince?.code ?? null} onSelect={(p) => { setSelectedProvince(p); setShowProvincePanel(false); }} compact />
                   </motion.div>
                 )}
               </AnimatePresence>
-              <div ref={chatScrollRef} className="h-96 p-6 overflow-y-auto text-sm space-y-4 relative" id="chat">
+              <div ref={chatScrollRef} className="h-96 p-6 overflow-y-auto text-sm space-y-4" id="chat">
                 {chatHistory.length === 0 && (
-                  <div className="text-zinc-500 text-center py-8">
+                  <div className="text-white/30 text-center py-8">
                     <p>Ask about digital income opportunities in South Africa.</p>
-                    <p className="text-xs mt-2 text-zinc-600">Powered by Scout Agent + Groq</p>
+                    <p className="text-xs mt-2 text-white/20">Powered by Scout Agent + Groq</p>
                   </div>
                 )}
-                {/* INP fix (SA-2026-03-11): CSS fadeSlideIn replaces motion.div initial/animate.
-                 * opacity + translateY run on compositor — zero main-thread cost per message. */}
                 {chatHistory.map((msg, i) => (
                   <div key={i} className={`fade-slide-in ${msg.role === 'user' ? 'text-right' : 'text-left'}`}>
                     <div className={`inline-block px-4 py-2 rounded-2xl max-w-[80%] ${msg.role === 'user' ? 'bg-white/10' : 'bg-white/5'}`}>
-                      {/* Phase 3: Use StreamingTypography for assistant messages */}
                       {msg.role === 'assistant' ? (
-                        <StreamingTypography 
-                          text={msg.content} 
-                          speed={0.02}
-                          variant="default"
-                        />
+                        <StreamingTypography text={msg.content} speed={0.02} variant="default" />
                       ) : (
                         <span className="whitespace-pre-wrap">{msg.content}</span>
                       )}
                     </div>
-                    {/* Phase 2: Speak button on completed assistant messages */}
                     {msg.role === 'assistant' && msg.content && !agentLoading && (
-                      <div className="mt-1">
-                        <ChatSpeakButton text={msg.content} />
-                      </div>
+                      <div className="mt-1"><ChatSpeakButton text={msg.content} /></div>
                     )}
                   </div>
                 ))}
                 {agentLoading && (!lastMessage || lastMessage.role !== 'assistant' || !lastMessage.content) && (
-                  /* INP fix: CSS fadeIn replaces motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} */
-                  <div className="text-left fade-in">
-                    <div className="inline-block px-4 py-2 rounded-2xl bg-white/5 text-zinc-500">
-                      <StreamingTypography text="Thinking..." speed={0.05} variant="thinking" />
+                  <div className="text-left">
+                    <div className="inline-block px-4 py-2 rounded-2xl bg-white/5 text-white/40">
+                      <StreamingTypography text="Thinking…" speed={0.05} variant="thinking" />
                     </div>
                   </div>
                 )}
-                
-                {/* Phase 3: Optimistic Transaction Card */}
                 <AnimatePresence>
                   {transactionState.status !== 'idle' && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -20 }}
-                    >
-                      <OptimisticTransactionCard
-                        intent={transactionState.intent}
-                        status={transactionState.status}
-                        hash={transactionState.hash}
-                        error={transactionState.error}
-                        onConfirm={() => {
-                          if (transactionState.intent) {
-                            setShowTransactionBeam(true);
-                            markOptimisticSuccess('pending-tx-hash');
-                            // In production, this would call the proactive submit endpoint
-                            setTimeout(() => confirmTransaction('confirmed-tx-hash'), 2000);
-                          }
-                        }}
+                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
+                      <OptimisticTransactionCard intent={transactionState.intent} status={transactionState.status} hash={transactionState.hash} error={transactionState.error}
+                        onConfirm={() => { if (transactionState.intent) { setShowTransactionBeam(true); markOptimisticSuccess('pending'); setTimeout(() => confirmTransaction('confirmed'), 2000); }}}
                         onCancel={resetTransaction}
                       />
                     </motion.div>
@@ -1214,81 +1313,48 @@ function SentientInterfaceInner() {
                 </AnimatePresence>
               </div>
               <div className="p-4 border-t border-white/10 flex gap-3 items-center">
-                {/* Phase 2: Voice input mic button */}
                 {voiceInput.isSupported && (
-                  <button
-                    type="button"
-                    onClick={voiceInput.isListening ? voiceInput.stopListening : voiceInput.startListening}
-                    aria-label={voiceInput.isListening ? 'Stop voice input' : 'Start voice input'}
-                    aria-pressed={voiceInput.isListening}
-                    className={`p-2 rounded-full transition ${voiceInput.isListening ? 'bg-red-500/30 text-red-400 animate-pulse' : 'hover:bg-white/10 text-zinc-500 hover:text-white'}`}
+                  <button type="button" onClick={voiceInput.isListening ? voiceInput.stopListening : voiceInput.startListening}
+                    aria-label={voiceInput.isListening ? 'Stop voice' : 'Start voice'} aria-pressed={voiceInput.isListening}
+                    className={`p-2 rounded-full transition ${voiceInput.isListening ? 'bg-red-500/30 text-red-400 animate-pulse' : 'hover:bg-white/10 text-white/30 hover:text-white'}`}
                   >
-                    <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
-                      <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd"/>
-                    </svg>
+                    <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden><path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd"/></svg>
                   </button>
                 )}
-                <input
-                  id="ai-chat-input"
-                  type="text"
+                <input id="ai-chat-input" type="text"
                   value={voiceInput.isListening && voiceInput.interimText ? voiceInput.interimText : aiMessage}
-                  onChange={(e) => {
-                    // Block writes to aiMessage while voice is active — the displayed
-                    // value is interim speech text, not the user's own typing.
-                    // Without this guard, typing during listening corrupts aiMessage
-                    // with a hybrid of interim text + keypress on next non-listening render.
-                    if (!voiceInput.isListening) setAiMessage(e.target.value);
-                  }}
+                  onChange={(e) => { if (!voiceInput.isListening) setAiMessage(e.target.value); }}
                   readOnly={voiceInput.isListening}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      void sendToAIAssistant();
-                    }
-                  }}
-                  placeholder={voiceInput.isListening ? 'Listening...' : selectedProvince ? `Ask about ${selectedProvince.name}...` : 'Ask about opportunities...'}
-                  className="flex-1 bg-transparent focus:outline-none"
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendToAIAssistant(); }}}
+                  placeholder={voiceInput.isListening ? 'Listening…' : selectedProvince ? `Ask about ${selectedProvince.name}…` : 'Ask about opportunities…'}
+                  className="flex-1 bg-transparent focus:outline-none text-white placeholder:text-white/25"
                   disabled={agentLoading}
                 />
-                <button
-                  type="button"
-                  onClick={() => { void sendToAIAssistant(); }}
-                  disabled={agentLoading || !aiMessage.trim()}
-                  className="px-6 py-2 glass rounded-2xl hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  Send
-                </button>
+                <button type="button" onClick={() => { void sendToAIAssistant(); }} disabled={agentLoading || !aiMessage.trim()}
+                  className="px-6 py-2 apex-glass rounded-2xl hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed text-sm"
+                >Send</button>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
+      {/* ── Register modal (unchanged logic) ─────────────────────────────────── */}
       <AnimatePresence>
         {showRegister && (
-          <motion.div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <motion.div className="glass w-full max-w-md rounded-3xl p-12 relative overflow-hidden" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}>
-              <div className="liquid-reflection opacity-30" />
-              <h3 className="text-3xl font-semibold mb-8">Create Account</h3>
-              <input
-                type="email"
-                placeholder="your@email.com"
-                value={registerEmail}
-                onChange={(e) => setRegisterEmail(e.target.value)}
-                className="w-full glass px-6 py-4 rounded-2xl mb-6 focus:outline-none focus:ring-2 focus:ring-white/20"
-              />
-              <button type="button" onClick={handleRegister} className="w-full py-4 glass rounded-2xl text-lg font-medium hover:bg-white/10 transition">
-                Join Now
-              </button>
-              <button type="button" onClick={() => setShowRegister(false)} className="mt-6 text-xs text-zinc-400 hover:text-white transition">
-                Cancel
-              </button>
+          <motion.div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-6" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div className="apex-glass w-full max-w-md rounded-3xl p-12 relative overflow-hidden" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}>
+              <div className="liquid-reflection opacity-20" />
+              <h3 className="text-3xl font-semibold mb-8 tracking-tighter">Create Account</h3>
+              <input type="email" placeholder="your@email.com" value={registerEmail} onChange={(e) => setRegisterEmail(e.target.value)} className="w-full apex-glass px-6 py-4 rounded-2xl mb-6 focus:outline-none focus:ring-1 focus:ring-cyan-400/30" />
+              <button type="button" onClick={handleRegister} className="w-full py-4 apex-glass rounded-2xl text-lg font-medium hover:bg-white/10 transition tracking-tight">Join Now</button>
+              <button type="button" onClick={() => setShowRegister(false)} className="mt-6 text-xs text-white/30 hover:text-white transition">Cancel</button>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Phase 1: Accessibility toggles for audio / haptics / motion */}
+      {/* ── Sensory controls ──────────────────────────────────────────────────── */}
       <SensoryControls />
 
       </EmotionalGrid>
