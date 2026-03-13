@@ -7,6 +7,7 @@
  *   Layer 3 — Volatility Gate : volatile = |zarUsdChange24h| > 1.5% from live API
  *   Layer 4 — Sensory Compound: transition() + trigger() fire together on market shift
  *   Layer 5 — Cinematic Shell : video scale/contrast reacts to real market state
+ *   Layer 6 — Live Insights   : InsightTicker calls /api/trading/insight (Groq) — no static strings
  *
  * Hook API reference (verified against src/hooks/):
  *   useEmotionEngine() → { transition, intensity, runCycle, pulse, state }
@@ -28,13 +29,11 @@ import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TrendingUp, TrendingDown, ArrowLeft, Activity, Zap, RefreshCw } from 'lucide-react';
 
-// Real hook APIs (verified)
 import { EmotionProvider, useEmotionEngine } from '@/hooks/useEmotionEngine';
 import { useMultiSensory }   from '@/hooks/useMultiSensory';
 import { useMagneticCursor } from '@/hooks/useMagneticCursor';
 import { useSpeech }         from '@/hooks/useSpeech';
 
-// Real component APIs (verified)
 import {
   OptimisticTransactionCard,
   TransactionBeam,
@@ -44,6 +43,7 @@ import {
 import ProvinceEconomicPanel from '@/components/chat/ProvinceEconomicPanel';
 import { type ProvinceProfile } from '@/lib/sa-context/provinces';
 import type { TradingData } from '@/app/api/trading/route';
+import type { InsightResponse } from '@/app/api/trading/insight/route';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -57,7 +57,9 @@ function fmt(n: number, decimals = 2): string {
 function ChangeTag({ value }: { value: number }) {
   const positive = value >= 0;
   return (
-    <span className={`inline-flex items-center gap-1 text-xs font-mono px-2 py-0.5 rounded-full ${positive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+    <span className={`inline-flex items-center gap-1 text-xs font-mono px-2 py-0.5 rounded-full ${
+      positive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
+    }`}>
       {positive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
       {positive ? '+' : ''}{fmt(value, 2)}%
     </span>
@@ -65,8 +67,6 @@ function ChangeTag({ value }: { value: number }) {
 }
 
 // ── Inline Swap Form ──────────────────────────────────────────────────────────
-// OptimisticTransactionUI has NO default export with assetIn/assetOut/rate/onExecute props.
-// We build the swap form inline and wire it to the named useOptimisticTransaction hook.
 
 interface SwapFormProps {
   xrpZar: number;
@@ -75,10 +75,6 @@ interface SwapFormProps {
 
 function SwapForm({ xrpZar, onExecute }: SwapFormProps) {
   const [zarAmount, setZarAmount] = useState('500');
-  // Devin fix: xrpZar defaults to 0 when Perplexity returns no valid number.
-  // parseFloat(n) / 0 = Infinity, and Infinity.toFixed(4) = "Infinity" — shown
-  // to the user as a valid output and the swap button stays enabled.
-  // Guard: only compute when xrpZar is a positive finite number.
   const xrpOut = zarAmount && xrpZar > 0
     ? (parseFloat(zarAmount) / xrpZar).toFixed(4)
     : '0';
@@ -97,10 +93,7 @@ function SwapForm({ xrpZar, onExecute }: SwapFormProps) {
         <div className="flex items-center gap-3 bg-white/5 rounded-2xl px-5 py-4 border border-white/10 focus-within:border-white/25 transition-colors">
           <span className="text-white/40 font-mono text-sm">ZAR</span>
           <input
-            type="number"
-            min="1"
-            step="50"
-            value={zarAmount}
+            type="number" min="1" step="50" value={zarAmount}
             onChange={(e: { target: { value: string } }) => setZarAmount(e.target.value)}
             className="flex-1 bg-transparent text-white text-xl font-light focus:outline-none text-right"
             placeholder="500"
@@ -120,8 +113,7 @@ function SwapForm({ xrpZar, onExecute }: SwapFormProps) {
         </div>
       </div>
       <button
-        type="button"
-        onClick={handleSwap}
+        type="button" onClick={handleSwap}
         disabled={!zarAmount || parseFloat(zarAmount) <= 0 || !rateAvailable}
         className="w-full py-4 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-medium tracking-widest uppercase text-sm hover:bg-emerald-500/30 hover:border-emerald-400/60 transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed"
       >
@@ -131,39 +123,70 @@ function SwapForm({ xrpZar, onExecute }: SwapFormProps) {
   );
 }
 
-// ── Proactive Insight Ticker ──────────────────────────────────────────────────
+// ── Live Insight Ticker (NO static strings) ───────────────────────────────────
+// Fetches a new Groq-generated insight from /api/trading/insight every 30s.
+// Falls back gracefully to the previous insight on error.
 
-const INSIGHTS = [
-  'High remittance demand detected in the Western Cape corridor. Yield potential +1.2% above baseline.',
-  'Gauteng regional nodes showing elevated ZAR-to-XRP volume. Conditions optimal for execution.',
-  'XRPL settlement latency at 3.1s — well below 5s SLA. Liquidity depth is sufficient.',
-  'Eastern Cape throughput up 8% this session. Monitor for sustained trend reversal.',
-  'Northern Cape thin orderbook. Spread wider than usual — size your position accordingly.',
-];
+interface InsightTickerProps {
+  volatile: boolean;
+  zarUsd: number | null;
+  xrpZar: number | null;
+}
 
-function InsightTicker({ volatile: isVolatile }: { volatile: boolean }) {
-  const [idx, setIdx] = useState(0);
+function InsightTicker({ volatile: isVolatile, zarUsd, xrpZar }: InsightTickerProps) {
+  const [insight, setInsight] = useState<string>('Connecting to market intelligence layer…');
+  const [fetching, setFetching] = useState(false);
+  const lastInsightRef = useRef<string>('');
+
+  const fetchInsight = useCallback(async () => {
+    if (fetching) return;
+    setFetching(true);
+    try {
+      const res = await fetch('/api/trading/insight', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ volatile: isVolatile, zarUsd, xrpZar }),
+      });
+      if (!res.ok) return;
+      const data = await res.json() as InsightResponse;
+      if (data.insight && data.insight !== lastInsightRef.current) {
+        lastInsightRef.current = data.insight;
+        setInsight(data.insight);
+      }
+    } catch {
+      // keep previous insight
+    } finally {
+      setFetching(false);
+    }
+  }, [isVolatile, zarUsd, xrpZar, fetching]);
+
+  // Fetch on mount and whenever volatility state changes
   useEffect(() => {
-    const t = setInterval(() => setIdx((i) => (i + 1) % INSIGHTS.length), 7000);
-    return () => clearInterval(t);
-  }, []);
+    void fetchInsight();
+    const interval = setInterval(() => void fetchInsight(), 30_000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVolatile]);
+
   return (
     <div className="rounded-[2rem] border border-white/10 backdrop-blur-xl p-6" style={{ background: 'rgba(255,255,255,0.04)' } as CSSProperties}>
       <div className="flex items-center gap-3 mb-4">
-        <div className={`w-2 h-2 rounded-full transition-colors duration-500 ${isVolatile ? 'bg-emerald-400 animate-ping' : 'bg-blue-500 animate-pulse'}`} />
-        <span className="text-xs font-mono text-white/50 tracking-widest uppercase">Proactive Insight</span>
+        <div className={`w-2 h-2 rounded-full transition-colors duration-500 ${
+          fetching ? 'bg-yellow-400 animate-ping' : isVolatile ? 'bg-emerald-400 animate-ping' : 'bg-blue-500 animate-pulse'
+        }`} />
+        <span className="text-xs font-mono text-white/50 tracking-widest uppercase">Live Market Insight</span>
         <Activity className="w-3 h-3 text-white/20 ml-auto" />
       </div>
       <AnimatePresence mode="wait">
         <motion.p
-          key={idx}
+          key={insight}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -8 }}
           transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
           className="text-base font-light text-white/80 leading-relaxed"
         >
-          &ldquo;{INSIGHTS[idx]}&rdquo;
+          &ldquo;{insight}&rdquo;
         </motion.p>
       </AnimatePresence>
     </div>
@@ -172,18 +195,11 @@ function InsightTicker({ volatile: isVolatile }: { volatile: boolean }) {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-/**
- * Bug 4 fix: useEmotionEngine() throws "requires <EmotionProvider>" if no
- * provider is in scope.  The root layout has none, so the trading page must
- * supply its own.  Pattern: inner component consumes the context, outer
- * default export wraps it in EmotionProvider.
- */
 function SentientTradingFloorInner() {
   const [data, setData]               = useState<TradingData | null>(null);
   const [dataLoading, setDataLoading] = useState(true);
   const [, startDataTransition]       = useTransition();
 
-  // Layer 3: volatile = real signal from API (not Math.random)
   const isVolatile = Boolean(data && Math.abs(data.zarUsdChange24h) > 1.5);
 
   const [selectedProvince, setSelectedProvince] = useState<ProvinceProfile | null>(null);
@@ -192,17 +208,13 @@ function SentientTradingFloorInner() {
   const { transactionState, resetTransaction, startTransaction, markOptimisticSuccess, confirmTransaction } = useOptimisticTransaction();
   const [showBeam, setShowBeam] = useState(false);
 
-  // Bug 6 fix: videoRef removed — video uses native autoPlay, ref was never
-  // called and produced a dead-ref lint warning.
   const hasSpokeRef = useRef(false);
 
-  // Layer 1: real hook APIs (no invented methods)
-  const { transition, intensity } = useEmotionEngine();   // was: setEmotion()
-  const { trigger, resume }       = useMultiSensory();    // was: playHapticFeedback/playAmbientSound
-  const { isHovering }            = useMagneticCursor();  // read-only, no setCursorState
-  const { speak }                 = useSpeech();          // Bug 5: ttsAvailable removed — see below
+  const { transition, intensity } = useEmotionEngine();
+  const { trigger, resume }       = useMultiSensory();
+  const { isHovering }            = useMagneticCursor();
+  const { speak }                 = useSpeech();
 
-  // Layer 2: real market data from /api/trading
   const fetchData = useCallback(async () => {
     try {
       const res = await fetch('/api/trading', { cache: 'no-store' });
@@ -210,29 +222,18 @@ function SentientTradingFloorInner() {
       const json = (await res.json()) as TradingData;
       startDataTransition(() => setData(json));
     } catch {
-      // Non-critical — page remains functional with stale data
+      // non-critical
     } finally {
       setDataLoading(false);
     }
   }, []);
 
-  // On mount: environment setup + whisper + polling
   useEffect(() => {
     void resume();
     transition('processing');
     trigger('processing');
     void fetchData();
 
-    /**
-     * Bug 5 fix: stale closure — ttsAvailable is false at mount time because
-     * useSpeech() initialises browserMode as 'unavailable' and promotes it to
-     * 'browser' in its own internal useEffect (runs after this one).
-     * Capturing it here always evaluated to false, so the whisper never fired.
-     *
-     * Fix: remove the guard entirely.  useSpeech.speak() already returns early
-     * when audio is unavailable (`if (!audio) return`) — duplicating that check
-     * here only introduced the stale-closure bug without adding safety.
-     */
     const whisperTimeout = setTimeout(() => {
       if (!hasSpokeRef.current) {
         hasSpokeRef.current = true;
@@ -247,18 +248,12 @@ function SentientTradingFloorInner() {
       clearInterval(refreshInterval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // stable on mount — all deps are stable refs/functions
+  }, []);
 
-  // Layer 3+4: react to real market state
   useEffect(() => {
     if (!data) return;
-    if (isVolatile) {
-      transition('awakened');
-      trigger('awakened');
-    } else {
-      transition('processing');
-      trigger('processing');
-    }
+    if (isVolatile) { transition('awakened'); trigger('awakened'); }
+    else            { transition('processing'); trigger('processing'); }
   }, [isVolatile, data, transition, trigger]);
 
   const handleExecute = useCallback(
@@ -277,16 +272,11 @@ function SentientTradingFloorInner() {
         trigger('processing');
       }, 3200);
     },
-    [startTransaction, markOptimisticSuccess, confirmTransaction, transition, trigger, speak]
+    [startTransaction, markOptimisticSuccess, confirmTransaction, transition, trigger, speak],
   );
 
-  // Layer 5: cinematic video style driven by real volatile flag
   const videoStyle: CSSProperties = {
-    position: 'absolute',
-    inset: 0,
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
+    position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
     transform: isVolatile ? 'scale(1.06)' : 'scale(1.0)',
     filter: isVolatile
       ? `contrast(1.30) brightness(${0.7 + intensity * 0.15})`
@@ -299,20 +289,26 @@ function SentientTradingFloorInner() {
 
       <TransactionBeam isActive={showBeam} startColor="#00FF88" endColor="#00AAFF" onComplete={() => setShowBeam(false)} />
 
-      {/* Layer 5: cinematic background */}
-      <video autoPlay muted loop playsInline preload="none" style={videoStyle} src="https://cdn.pixabay.com/video/2020/05/24/40090-424754578_large.mp4" aria-hidden="true" />
+      {/* Cinematic background — replace src with a self-hosted asset for production */}
+      <video autoPlay muted loop playsInline preload="none" style={videoStyle}
+        src="/videos/trading-bg.mp4"
+        aria-hidden="true"
+      />
 
-      {/* Gradient overlay */}
-      <div className="absolute inset-0 pointer-events-none z-10" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.10) 45%, rgba(0,0,0,0.90) 100%)' } as CSSProperties} />
+      <div className="absolute inset-0 pointer-events-none z-10" style={{
+        background: 'linear-gradient(to bottom, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.10) 45%, rgba(0,0,0,0.90) 100%)'
+      } as CSSProperties} />
 
-      {/* Volatile flash overlay */}
       <AnimatePresence>
         {isVolatile && (
-          <motion.div className="absolute inset-0 z-10 pointer-events-none" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.6 }} style={{ background: 'radial-gradient(ellipse at center, rgba(16,185,129,0.07) 0%, transparent 70%)' } as CSSProperties} />
+          <motion.div className="absolute inset-0 z-10 pointer-events-none"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.6 }}
+            style={{ background: 'radial-gradient(ellipse at center, rgba(16,185,129,0.07) 0%, transparent 70%)' } as CSSProperties}
+          />
         )}
       </AnimatePresence>
 
-      {/* Sentient UI layer */}
       <div className="relative z-20 w-full h-full flex flex-col justify-between p-8 md:p-12 lg:p-16">
 
         {/* Header */}
@@ -334,7 +330,6 @@ function SentientTradingFloorInner() {
             </motion.h1>
           </div>
 
-          {/* Live price panel */}
           <div className="text-right rounded-2xl border border-white/10 backdrop-blur-md p-5" style={{ background: 'rgba(0,0,0,0.45)' } as CSSProperties} data-magnetic="true">
             {dataLoading ? (
               <div className="space-y-2">
@@ -344,7 +339,9 @@ function SentientTradingFloorInner() {
             ) : data ? (
               <>
                 <motion.div
-                  className={`text-3xl font-light tabular-nums transition-colors duration-500 ${isVolatile ? 'text-emerald-400' : 'text-white'}`}
+                  className={`text-3xl font-light tabular-nums transition-colors duration-500 ${
+                    isVolatile ? 'text-emerald-400' : 'text-white'
+                  }`}
                   animate={{ scale: isVolatile ? [1, 1.04, 1] : 1 }}
                   transition={{ duration: 0.4 }}
                 >
@@ -354,7 +351,9 @@ function SentientTradingFloorInner() {
                   <ChangeTag value={data.zarUsdChange24h} />
                   <span className="text-white/30 text-xs font-mono">24h ZAR</span>
                 </div>
-                <div className="text-white/30 text-xs font-mono mt-1">BTC R {fmt(data.btcZar, 0)} · ETH R {fmt(data.ethZar, 0)}</div>
+                <div className="text-white/30 text-xs font-mono mt-1">
+                  BTC R {fmt(data.btcZar, 0)} · ETH R {fmt(data.ethZar, 0)}
+                </div>
               </>
             ) : (
               <span className="text-white/30 text-sm font-mono">Unavailable</span>
@@ -388,7 +387,10 @@ function SentientTradingFloorInner() {
                 <h2 className="text-2xl font-light">Instant Swap</h2>
                 <div className="flex items-center gap-2">
                   {isVolatile && (
-                    <motion.span initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} className="text-[10px] font-mono tracking-widest text-emerald-400 uppercase px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10">
+                    <motion.span
+                      initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }}
+                      className="text-[10px] font-mono tracking-widest text-emerald-400 uppercase px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10"
+                    >
                       Volatile
                     </motion.span>
                   )}
@@ -421,7 +423,13 @@ function SentientTradingFloorInner() {
 
           {/* Context panel */}
           <div className="w-full md:w-[460px] flex flex-col gap-4">
-            <InsightTicker volatile={isVolatile} />
+
+            {/* Live insight ticker — real Groq, no static strings */}
+            <InsightTicker
+              volatile={isVolatile}
+              zarUsd={data?.zarUsd ?? null}
+              xrpZar={data?.xrpZar ?? null}
+            />
 
             {data && data.topMovers.length > 0 && (
               <div className="rounded-[2rem] border border-white/10 backdrop-blur-xl p-5" style={{ background: 'rgba(255,255,255,0.03)' } as CSSProperties}>
@@ -449,7 +457,6 @@ function SentientTradingFloorInner() {
               </div>
             )}
 
-            {/* Province panel — correct props: selectedCode + onSelect (not activeProvince) */}
             <motion.div animate={{ opacity: showProvince ? 1 : 0.55 }} whileHover={{ opacity: 1 }} transition={{ duration: 0.4 }}>
               <button
                 type="button"
@@ -483,7 +490,10 @@ function SentientTradingFloorInner() {
           <div className="flex items-center gap-3">
             <motion.div
               className="w-1.5 h-1.5 rounded-full"
-              animate={{ backgroundColor: isVolatile ? '#10b981' : 'rgba(255,255,255,0.25)', boxShadow: isVolatile ? '0 0 6px rgba(16,185,129,0.8)' : '0 0 0px transparent' }}
+              animate={{
+                backgroundColor: isVolatile ? '#10b981' : 'rgba(255,255,255,0.25)',
+                boxShadow: isVolatile ? '0 0 6px rgba(16,185,129,0.8)' : '0 0 0px transparent',
+              }}
               transition={{ duration: 0.5 }}
             />
             <span>XRPL Mainnet / Connected</span>
@@ -506,12 +516,6 @@ function SentientTradingFloorInner() {
   );
 }
 
-/**
- * Bug 4 fix: EmotionProvider wraps the inner component so useEmotionEngine(),
- * useMultiSensory(), and useSpeech() (which calls useEmotionEngine internally)
- * all have a valid context.  Without this the page throws on mount:
- * "useEmotionEngine requires <EmotionProvider>"
- */
 export default function SentientTradingFloor() {
   return (
     <EmotionProvider>
