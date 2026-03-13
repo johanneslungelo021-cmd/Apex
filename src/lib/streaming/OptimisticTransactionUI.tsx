@@ -62,36 +62,55 @@ export function useOptimisticTransaction() {
   }, []);
 
   const startTransaction = useCallback((intent: TransactionIntent) => {
-    setTransactionState({
-      status: 'pending',
-      intent,
-      hash: null,
-      error: null,
+    setTransactionState(prev => {
+      // Guard: Only start from idle or failed states
+      if (prev.status !== 'idle' && prev.status !== 'failed') return prev;
+      return {
+        status: 'pending',
+        intent: { ...intent, status: 'pending' },
+        hash: null,
+        error: null,
+      };
     });
   }, []);
 
   const markOptimisticSuccess = useCallback((hash: string) => {
-    setTransactionState(prev => ({
-      ...prev,
-      status: 'optimistic_success',
-      hash,
-    }));
+    setTransactionState(prev => {
+      // Guard: Only move to optimistic success if currently pending
+      if (prev.status !== 'pending') return prev;
+      return {
+        ...prev,
+        status: 'optimistic_success',
+        intent: prev.intent ? { ...prev.intent, status: 'submitted' } : null,
+        hash,
+      };
+    });
   }, []);
 
   const confirmTransaction = useCallback((hash: string) => {
-    setTransactionState(prev => ({
-      ...prev,
-      status: 'confirmed',
-      hash,
-    }));
+    setTransactionState(prev => {
+      // Guard: Allow confirm from pending or optimistic_success
+      if (prev.status !== 'pending' && prev.status !== 'optimistic_success') return prev;
+      return {
+        ...prev,
+        status: 'confirmed',
+        intent: prev.intent ? { ...prev.intent, status: 'confirmed' } : null,
+        hash,
+      };
+    });
   }, []);
 
   const failTransaction = useCallback((error: string) => {
-    setTransactionState(prev => ({
-      ...prev,
-      status: 'failed',
-      error,
-    }));
+    setTransactionState(prev => {
+      // Guard: Prevent failure if already confirmed or idle
+      if (prev.status === 'confirmed' || prev.status === 'idle') return prev;
+      return {
+        ...prev,
+        status: 'failed',
+        intent: prev.intent ? { ...prev.intent, status: 'failed' } : null,
+        error,
+      };
+    });
   }, []);
 
   return {

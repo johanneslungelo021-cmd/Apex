@@ -144,6 +144,8 @@ function SentientInterfaceInner() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showRegister, setShowRegister] = useState(false);
   const [registerEmail, setRegisterEmail] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
+  const [registerDisplayName, setRegisterDisplayName] = useState('');
   const [aiMessage, setAiMessage] = useState('');
   const [chatHistory, setChatHistory] = useState<{ role: string; content: string }[]>([]);
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -293,12 +295,17 @@ function SentientInterfaceInner() {
 
   // On mount: auto-boot Scout Agent so opportunities section is never empty
   useEffect(() => {
+    let isCancelled = false;
     const timer = setTimeout(() => {
-      void sendToAIAssistant('Find me 3 top digital income opportunities in South Africa under R2000 to start right now');
-    }, 1800); // slight delay so chat history doesn't flash on first render
-    return () => { clearTimeout(timer); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // intentionally runs once on mount — sendToAIAssistant is stable
+      if (!isCancelled) {
+        void sendToAIAssistant('Find me 3 top digital income opportunities in South Africa under R2000 to start right now');
+      }
+    }, 1800);
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
+    };
+  }, [sendToAIAssistant]);
 
   // Re-fetch immediately whenever the user switches categories.
   useEffect(() => {
@@ -346,6 +353,7 @@ function SentientInterfaceInner() {
   }, []);
 
   const sendToAIAssistant = useCallback(async (promptOverride?: string) => {
+    if (voiceInput.isListening) return;
     const outgoingMessage = (promptOverride ?? aiMessage).trim();
     if (!outgoingMessage || agentLoading) return;
 
@@ -580,7 +588,7 @@ function SentientInterfaceInner() {
       const res = await fetch('/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: registerEmail }),
+        body: JSON.stringify({ email: registerEmail, password: registerPassword, displayName: registerDisplayName }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -1093,6 +1101,7 @@ function SentientInterfaceInner() {
                       disabled={agentLoading}
                       className="flex items-center gap-1.5 text-xs glass px-3 py-1.5 rounded-full text-zinc-300 hover:text-white hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed"
                       title="Research this article with AI"
+                      aria-label={`Research and analyze article: ${article.title}`}
                     >
                       <Microscope className="w-3.5 h-3.5" />
                       Research
@@ -1159,6 +1168,7 @@ function SentientInterfaceInner() {
                       disabled={agentLoading}
                       className="flex items-center gap-1.5 text-xs glass px-2.5 py-1 rounded-full text-zinc-400 hover:text-white hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed"
                       title="Research this article with AI"
+                      aria-label={`Research and analyze article: ${article.title}`}
                     >
                       <Microscope className="w-3 h-3" />
                       Research
@@ -1377,7 +1387,7 @@ function SentientInterfaceInner() {
                 />
                 <button
                   onClick={() => { void sendToAIAssistant(); }}
-                  disabled={agentLoading || !aiMessage.trim()}
+                  disabled={agentLoading || !aiMessage.trim() || voiceInput.isListening}
                   className="px-6 py-2 glass rounded-2xl hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Send
@@ -1400,8 +1410,22 @@ function SentientInterfaceInner() {
                 value={registerEmail}
                 onChange={(e) => setRegisterEmail(e.target.value)}
                 className="w-full glass px-6 py-4 rounded-2xl mb-6 focus:outline-none focus:ring-2 focus:ring-white/20"
+              <input
+                type="text"
+                placeholder="Display Name"
+                value={registerDisplayName}
+                onChange={(e) => setRegisterDisplayName(e.target.value)}
+                className="w-full glass px-6 py-4 rounded-2xl mb-4 focus:outline-none focus:ring-2 focus:ring-white/20"
               />
-              <button onClick={handleRegister} className="w-full py-4 glass rounded-2xl text-lg font-medium hover:bg-white/10 transition">
+              <input
+                type="password"
+                placeholder="Password"
+                value={registerPassword}
+                onChange={(e) => setRegisterPassword(e.target.value)}
+                className="w-full glass px-6 py-4 rounded-2xl mb-6 focus:outline-none focus:ring-2 focus:ring-white/20"
+              />
+              />
+              <button onClick={handleRegister} disabled={!registerEmail || !registerPassword || !registerDisplayName}  className="w-full py-4 glass rounded-2xl text-lg font-medium hover:bg-white/10 transition">
                 Join Now
               </button>
               <button onClick={() => setShowRegister(false)} className="mt-6 text-xs text-zinc-400 hover:text-white transition">
