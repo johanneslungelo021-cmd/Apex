@@ -18,7 +18,7 @@ import { useState, useEffect, useCallback, useRef, Suspense, useTransition } fro
 // Lucide-react: Turbopack tree-shakes the barrel import correctly in Next.js 16.
 // Individual deep imports (lucide-react/dist/esm/icons/heart) have no .d.ts files
 // in this version, causing TypeScript errors. The barrel import is the correct path.
-import { Heart, Search, User, MessageSquare, Zap, ExternalLink, Newspaper, Clock, RefreshCw, Microscope, Filter, X, Star, GitFork, AlertCircle, Code2 } from 'lucide-react';
+import { Search, User, MessageSquare, Zap, ExternalLink, Newspaper, Clock, RefreshCw, Microscope, Filter, X, Star, GitFork, Code2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -222,7 +222,7 @@ function SentientInterfaceInner() {
   }, [emotion.state]);
 
   // Derived heartbeat intensity for backward-compatible Heart icon animation
-  const heartbeatIntensity = emotion.intensity;
+  // Removed unused heartbeatIntensity variable
   const {
     transactionState,
     resetTransaction,
@@ -651,10 +651,10 @@ function SentientInterfaceInner() {
         <div className="glass hero-card mx-auto max-w-5xl mt-16 rounded-3xl p-16 relative overflow-hidden">
           <div className="liquid-reflection" />
           <div className="flex items-center gap-4 mb-6">
-            <motion.div animate={{ scale: heartbeatIntensity }} transition={{ type: 'spring', stiffness: 300 }}>
-              <Heart
-                className="w-12 h-12 text-red-500 heart-pulse"
-                style={{ filter: `drop-shadow(0 0 ${10 * heartbeatIntensity}px rgba(239, 68, 68, 0.6))` }}
+            <motion.div animate={{ scale: emotion.intensity }} transition={{ type: 'spring', stiffness: 300 }}>
+              <div
+                className="w-12 h-12 bg-red-500 rounded-full"
+                style={{ filter: `drop-shadow(0 0 ${10 * emotion.intensity}px rgba(239, 68, 68, 0.6))` }}
               />
             </motion.div>
             <h1 className="text-7xl font-bold tracking-tighter">Sentient Interface</h1>
@@ -699,7 +699,7 @@ function SentientInterfaceInner() {
                   target="_blank" rel="noopener noreferrer"
                   className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs font-medium text-zinc-300 hover:bg-white/10 transition"
                 >
-                  <AlertCircle className="w-3 h-3" />
+                  <Search className="w-3 h-3" />
                   {githubMetrics.openIssues} open
                 </a>
                 <span className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs text-zinc-400">
@@ -715,7 +715,7 @@ function SentientInterfaceInner() {
       {/* Pillar 2: GEO — Platform capabilities with answer-first summary */}
       <AgentReadableChunk
         id="apex-capabilities"
-        agentSummary="Apex Central's three core capabilities are: (1) Scout Agent — discovers South African digital income opportunities ≤R2000, refreshing every 5 minutes; (2) Intelligent Engine — Answer-First AI powered by Groq Llama, Qwen 3.5-Plus, GLM-5, and Kimi K2.5 for personalised guidance; (3) Full Observability — OpenTelemetry metrics to Prometheus and Grafana Cloud."
+        agentSummary="Apex Central&apos;s three core capabilities are: (1) Scout Agent — discovers South African digital income opportunities ≤R2000, refreshing every 5 minutes; (2) Intelligent Engine — Answer-First AI powered by Groq Llama, Qwen 3.5-Plus, GLM-5, and Kimi K2.5 for personalised guidance; (3) Full Observability — OpenTelemetry metrics to Prometheus and Grafana Cloud."
         summaryLabel="Platform Capabilities"
       >
         <div className="glass mx-auto max-w-5xl mt-8 p-8 rounded-3xl border border-white/10">
