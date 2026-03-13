@@ -93,7 +93,7 @@ export async function POST(req: Request): Promise<Response> {
 
   try {
     // Check duplicate - timing-safe: hash password anyway
-    if (findUserByEmail(normalizedEmail)) {
+    if (await findUserByEmail(normalizedEmail)) {
       await hashPassword(password); // Prevent timing attack
       return NextResponse.json(
         { success: false, error: 'DUPLICATE_EMAIL', message: 'An account with this email already exists.' },
@@ -115,7 +115,7 @@ export async function POST(req: Request): Promise<Response> {
       province: null,
     };
 
-    createUser(newUser);
+    await createUser(newUser);
 
     // Issue session JWT
     const token = await createSession({ 

@@ -33,7 +33,7 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   // Verify user still exists in store
-  const user = findUserById(session.userId);
+  const user = await findUserById(session.userId);
   if (!user) {
     return NextResponse.json(
       { authenticated: false, user: null },
