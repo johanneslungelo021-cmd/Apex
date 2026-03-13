@@ -22,21 +22,11 @@ export interface StoredUser {
   province: string | null;
 }
 
-// ─── Row shape from Supabase (snake_case) ────────────────────────────────────
+// ─── Row shape returned by Supabase (snake_case) ──────────────────────────────
 interface UserRow {
   id: string;
   email: string;
-  password_hash: string;
-  display_name: string;
-  created_at: string;
-  last_login_at: string | null;
-  province: string | null;
-}
-
-// Profile-only row (no password_hash) — used in /api/auth/me and register existence checks.
-interface ProfileRow {
-  id: string;
-  email: string;
+  password_hash: string;  // empty string when not selected (profile-only queries)
   display_name: string;
   created_at: string;
   last_login_at: string | null;
@@ -47,19 +37,7 @@ function rowToUser(row: UserRow): StoredUser {
   return {
     id: row.id,
     email: row.email,
-    passwordHash: row.password_hash,
-    displayName: row.display_name,
-    createdAt: row.created_at,
-    lastLoginAt: row.last_login_at,
-    province: row.province,
-  };
-}
-
-function profileRowToUser(row: ProfileRow): StoredUser {
-  return {
-    id: row.id,
-    email: row.email,
-    passwordHash: '', // intentionally empty — not fetched
+    passwordHash: row.password_hash ?? '',
     displayName: row.display_name,
     createdAt: row.created_at,
     lastLoginAt: row.last_login_at,
@@ -72,8 +50,9 @@ function profileRowToUser(row: ProfileRow): StoredUser {
 // (Breaking change from the previous synchronous in-memory Map API.)
 
 /**
- * Credential lookup — includes password_hash for bcrypt verification.
- * Only use in auth/login. Never expose the result to the client.
+ * Credential lookup — projects id, email, password_hash, display_name,
+ * created_at, last_login_at, province. Includes password_hash for bcrypt
+ * verification in login. Never expose the result directly to the client.
  */
 export async function findUserByEmail(email: string): Promise<StoredUser | null> {
   const db = getSupabaseClient();
@@ -84,12 +63,15 @@ export async function findUserByEmail(email: string): Promise<StoredUser | null>
     .maybeSingle();
 
   if (error) throw new Error(`[store] findUserByEmail: ${error.message}`);
+  // Supabase returns an untyped Json union without a Database generic.
+  // The double cast (unknown → UserRow) is intentional: shape guaranteed by migration.
   return data ? rowToUser(data as unknown as UserRow) : null;
 }
 
 /**
- * Profile lookup — does NOT include password_hash.
- * Safe to use in /api/auth/me and register duplicate-email checks.
+ * Profile lookup — projects id, email, display_name, created_at,
+ * last_login_at, province. password_hash is intentionally NOT selected
+ * to minimise sensitive-data exposure in /api/auth/me and duplicate checks.
  */
 export async function findUserById(id: string): Promise<StoredUser | null> {
   const db = getSupabaseClient();
@@ -100,7 +82,8 @@ export async function findUserById(id: string): Promise<StoredUser | null> {
     .maybeSingle();
 
   if (error) throw new Error(`[store] findUserById: ${error.message}`);
-  return data ? profileRowToUser(data as unknown as ProfileRow) : null;
+  // password_hash not in projection — cast still safe, field defaults to '' via rowToUser.
+  return data ? rowToUser(data as unknown as UserRow) : null;
 }
 
 export async function createUser(user: StoredUser): Promise<void> {

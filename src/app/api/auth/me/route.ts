@@ -11,14 +11,13 @@ export const runtime = 'nodejs';
  */
 
 import { NextResponse } from 'next/server';
-import { generateRequestId, log } from '@/lib/api-utils';
+import { log } from '@/lib/api-utils';
 import { getTokenFromRequest, verifySession } from '@/lib/auth/session';
-import { findUserById } from '@/lib/auth/store';
+import { findUserById, type StoredUser } from '@/lib/auth/store';
 
 const SERVICE = 'auth-me';
 
 export async function GET(req: Request): Promise<Response> {
-  const requestId = generateRequestId();
   const token = getTokenFromRequest(req);
 
   if (!token) {
@@ -38,16 +37,14 @@ export async function GET(req: Request): Promise<Response> {
 
   // findUserById is now async Supabase I/O — wrap in try/catch so a transient
   // DB/network error returns a stable JSON response instead of an opaque 500.
-  let user;
+  let user: StoredUser | null;
   try {
-    // Narrow projection: profile-only fields, password_hash intentionally excluded.
     user = await findUserById(session.userId);
-  } catch (error) {
+  } catch (err) {
     log({
       level: 'error',
       service: SERVICE,
-      message: `Supabase lookup failed: ${error instanceof Error ? error.message : 'Unknown'}`,
-      requestId,
+      message: `Supabase lookup failed: ${err instanceof Error ? err.message : 'Unknown'}`,
     });
     return NextResponse.json(
       { error: 'service_unavailable', message: 'Auth service temporarily unavailable.' },
