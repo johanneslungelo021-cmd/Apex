@@ -58,8 +58,8 @@ export async function POST(request: NextRequest): Promise<Response> {
       if (tid) clearTimeout(tid);
     }
 
-  } catch (error: any) {
-    if (error.name === 'AbortError') {
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === 'AbortError') {
       return NextResponse.json(
         { error: 'Gateway Timeout', details: 'The XRPL submission service timed out.' },
         { status: 504 }

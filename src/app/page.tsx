@@ -15,24 +15,20 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, Suspense, useTransition } from 'react';
- main
-
 // Lucide-react: Turbopack tree-shakes the barrel import correctly in Next.js 16.
 // Individual deep imports (lucide-react/dist/esm/icons/heart) have no .d.ts files
 // in this version, causing TypeScript errors. The barrel import is the correct path.
- feat/perf-cwv-zero-mocks
 import { Heart, Search, User, MessageSquare, Zap, ExternalLink, Newspaper, Clock, RefreshCw, Microscope, Filter, X, Star, GitFork, AlertCircle, Code2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
-// Canvas dynamically imported below — removed from critical bundle (Fix 2)
+
+// Lightweight hook + types — no UI components, safe to import statically.
+// Prevents TransactionBeam / StreamingTypography from entering the initial JS bundle.
 import {
-  StreamingTypography,
-  OptimisticTransactionCard,
-  TransactionBeam,
   useOptimisticTransaction,
   type TransactionIntent,
-} from '@/lib/streaming/OptimisticTransactionUI';
+} from '@/lib/streaming/optimisticTransactionHook';
 
 // Phase 1: Sentient Vessel imports
 import dynamic from 'next/dynamic';
@@ -57,8 +53,6 @@ import { useMultiSensory } from '@/hooks/useMultiSensory';
 
 // WebGL Swarm: pulls Three.js + R3F + Drei — the heaviest bundle on the page.
 // Dynamic import ensures it is completely absent from the initial JS payload.
-// NOTE: Even with ssr:false, the chunk is preloaded. We use a separate lazy trigger
-// below to defer loading until after the page is interactive (requestIdleCallback).
 const SentientCanvasScene = dynamic(
   () => import('@/components/sentient/SentientCanvasScene'),
   {
@@ -87,6 +81,23 @@ const SensoryControls = dynamic(
   () => import('@/components/sentient/SensoryControls'),
   { ssr: false, loading: () => null }
 );
+
+// Heavy transaction UI — framer-motion + complex animations. Dynamic-imported so
+// TransactionBeam / StreamingTypography never enter the initial JS bundle.
+const { StreamingTypography, TransactionBeam, OptimisticTransactionCard } = {
+  StreamingTypography: dynamic(
+    () => import('@/lib/streaming/OptimisticTransactionUI').then(m => ({ default: m.StreamingTypography })),
+    { ssr: false, loading: () => null }
+  ),
+  TransactionBeam: dynamic(
+    () => import('@/lib/streaming/OptimisticTransactionUI').then(m => ({ default: m.TransactionBeam })),
+    { ssr: false, loading: () => null }
+  ),
+  OptimisticTransactionCard: dynamic(
+    () => import('@/lib/streaming/OptimisticTransactionUI').then(m => ({ default: m.OptimisticTransactionCard })),
+    { ssr: false, loading: () => null }
+  ),
+};
 
 // Pillar 2: GEO — Generative Engine Optimization
 import AgentReadableChunk from '@/components/geo/AgentReadableChunk';
@@ -121,15 +132,11 @@ interface NewsArticle {
   imageUrl: string;
 }
 
- main
-/** Shape of the real data returned by GET /api/metrics */
-
 /**
  * Real data shape returned by GET /api/metrics → GitHub REST API.
  * Used in: src/app/page.tsx hero metrics strip (below h1).
  * Source verified: api.github.com/repos/johanneslungelo021-cmd/Apex
  */
- feat/perf-cwv-zero-mocks
 interface LiveGitHubMetrics {
   stars: number;
   forks: number;
@@ -144,8 +151,6 @@ function SentientInterfaceInner() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showRegister, setShowRegister] = useState(false);
   const [registerEmail, setRegisterEmail] = useState('');
-  const [registerPassword, setRegisterPassword] = useState('');
-  const [registerDisplayName, setRegisterDisplayName] = useState('');
   const [aiMessage, setAiMessage] = useState('');
   const [chatHistory, setChatHistory] = useState<{ role: string; content: string }[]>([]);
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -156,28 +161,12 @@ function SentientInterfaceInner() {
   const [newsError, setNewsError] = useState(false);
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
 
- main
-  // ─── Live GitHub Metrics (real data from /api/metrics → GitHub REST API) ──
-  const [githubMetrics, setGithubMetrics] = useState<LiveGitHubMetrics | null>(null);
-  const [metricsLoading, setMetricsLoading] = useState(true);
-
-  // ─── Performance: Defer Three.js until after page is interactive ─────────────
-  // Don't render WebGL until browser is idle (after FCP + hydration).
-  // This prevents the 226KB Three.js chunk from blocking the main thread.
-  const [showWebGL, setShowWebGL] = useState(false);
-  useEffect(() => {
-    // Simple timeout fallback - works on all browsers
-    const timeoutId = setTimeout(() => setShowWebGL(true), 2000);
-    return () => clearTimeout(timeoutId);
-  }, []);
-
   // ─── Live GitHub Metrics — sourced from /api/metrics → GitHub REST API ────
   // Replaces the fabricated platform metrics (users/impact/courses) removed
   // in the audit. All values verifiable at: github.com/johanneslungelo021-cmd/Apex
   const [githubMetrics, setGithubMetrics] = useState<LiveGitHubMetrics | null>(null);
   const [metricsLoading, setMetricsLoading] = useState(true);
 
- feat/perf-cwv-zero-mocks
 
   /**
    * Perf: React 18 concurrent transitions.
@@ -245,6 +234,9 @@ function SentientInterfaceInner() {
   const [showTransactionBeam, setShowTransactionBeam] = useState(false);
 
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  // Ref for auto-dismiss timeout of the transaction confirmation modal.
+  // Stored in a ref (not state) to avoid re-renders and allow cleanup in useEffect.
+  const confirmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const NEWS_CATEGORIES = ['Latest', 'Tech & AI', 'Finance & Crypto', 'Startups'] as const;
   type NewsCategory = typeof NEWS_CATEGORIES[number];
@@ -285,27 +277,27 @@ function SentientInterfaceInner() {
   useEffect(() => {
     fetch('/api/analytics', { method: 'POST' }).catch(() => {});
     void fetchNews(activeCategoryRef.current);
-    
     const newsInterval = setInterval(
       () => { void fetchNews(activeCategoryRef.current); },
       10 * 60 * 1000
     );
-    return () => { clearInterval(newsInterval); };
+    // Capture ref value at effect time so the cleanup closure uses a stable reference.
+    const pendingConfirmTimeout = confirmTimeoutRef;
+    return () => {
+      clearInterval(newsInterval);
+      // Clean up any pending confirmation auto-dismiss on unmount.
+      if (pendingConfirmTimeout.current) clearTimeout(pendingConfirmTimeout.current);
+    };
   }, [fetchNews]); // fetchNews is stable (useCallback []); ref handles category
 
   // On mount: auto-boot Scout Agent so opportunities section is never empty
   useEffect(() => {
-    let isCancelled = false;
     const timer = setTimeout(() => {
-      if (!isCancelled) {
-        void sendToAIAssistant('Find me 3 top digital income opportunities in South Africa under R2000 to start right now');
-      }
-    }, 1800);
-    return () => {
-      isCancelled = true;
-      clearTimeout(timer);
-    };
-  }, [sendToAIAssistant]);
+      void sendToAIAssistant('Find me 3 top digital income opportunities in South Africa under R2000 to start right now');
+    }, 1800); // slight delay so chat history doesn't flash on first render
+    return () => { clearTimeout(timer); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally runs once on mount — sendToAIAssistant is stable
 
   // Re-fetch immediately whenever the user switches categories.
   useEffect(() => {
@@ -318,15 +310,10 @@ function SentientInterfaceInner() {
     }
   }, [isChatOpen, chatHistory]);
 
- main
-  // Fetch real GitHub metrics from /api/metrics on mount.
-  // /api/metrics now returns only real GitHub API data — no fabricated values.
-
   // Fetch real GitHub metrics on mount — /api/metrics → GitHub REST API.
   // Cancellable via cleanup function to prevent setState on unmounted component.
   // Fails silently — hero renders without the metrics strip if network is unavailable.
   // Used in: hero metrics strip below h1 (line ~600)
- feat/perf-cwv-zero-mocks
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -334,17 +321,9 @@ function SentientInterfaceInner() {
         const res = await fetch('/api/metrics');
         if (!res.ok) return;
         const data = await res.json() as { github: LiveGitHubMetrics };
- main
-        if (!cancelled && data?.github) {
-          setGithubMetrics(data.github);
-        }
-      } catch {
-        // Non-critical — hero simply won't render the metrics strip
-
         if (!cancelled && data?.github) setGithubMetrics(data.github);
       } catch {
         // Non-critical: hero renders without metrics strip on network error
- feat/perf-cwv-zero-mocks
       } finally {
         if (!cancelled) setMetricsLoading(false);
       }
@@ -353,7 +332,6 @@ function SentientInterfaceInner() {
   }, []);
 
   const sendToAIAssistant = useCallback(async (promptOverride?: string) => {
-    if (voiceInput.isListening) return;
     const outgoingMessage = (promptOverride ?? aiMessage).trim();
     if (!outgoingMessage || agentLoading) return;
 
@@ -588,7 +566,7 @@ function SentientInterfaceInner() {
       const res = await fetch('/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: registerEmail, password: registerPassword, displayName: registerDisplayName }),
+        body: JSON.stringify({ email: registerEmail }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -605,47 +583,28 @@ function SentientInterfaceInner() {
   };
 
 
- main
-  // Last message available for future features (e.g., message status indicators)
-
-  // Derive whether to show the thinking indicator:
-  // Only show BEFORE the assistant starts streaming content
-  const lastMessage = chatHistory.length > 0 ? chatHistory[chatHistory.length - 1] : null;
-  const showThinking = agentLoading && (
-    !lastMessage ||
-    lastMessage.role !== 'assistant' ||
-    !lastMessage.content
-  );
-
-
   const lastMessage = chatHistory[chatHistory.length - 1];
- feat/perf-cwv-zero-mocks
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white relative">
       {/* Phase 1: Emotion-reactive WebGL swarm */}
-      {/* Static gradient background always renders for instant visual feedback */}
-      <div className="fixed inset-0 -z-10 opacity-60 mix-blend-screen pointer-events-none bg-gradient-to-b from-neutral-950 via-neutral-900/80 to-neutral-950" aria-hidden="true" />
-      {/* WebGL canvas only renders after browser is idle (requestIdleCallback) */}
-      {showWebGL && (
-        <div className="fixed inset-0 -z-10 opacity-60 mix-blend-screen pointer-events-none">
-          {/*
-           * Perf: ReducedMotionGate checks window.matchMedia('prefers-reduced-motion').
-           * When active it returns a static gradient — Three.js never loads, zero WebGL
-           * cost.  For all other users SentientCanvasScene loads post-FCP via dynamic().
-           */}
-          <ReducedMotionGate>
-            <Suspense fallback={null}>
-              {/*
-               * Fix 2: SentientCanvasScene is dynamically imported with ssr:false.
-               * Three.js (~500KB) now loads AFTER FCP — browser paints text content first.
-               * The fixed container is already in the DOM; canvas slot is reserved.
-               */}
-              <SentientCanvasScene />
-            </Suspense>
-          </ReducedMotionGate>
-        </div>
-      )}
+      <div className="fixed inset-0 -z-10 opacity-60 mix-blend-screen pointer-events-none">
+        {/*
+         * Perf: ReducedMotionGate checks window.matchMedia('prefers-reduced-motion').
+         * When active it returns a static gradient — Three.js never loads, zero WebGL
+         * cost.  For all other users SentientCanvasScene loads post-FCP via dynamic().
+         */}
+        <ReducedMotionGate>
+          <Suspense fallback={null}>
+            {/*
+             * Fix 2: SentientCanvasScene is dynamically imported with ssr:false.
+             * Three.js (~500KB) now loads AFTER FCP — browser paints text content first.
+             * The fixed container is already in the DOM; canvas slot is reserved.
+             */}
+            <SentientCanvasScene />
+          </Suspense>
+        </ReducedMotionGate>
+      </div>
 
       {/* Phase 1: Custom magnetic cursor (desktop only) */}
       <MagneticReticle />
@@ -701,24 +660,6 @@ function SentientInterfaceInner() {
             <h1 className="text-7xl font-bold tracking-tighter">Sentient Interface</h1>
           </div>
           <p className="text-2xl text-zinc-400">Phase 3 Live • XRPL Pre-Sign &amp; Stream + WebGL Visualization</p>
- main
-          <div className="flex items-center gap-3 mt-6 flex-wrap">
-            {metricsLoading ? (
-              /* Skeleton placeholders — exact height 32px matches badge height */
-              <>
-                {[72, 56, 64, 80].map((w) => (
-                  <div
-                    key={w}
-                    className="glass h-8 rounded-full animate-pulse"
-                    style={{ width: `${w}px` }}
-                  />
-                ))}
-              </>
-            ) : githubMetrics ? (
-              /* Real badges — all values sourced from GitHub REST API */
-              <>
-                {/* Language badge */}
-
 
           {/* Real GitHub metrics — sourced from /api/metrics → GitHub REST API.
            * Skeleton pills while loading (4 × exact badge height = no CLS).
@@ -733,78 +674,26 @@ function SentientInterfaceInner() {
               </>
             ) : githubMetrics ? (
               <>
- feat/perf-cwv-zero-mocks
                 <span className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs font-medium text-blue-300">
                   <Code2 className="w-3 h-3" />
                   {githubMetrics.language}
                 </span>
- main
-
-                {/* Stars — links to the repo stargazers page */}
-                <a
-                  href="https://github.com/johanneslungelo021-cmd/Apex/stargazers"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs font-medium text-yellow-300 hover:bg-white/10 transition"
-                  title="GitHub Stars"
-
                 <a
                   href="https://github.com/johanneslungelo021-cmd/Apex/stargazers"
                   target="_blank" rel="noopener noreferrer"
                   className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs font-medium text-yellow-300 hover:bg-white/10 transition"
- feat/perf-cwv-zero-mocks
                 >
                   <Star className="w-3 h-3" />
                   {githubMetrics.stars.toLocaleString()}
                 </a>
- main
-
-                {/* Forks */}
-                <a
-                  href="https://github.com/johanneslungelo021-cmd/Apex/network/members"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs font-medium text-emerald-300 hover:bg-white/10 transition"
-                  title="GitHub Forks"
-
                 <a
                   href="https://github.com/johanneslungelo021-cmd/Apex/network/members"
                   target="_blank" rel="noopener noreferrer"
                   className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs font-medium text-emerald-300 hover:bg-white/10 transition"
- feat/perf-cwv-zero-mocks
                 >
                   <GitFork className="w-3 h-3" />
                   {githubMetrics.forks.toLocaleString()}
                 </a>
- main
-
-                {/* Open issues */}
-                <a
-                  href="https://github.com/johanneslungelo021-cmd/Apex/issues"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs font-medium text-zinc-300 hover:bg-white/10 transition"
-                  title="Open Issues"
-                >
-                  <AlertCircle className="w-3 h-3" />
-                  {githubMetrics.openIssues.toLocaleString()} open
-                </a>
-
-                {/* Last updated */}
-                <span
-                  className="flex items-center gap-1.5 glass px-3 py-1.5 rounded-full text-xs text-zinc-400"
-                  title={new Date(githubMetrics.lastUpdated).toISOString()}
-                >
-                  <Clock className="w-3 h-3" />
-                  {new Date(githubMetrics.lastUpdated).toLocaleDateString('en-ZA', {
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric',
-                  })}
-                </span>
-              </>
-            ) : null /* metrics fetch failed — show nothing rather than fake zeros */}
-
                 <a
                   href="https://github.com/johanneslungelo021-cmd/Apex/issues"
                   target="_blank" rel="noopener noreferrer"
@@ -819,7 +708,6 @@ function SentientInterfaceInner() {
                 </span>
               </>
             ) : null}
- feat/perf-cwv-zero-mocks
           </div>
         </div>
       </AgentReadableChunk>
@@ -886,6 +774,7 @@ function SentientInterfaceInner() {
             />
           </div>
           <button
+            type="button"
             onClick={() => { setShowRegister(true); triggerSentient(1); }}
             className="glass px-8 py-3 rounded-2xl flex items-center gap-2 hover:scale-105 transition"
           >
@@ -975,6 +864,7 @@ function SentientInterfaceInner() {
             </Link>
           </div>
           <button
+            type="button"
             onClick={() => { void fetchNews(activeCategory); triggerSentient(0.4); }}
             disabled={newsLoading}
             className="flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition disabled:opacity-40"
@@ -990,6 +880,7 @@ function SentientInterfaceInner() {
           {NEWS_CATEGORIES.map((cat) => (
             <button
               key={cat}
+              type="button"
               onClick={() => { startUITransition(() => setActiveCategory(cat)); triggerSentient(0.3); }}
               className={`px-4 py-1.5 rounded-full text-sm transition ${
                 activeCategory === cat
@@ -1028,6 +919,7 @@ function SentientInterfaceInner() {
             <p className="text-lg mb-2">News unavailable</p>
             <p className="text-sm mb-6">Add PERPLEXITY_API_KEY to your environment variables to enable live news.</p>
             <button
+              type="button"
               onClick={() => { void fetchNews(activeCategory); triggerSentient(0.5); }}
               className="glass px-6 py-2 rounded-2xl text-sm hover:bg-white/10 transition"
             >
@@ -1101,7 +993,6 @@ function SentientInterfaceInner() {
                       disabled={agentLoading}
                       className="flex items-center gap-1.5 text-xs glass px-3 py-1.5 rounded-full text-zinc-300 hover:text-white hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed"
                       title="Research this article with AI"
-                      aria-label={`Research and analyze article: ${article.title}`}
                     >
                       <Microscope className="w-3.5 h-3.5" />
                       Research
@@ -1168,7 +1059,6 @@ function SentientInterfaceInner() {
                       disabled={agentLoading}
                       className="flex items-center gap-1.5 text-xs glass px-2.5 py-1 rounded-full text-zinc-400 hover:text-white hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed"
                       title="Research this article with AI"
-                      aria-label={`Research and analyze article: ${article.title}`}
                     >
                       <Microscope className="w-3 h-3" />
                       Research
@@ -1188,10 +1078,13 @@ function SentientInterfaceInner() {
           {!isChatOpen ? (
             <motion.button
               key="fab"
+              type="button"
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
               onClick={() => { setIsChatOpen(true); triggerSentient(0.5); }}
+              aria-label="Toggle AI assistant chat"
+              aria-expanded={isChatOpen}
               className="flex items-center gap-2 glass px-5 py-3 rounded-full shadow-xl hover:bg-white/15 transition"
             >
               <span className="relative flex h-2 w-2">
@@ -1210,35 +1103,13 @@ function SentientInterfaceInner() {
               transition={{ type: 'spring', stiffness: 300, damping: 28 }}
               className="w-96 glass rounded-3xl overflow-hidden shadow-2xl"
             >
- main
-              <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-                <div className="flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 text-blue-400" />
-                  <span className="font-medium text-sm">AI Assistant</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => startUITransition(() => setShowProvincePanel(p => !p))}
-                    className="glass px-3 py-1.5 rounded-full text-xs font-medium text-zinc-300 hover:text-white transition-colors"
-                    aria-label="Toggle province economic panel"
-                    aria-expanded={showProvincePanel}
-                  >
-                    🇿🇦 Provinces
-                  </button>
-                  <button
-                    onClick={() => setIsChatOpen(false)}
-                    className="text-zinc-400 hover:text-white transition"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-
               <div className="p-4 border-b border-white/10 flex items-center gap-3">
                 <MessageSquare className="w-5 h-5" />
                 <span className="font-medium">Intelligent Engine</span>
                 <span className="text-xs text-emerald-400 animate-pulse ml-auto">● Online</span>
                 {/* Phase 2: Province selector badge */}
                 <button
+                  type="button"
                   onClick={() => startUITransition(() => setShowProvincePanel((p) => !p))}
                   className={`text-xs px-2 py-1 rounded-lg transition ${selectedProvince ? 'bg-blue-500/20 text-blue-300' : 'bg-white/10 text-zinc-400 hover:text-white'}`}
                   title="Select your province for personalised advice"
@@ -1247,13 +1118,13 @@ function SentientInterfaceInner() {
                   {selectedProvince ? selectedProvince.code : '🌍 SA'}
                 </button>
                 <button
+                  type="button"
                   onClick={() => setIsChatOpen(false)}
                   className="ml-1 p-1 rounded-full hover:bg-white/10 transition text-zinc-400 hover:text-white"
                   aria-label="Close chat"
                 >
                   <X className="w-4 h-4" />
                 </button>
- feat/perf-cwv-zero-mocks
               </div>
               {/* Phase 2: Province economic panel (collapsible) */}
               <AnimatePresence>
@@ -1306,18 +1177,11 @@ function SentientInterfaceInner() {
                     )}
                   </div>
                 ))}
- main
-                {showThinking && (
-                  <div className="text-left">
-                    <div className="inline-block px-3 py-2 rounded-2xl bg-zinc-800/50 text-zinc-400 text-sm">
-                      <span className="animate-pulse">Thinking…</span>
-
                 {agentLoading && (!lastMessage || lastMessage.role !== 'assistant' || !lastMessage.content) && (
                   /* INP fix: CSS fadeIn replaces motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} */
                   <div className="text-left fade-in">
                     <div className="inline-block px-4 py-2 rounded-2xl bg-white/5 text-zinc-500">
                       <StreamingTypography text="Thinking..." speed={0.05} variant="thinking" />
- feat/perf-cwv-zero-mocks
                     </div>
                   </div>
                 )}
@@ -1353,6 +1217,7 @@ function SentientInterfaceInner() {
                 {/* Phase 2: Voice input mic button */}
                 {voiceInput.isSupported && (
                   <button
+                    type="button"
                     onClick={voiceInput.isListening ? voiceInput.stopListening : voiceInput.startListening}
                     aria-label={voiceInput.isListening ? 'Stop voice input' : 'Start voice input'}
                     aria-pressed={voiceInput.isListening}
@@ -1386,8 +1251,9 @@ function SentientInterfaceInner() {
                   disabled={agentLoading}
                 />
                 <button
+                  type="button"
                   onClick={() => { void sendToAIAssistant(); }}
-                  disabled={agentLoading || !aiMessage.trim() || voiceInput.isListening}
+                  disabled={agentLoading || !aiMessage.trim()}
                   className="px-6 py-2 glass rounded-2xl hover:bg-white/10 transition disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Send
@@ -1410,25 +1276,11 @@ function SentientInterfaceInner() {
                 value={registerEmail}
                 onChange={(e) => setRegisterEmail(e.target.value)}
                 className="w-full glass px-6 py-4 rounded-2xl mb-6 focus:outline-none focus:ring-2 focus:ring-white/20"
-              <input
-                type="text"
-                placeholder="Display Name"
-                value={registerDisplayName}
-                onChange={(e) => setRegisterDisplayName(e.target.value)}
-                className="w-full glass px-6 py-4 rounded-2xl mb-4 focus:outline-none focus:ring-2 focus:ring-white/20"
               />
-              <input
-                type="password"
-                placeholder="Password"
-                value={registerPassword}
-                onChange={(e) => setRegisterPassword(e.target.value)}
-                className="w-full glass px-6 py-4 rounded-2xl mb-6 focus:outline-none focus:ring-2 focus:ring-white/20"
-              />
-              />
-              <button onClick={handleRegister} disabled={!registerEmail || !registerPassword || !registerDisplayName}  className="w-full py-4 glass rounded-2xl text-lg font-medium hover:bg-white/10 transition">
+              <button type="button" onClick={handleRegister} className="w-full py-4 glass rounded-2xl text-lg font-medium hover:bg-white/10 transition">
                 Join Now
               </button>
-              <button onClick={() => setShowRegister(false)} className="mt-6 text-xs text-zinc-400 hover:text-white transition">
+              <button type="button" onClick={() => setShowRegister(false)} className="mt-6 text-xs text-zinc-400 hover:text-white transition">
                 Cancel
               </button>
             </motion.div>
