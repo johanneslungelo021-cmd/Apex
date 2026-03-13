@@ -16,30 +16,33 @@
 import 'server-only';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-if (!process.env.SUPABASE_URL) {
-  throw new Error('[supabase] SUPABASE_URL is not set. Add it to Vercel Environment Variables.');
-}
-if (!process.env.SUPABASE_SECRET_KEY) {
-  throw new Error('[supabase] SUPABASE_SECRET_KEY is not set. Add it to Vercel Environment Variables.');
-}
-
 // Global singleton — reused across invocations in the same warm serverless instance.
 let _client: SupabaseClient | null = null;
 
 export function getSupabaseClient(): SupabaseClient {
   if (_client) return _client;
-  _client = createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SECRET_KEY!,
-    {
-      auth: {
-        // Server-side: sessions are managed via jose JWTs in HttpOnly cookies.
-        // Disable Supabase Auth helpers to avoid confusion with our own session layer.
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false,
-      },
-    }
-  );
+
+  // Guards are inside the function so they fire at request time, not at
+  // Next.js build time. Moving them here prevents `next build` from crashing
+  // in CI where SUPABASE_URL / SUPABASE_SECRET_KEY are not real secrets.
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SECRET_KEY;
+
+  if (!url) {
+    throw new Error('[supabase] SUPABASE_URL is not set. Add it to Vercel Environment Variables.');
+  }
+  if (!key) {
+    throw new Error('[supabase] SUPABASE_SECRET_KEY is not set. Add it to Vercel Environment Variables.');
+  }
+
+  _client = createClient(url, key, {
+    auth: {
+      // Server-side: sessions are managed via jose JWTs in HttpOnly cookies.
+      // Disable Supabase Auth helpers to avoid confusion with our own session layer.
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
   return _client;
 }
