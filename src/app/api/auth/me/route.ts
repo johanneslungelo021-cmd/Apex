@@ -35,11 +35,7 @@ export async function GET(req: Request): Promise<Response> {
     );
   }
 
- feat/supabase-auth-persistence
-  // Verify user still exists in store
-  const user = await findUserById(session.userId);
-
-  // findUserById is now async Supabase I/O — wrap in try/catch so a transient
+  // findUserById is async Supabase I/O — wrap in try/catch so a transient
   // DB/network error returns a stable JSON response instead of an opaque 500.
   let user: StoredUser | null;
   try {
@@ -56,7 +52,6 @@ export async function GET(req: Request): Promise<Response> {
     );
   }
 
- main
   if (!user) {
     return NextResponse.json(
       { authenticated: false, user: null },

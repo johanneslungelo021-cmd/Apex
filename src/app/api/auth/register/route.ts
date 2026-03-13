@@ -92,17 +92,11 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   try {
- feat/supabase-auth-persistence
-    // Check duplicate - timing-safe: hash password anyway
-    if (await findUserByEmail(normalizedEmail)) {
-      await hashPassword(password); // Prevent timing attack
-
     // Optimistic duplicate check (best-effort — not a hard guarantee).
     // A concurrent registration may pass this check and hit the DB constraint;
     // that race is handled in the catch block below.
     if (await findUserByEmail(normalizedEmail)) {
       await hashPassword(password); // timing-safe: prevent email enumeration
- main
       return NextResponse.json(
         { success: false, error: 'DUPLICATE_EMAIL', message: 'An account with this email already exists.' },
         { status: 409 }

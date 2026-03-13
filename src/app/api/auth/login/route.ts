@@ -71,7 +71,6 @@ export async function POST(req: Request): Promise<Response> {
   const normalizedEmail = email.toLowerCase().trim();
 
   try {
-    // Find user
     const user = await findUserByEmail(normalizedEmail);
 
     if (!user) {
@@ -98,13 +97,8 @@ export async function POST(req: Request): Promise<Response> {
       );
     }
 
- feat/supabase-auth-persistence
-    // Issue session
-    await updateLastLogin(user.id);
-
     // Issue session first — updateLastLogin is audit metadata only.
     // A transient Supabase failure here must NOT reject a valid login.
- main
     const token = await createSession({
       userId: user.id,
       email: user.email,
