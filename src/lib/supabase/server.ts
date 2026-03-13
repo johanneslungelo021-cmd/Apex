@@ -14,11 +14,14 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 const url = process.env.SUPABASE_URL;
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Vercel's Supabase integration injects this as SUPABASE_SECRET_KEY.
+// Fallback to the conventional name in case it's been manually added.
+const key =
+  process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!url || !key) {
   throw new Error(
-    '[Supabase] SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not set.\n' +
+    '[Supabase] SUPABASE_URL or SUPABASE_SECRET_KEY is not set.\n' +
       'Get both values from:\n' +
       '  https://supabase.com/dashboard/project/xdkojaigrjhzjkqxguxh/settings/api\n' +
       'Add them to .env.local and to Vercel → Project Settings → Environment Variables.'
