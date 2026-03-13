@@ -19,9 +19,9 @@
  * @module lib/auth/store
  */
 
-import { supabase } from '@/lib/supabase/server';
+import { getSupabaseClient } from '@/lib/supabase';
 
-// ── Types ───────────────────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────────────
 
 export interface StoredUser {
   id: string;
@@ -44,7 +44,7 @@ interface UserRow {
   province: string | null;
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────
 
 /** Convert a Supabase row to the application-layer StoredUser shape. */
 function rowToUser(row: UserRow): StoredUser {
@@ -59,51 +59,44 @@ function rowToUser(row: UserRow): StoredUser {
   };
 }
 
-// ── Store Functions ──────────────────────────────────────────────────
+// ── Store Functions ───────────────────────────────────────────
 
 /**
- * Find a user by their email address (case-insensitive — emails are
- * normalised to lowercase before storage).
+ * Find a user by their email address (case-insensitive).
  */
 export async function findUserByEmail(email: string): Promise<StoredUser | null> {
-  const { data, error } = await supabase
+  const db = getSupabaseClient();
+  const { data, error } = await db
     .from('users')
-    .select('*')
+    .select('id, email, password_hash, display_name, created_at, last_login_at, province')
     .eq('email', email)
-    .maybeSingle<UserRow>();
+    .maybeSingle();
 
-  if (error) {
-    console.error('[store] findUserByEmail error:', error.message);
-    throw new Error('Database lookup failed.');
-  }
-
-  return data ? rowToUser(data) : null;
+  if (error) throw new Error(`[store] findUserByEmail: ${error.message}`);
+  return data ? rowToUser(data as unknown as UserRow) : null;
 }
 
 /**
  * Find a user by their UUID.
  */
 export async function findUserById(id: string): Promise<StoredUser | null> {
-  const { data, error } = await supabase
+  const db = getSupabaseClient();
+  const { data, error } = await db
     .from('users')
-    .select('*')
+    .select('id, email, display_name, created_at, last_login_at, province')
     .eq('id', id)
-    .maybeSingle<UserRow>();
+    .maybeSingle();
 
-  if (error) {
-    console.error('[store] findUserById error:', error.message);
-    throw new Error('Database lookup failed.');
-  }
-
-  return data ? rowToUser(data) : null;
+  if (error) throw new Error(`[store] findUserById: ${error.message}`);
+  return data ? rowToUser(data as unknown as UserRow) : null;
 }
 
 /**
- * Insert a new user row.  Throws if the email already exists (unique
- * constraint) so the caller should call findUserByEmail first.
+ * Insert a new user row.
  */
 export async function createUser(user: StoredUser): Promise<void> {
-  const { error } = await supabase.from('users').insert({
+  const db = getSupabaseClient();
+  const { error } = await db.from('users').insert({
     id: user.id,
     email: user.email,
     password_hash: user.passwordHash,
@@ -114,54 +107,48 @@ export async function createUser(user: StoredUser): Promise<void> {
   });
 
   if (error) {
-    console.error('[store] createUser error:', error.message);
-    throw new Error('Failed to create user.');
+    if (error.code === '23505' && error.details?.toLowerCase().includes('(email)')) {
+      throw new Error('DUPLICATE_EMAIL');
+    }
+    throw new Error(`[store] createUser: ${error.message}`);
   }
 }
 
 /**
- * Update the province for a user (set in onboarding after registration).
+ * Update the province for a user.
  */
 export async function updateUserProvince(id: string, province: string): Promise<void> {
-  const { error } = await supabase
+  const db = getSupabaseClient();
+  const { error } = await db
     .from('users')
     .update({ province })
     .eq('id', id);
 
-  if (error) {
-    console.error('[store] updateUserProvince error:', error.message);
-    throw new Error('Failed to update province.');
-  }
+  if (error) throw new Error(`[store] updateUserProvince: ${error.message}`);
 }
 
 /**
  * Stamp last_login_at with the current UTC time.
  */
 export async function updateLastLogin(id: string): Promise<void> {
-  const { error } = await supabase
+  const db = getSupabaseClient();
+  const { error } = await db
     .from('users')
     .update({ last_login_at: new Date().toISOString() })
     .eq('id', id);
 
-  if (error) {
-    console.error('[store] updateLastLogin error:', error.message);
-    throw new Error('Failed to update last login.');
-  }
+  if (error) throw new Error(`[store] updateLastLogin: ${error.message}`);
 }
 
 /**
  * Return the total number of registered users.
- * Uses Supabase's count feature — no full table scan.
  */
 export async function getUserCount(): Promise<number> {
-  const { count, error } = await supabase
+  const db = getSupabaseClient();
+  const { count, error } = await db
     .from('users')
     .select('*', { count: 'exact', head: true });
 
-  if (error) {
-    console.error('[store] getUserCount error:', error.message);
-    throw new Error('Failed to get user count.');
-  }
-
+  if (error) throw new Error(`[store] getUserCount: ${error.message}`);
   return count ?? 0;
 }
