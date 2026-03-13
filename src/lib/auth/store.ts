@@ -56,7 +56,10 @@ export async function findUserByEmail(email: string): Promise<StoredUser | null>
     .maybeSingle();
 
   if (error) throw new Error(`[store] findUserByEmail: ${error.message}`);
-  return data ? rowToUser(data as UserRow) : null;
+  // Supabase returns an untyped Json union when no Database generic is provided.
+  // The double cast (unknown → UserRow) is intentional and safe: the shape is
+  // guaranteed by the migration in supabase/migrations/001_users.sql.
+  return data ? rowToUser(data as unknown as UserRow) : null;
 }
 
 export async function findUserById(id: string): Promise<StoredUser | null> {
@@ -68,7 +71,8 @@ export async function findUserById(id: string): Promise<StoredUser | null> {
     .maybeSingle();
 
   if (error) throw new Error(`[store] findUserById: ${error.message}`);
-  return data ? rowToUser(data as UserRow) : null;
+  // Same intentional double-cast as findUserByEmail — see comment above.
+  return data ? rowToUser(data as unknown as UserRow) : null;
 }
 
 export async function createUser(user: StoredUser): Promise<void> {
@@ -84,7 +88,7 @@ export async function createUser(user: StoredUser): Promise<void> {
   });
 
   if (error) {
-    // Unique violation — email already exists
+    // Unique violation — email already exists (citext enforces case-insensitive uniqueness)
     if (error.code === '23505') {
       throw new Error('DUPLICATE_EMAIL');
     }
