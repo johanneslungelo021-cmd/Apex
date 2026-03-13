@@ -75,7 +75,14 @@ interface SwapFormProps {
 
 function SwapForm({ xrpZar, onExecute }: SwapFormProps) {
   const [zarAmount, setZarAmount] = useState('500');
-  const xrpOut = zarAmount ? (parseFloat(zarAmount) / xrpZar).toFixed(4) : '0';
+  // Devin fix: xrpZar defaults to 0 when Perplexity returns no valid number.
+  // parseFloat(n) / 0 = Infinity, and Infinity.toFixed(4) = "Infinity" — shown
+  // to the user as a valid output and the swap button stays enabled.
+  // Guard: only compute when xrpZar is a positive finite number.
+  const xrpOut = zarAmount && xrpZar > 0
+    ? (parseFloat(zarAmount) / xrpZar).toFixed(4)
+    : '0';
+  const rateAvailable = xrpZar > 0;
 
   const handleSwap = () => {
     const amount = parseFloat(zarAmount);
@@ -115,10 +122,10 @@ function SwapForm({ xrpZar, onExecute }: SwapFormProps) {
       <button
         type="button"
         onClick={handleSwap}
-        disabled={!zarAmount || parseFloat(zarAmount) <= 0}
+        disabled={!zarAmount || parseFloat(zarAmount) <= 0 || !rateAvailable}
         className="w-full py-4 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-medium tracking-widest uppercase text-sm hover:bg-emerald-500/30 hover:border-emerald-400/60 transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed"
       >
-        Execute Swap
+        {rateAvailable ? 'Execute Swap' : 'Rate Unavailable'}
       </button>
     </div>
   );

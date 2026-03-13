@@ -15,7 +15,7 @@
 
 import { useState, useRef, useCallback, useEffect, type CSSProperties } from 'react';
 import Link from 'next/link';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, type Variants } from 'framer-motion';
 
 // ─── Real hook APIs (no assumed methods) ────────────────────────────────────
 import { useEmotionEngine, type EmotionState } from '@/hooks/useEmotionEngine';
@@ -125,8 +125,10 @@ const EMOTION_MAP: Record<PortalEmotion, GlowConfig> = {
 
 // ─── Layer 4: Motion variant definitions ─────────────────────────────────────
 // Stagger timing is scaled by emotion intensity from the engine
+// TS fix: explicit Variants type required — framer-motion's strict types reject
+// inline transition objects inside variant keys without it.
 
-const subtitleVariants = {
+const subtitleVariants: Variants = {
   hidden:  { opacity: 0, y: 20, filter: 'blur(4px)' },
   visible: { opacity: 1, y: 0,  filter: 'blur(0px)',
     transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1] } },
@@ -134,7 +136,7 @@ const subtitleVariants = {
     transition: { duration: 0.25 } },
 };
 
-const enterBtnVariants = {
+const enterBtnVariants: Variants = {
   hidden:  { opacity: 0, x: 12, scale: 0.92 },
   visible: { opacity: 1, x: 0,  scale: 1,
     transition: { delay: 0.12, duration: 0.45, ease: [0.22, 1, 0.36, 1] } },
@@ -142,7 +144,7 @@ const enterBtnVariants = {
     transition: { duration: 0.2 } },
 };
 
-const idVariants = {
+const idVariants: Variants = {
   rest:    { opacity: 0.45, letterSpacing: '0.15em' },
   hovered: { opacity: 1,    letterSpacing: '0.30em',
     transition: { duration: 0.4, ease: 'easeOut' } },
@@ -197,27 +199,42 @@ export default function CinematicPortalCard({
 
   // Bug 3 fix: inject keyframes once per document, not once per card instance.
   // 6 cards × naive <style> = 12 duplicate @keyframes blocks in the DOM.
-  // useEffect with a data-attribute guard fires only on the first card mount.
+  //
+  // Ref counter pattern (CodeRabbit recommendation):
+  //   - Increment on mount, decrement on unmount
+  //   - Inject when counter goes 0→1 (first card), remove when 1→0 (last card)
+  //   - Unconditional cleanup was wrong — it removed the element when any card
+  //     unmounted, even if 5 others still needed it
   useEffect(() => {
     const MARKER = 'data-apex-portal-keyframes';
-    if (document.querySelector(`[${MARKER}]`)) return;
-    const style = document.createElement('style');
-    style.setAttribute(MARKER, '');
-    style.textContent = `
-      @keyframes apexScanline {
-        0%   { transform: translateY(-100%); }
-        100% { transform: translateY(200%); }
-      }
-      @keyframes apexPulseRing {
-        0%   { opacity: 0.6; transform: scale(0.96); }
-        50%  { opacity: 0.2; transform: scale(1.04); }
-        100% { opacity: 0.6; transform: scale(0.96); }
-      }
-    `;
-    document.head.appendChild(style);
+    const COUNTER_KEY = '__apexPortalCardCount__';
+    const win = window as typeof window & { [COUNTER_KEY]?: number };
+
+    win[COUNTER_KEY] = (win[COUNTER_KEY] ?? 0) + 1;
+
+    if (!document.querySelector(`[${MARKER}]`)) {
+      const style = document.createElement('style');
+      style.setAttribute(MARKER, '');
+      style.textContent = `
+        @keyframes apexScanline {
+          0%   { transform: translateY(-100%); }
+          100% { transform: translateY(200%); }
+        }
+        @keyframes apexPulseRing {
+          0%   { opacity: 0.6; transform: scale(0.96); }
+          50%  { opacity: 0.2; transform: scale(1.04); }
+          100% { opacity: 0.6; transform: scale(0.96); }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
     return () => {
-      // Only remove if this component was the one that injected it
-      document.querySelector(`[${MARKER}]`)?.remove();
+      win[COUNTER_KEY] = (win[COUNTER_KEY] ?? 1) - 1;
+      // Only remove when the very last portal card unmounts
+      if (win[COUNTER_KEY] === 0) {
+        document.querySelector(`[${MARKER}]`)?.remove();
+      }
     };
   }, []);
 
