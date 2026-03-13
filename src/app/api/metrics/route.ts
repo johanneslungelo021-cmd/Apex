@@ -1,40 +1,16 @@
+import { NextResponse } from 'next/server';
+
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 /**
- main
- * Metrics API Route
- *
- * Returns real GitHub repository metrics sourced directly from the GitHub REST API.
- * A 5-minute server-side cache prevents rate-limit pressure on the GitHub API
- * (60 req/hr unauthenticated; 5 000 req/hr with GITHUB_TOKEN).
- *
- * NOTE: "platform metrics" (users, impact, courses) were removed in this revision
- * because the previous implementation used fabricated base values with a sine-wave
- * variation — none of those numbers reflected real usage data.  The GitHub metrics
- * below are verifiable at https://api.github.com/repos/johanneslungelo021-cmd/Apex.
-
  * Metrics API Route — real GitHub repository data only
  *
  * Returns live repository metrics from the GitHub REST API.
- * 5-minute in-process cache prevents rate-limit pressure.
- *
- * REMOVED: fetchPlatformMetrics() — it returned users:12480, impact:874200,
- * courses:342 with a sine-wave variation. None of those values had a real
- * data source. Fabricated metrics violate the Speed Insights report SA-2026-03-11
- * requirement: "only reference data from Speed Insights or Vercel build logs."
- *
- * Verified source: https://api.github.com/repos/johanneslungelo021-cmd/Apex
- feat/perf-cwv-zero-mocks
- *
- * @module api/metrics
+ * A 5-minute server-side cache and a single-flight pattern prevent
+ * rate-limit pressure and redundant concurrent fetches.
  */
 
-import { NextResponse } from 'next/server';
-
- main
-/** GitHub repository metrics sourced from the GitHub REST API. */
-
- feat/perf-cwv-zero-mocks
 export interface GitHubMetrics {
   stars: number;
   forks: number;
@@ -47,31 +23,20 @@ export interface GitHubMetrics {
   language: string;
 }
 
- main
-/** Combined response shape returned by GET /api/metrics */
 export interface MetricsResponse {
   github: GitHubMetrics;
   timestamp: number;
 }
 
-/** In-process cache — valid for 5 minutes */
-
-export interface MetricsResponse {
-  github: GitHubMetrics;
-  /** Unix millisecond timestamp — tells the client when this was fetched */
-  timestamp: number;
-}
-
- feat/perf-cwv-zero-mocks
 let cache: { data: MetricsResponse; ts: number } | null = null;
 const CACHE_TTL_MS = 5 * 60 * 1_000;
 
+// Single-flight pattern: track ongoing request to prevent concurrent duplicate fetches
+let pendingRequest: Promise<GitHubMetrics> | null = null;
+
 const GITHUB_REPO = 'johanneslungelo021-cmd/Apex';
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}`;
-
-const rawTimeout = parseInt(process.env.GITHUB_TIMEOUT_MS ?? '8000', 10);
-const GITHUB_TIMEOUT_MS =
-  Number.isFinite(rawTimeout) && rawTimeout > 0 ? rawTimeout : 8_000;
+const GITHUB_TIMEOUT_MS = 8_000;
 
 function githubFallback(): GitHubMetrics {
   return {
@@ -95,21 +60,9 @@ async function fetchGitHubMetrics(): Promise<GitHubMetrics> {
   const token = process.env.GITHUB_TOKEN;
   if (token) headers['Authorization'] = `token ${token}`;
 
- main
-  const token = process.env.GITHUB_TOKEN;
-  if (token) {
-    headers['Authorization'] = `token ${token}`;
-  }
-
   for (let attempt = 1; attempt <= 2; attempt++) {
     const ac = new AbortController();
     const tid = setTimeout(() => ac.abort(), GITHUB_TIMEOUT_MS);
-
-
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    const ac = new AbortController();
-    const tid = setTimeout(() => ac.abort(), GITHUB_TIMEOUT_MS);
- feat/perf-cwv-zero-mocks
     try {
       const res = await fetch(GITHUB_API_URL, {
         headers,
@@ -119,74 +72,54 @@ async function fetchGitHubMetrics(): Promise<GitHubMetrics> {
       clearTimeout(tid);
       if (!res.ok) throw new Error(`GitHub HTTP ${res.status}`);
 
- main
-      clearTimeout(tid);
-
-      if (!res.ok) throw new Error(`GitHub HTTP ${res.status}`);
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const d = (await res.json()) as Record<string, any>;
-
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const d = (await res.json()) as Record<string, any>;
- feat/perf-cwv-zero-mocks
+      const d = await res.json();
       return {
-        stars: (d.stargazers_count as number) ?? 0,
-        forks: (d.forks_count as number) ?? 0,
-        openIssues: (d.open_issues_count as number) ?? 0,
-        watchers: (d.watchers_count as number) ?? 0,
-        size: (d.size as number) ?? 0,
-        lastUpdated: (d.updated_at as string) ?? new Date().toISOString(),
-        fullName: (d.full_name as string) ?? GITHUB_REPO,
-        description:
-          (d.description as string) ??
-          'Apex — AI-Powered Digital Income Platform for South Africa',
-        language: (d.language as string) ?? 'TypeScript',
+        stars: d.stargazers_count ?? 0,
+        forks: d.forks_count ?? 0,
+        openIssues: d.open_issues_count ?? 0,
+        watchers: d.watchers_count ?? 0,
+        size: d.size ?? 0,
+        lastUpdated: d.updated_at ?? new Date().toISOString(),
+        fullName: d.full_name ?? GITHUB_REPO,
+        description: d.description ?? 'Apex — AI-Powered Digital Income Platform',
+        language: d.language ?? 'TypeScript',
       };
     } catch (err) {
       clearTimeout(tid);
-      const msg = err instanceof Error ? err.message : String(err);
       if (attempt === 2) {
- main
-        console.warn(`[metrics] GitHub fetch failed after 2 attempts: ${msg}`);
-        return githubFallback();
-      }
-      console.warn(`[metrics] GitHub fetch attempt ${attempt} failed, retrying: ${msg}`);
-      await new Promise((r) => setTimeout(r, 300));
-    }
-  }
-
-
-        console.warn(`[metrics] GitHub fetch failed: ${msg}`);
+        console.warn(`[metrics] GitHub fetch failed: ${err}`);
         return githubFallback();
       }
       await new Promise((r) => setTimeout(r, 300));
     }
   }
- feat/perf-cwv-zero-mocks
   return githubFallback();
 }
 
 export async function GET(): Promise<Response> {
   const now = Date.now();
- main
 
+  // 1. Check cache
   if (cache && now - cache.ts < CACHE_TTL_MS) {
     return NextResponse.json(cache.data);
   }
 
-  const github = await fetchGitHubMetrics();
-  const body: MetricsResponse = { github, timestamp: now };
-  cache = { data: body, ts: now };
+  // 2. Single-flight: If a request is already in flight, wait for it
+  if (pendingRequest) {
+    const github = await pendingRequest;
+    return NextResponse.json({ github, timestamp: now });
+  }
 
-
-  if (cache && now - cache.ts < CACHE_TTL_MS) return NextResponse.json(cache.data);
-  const github = await fetchGitHubMetrics();
-  const body: MetricsResponse = { github, timestamp: now };
-  cache = { data: body, ts: now };
- feat/perf-cwv-zero-mocks
-  return NextResponse.json(body);
+  // 3. Start new fetch and track it
+  try {
+    pendingRequest = fetchGitHubMetrics();
+    const github = await pendingRequest;
+    const body: MetricsResponse = { github, timestamp: now };
+    cache = { data: body, ts: now };
+    return NextResponse.json(body);
+  } finally {
+    pendingRequest = null;
+  }
 }
 
 export const revalidate = 300;

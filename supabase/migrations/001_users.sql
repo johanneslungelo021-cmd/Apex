@@ -1,3 +1,4 @@
+fix/inline-review-fixes
 -- ══════════════════════════════════════════════════════════════
 -- Apex — Users table migration
 -- Project: xdkojaigrjhzjkqxguxh (West EU — Ireland)
@@ -26,3 +27,19 @@ alter table public.users enable row level security;
 -- Deny all direct browser access. Vercel uses the service-role key which
 -- bypasses RLS entirely, so no policies are needed for server-side ops.
 -- If you ever add client-side Supabase calls, add policies here.
+
+-- Enable the citext extension for case-insensitive string types
+CREATE EXTENSION IF NOT EXISTS citext;
+
+-- Create users table with CITEXT for the email column
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email CITEXT UNIQUE NOT NULL,
+    display_name TEXT,
+    password_hash TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Ensure a functional unique index is also present as a fallback/best practice
+CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_idx ON users (lower(email));
+ main
