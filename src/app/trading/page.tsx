@@ -29,7 +29,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { TrendingUp, TrendingDown, ArrowLeft, Activity, Zap, RefreshCw } from 'lucide-react';
 
 // Real hook APIs (verified)
-import { useEmotionEngine }  from '@/hooks/useEmotionEngine';
+import { EmotionProvider, useEmotionEngine } from '@/hooks/useEmotionEngine';
 import { useMultiSensory }   from '@/hooks/useMultiSensory';
 import { useMagneticCursor } from '@/hooks/useMagneticCursor';
 import { useSpeech }         from '@/hooks/useSpeech';
@@ -165,10 +165,16 @@ function InsightTicker({ volatile: isVolatile }: { volatile: boolean }) {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-export default function SentientTradingFloor() {
-  const [data, setData]             = useState<TradingData | null>(null);
+/**
+ * Bug 4 fix: useEmotionEngine() throws "requires <EmotionProvider>" if no
+ * provider is in scope.  The root layout has none, so the trading page must
+ * supply its own.  Pattern: inner component consumes the context, outer
+ * default export wraps it in EmotionProvider.
+ */
+function SentientTradingFloorInner() {
+  const [data, setData]               = useState<TradingData | null>(null);
   const [dataLoading, setDataLoading] = useState(true);
-  const [, startDataTransition]     = useTransition();
+  const [, startDataTransition]       = useTransition();
 
   // Layer 3: volatile = real signal from API (not Math.random)
   const isVolatile = Boolean(data && Math.abs(data.zarUsdChange24h) > 1.5);
@@ -179,14 +185,15 @@ export default function SentientTradingFloor() {
   const { transactionState, resetTransaction, startTransaction, markOptimisticSuccess, confirmTransaction } = useOptimisticTransaction();
   const [showBeam, setShowBeam] = useState(false);
 
-  const videoRef      = useRef<HTMLVideoElement>(null);
-  const hasSpokeRef   = useRef(false);
+  // Bug 6 fix: videoRef removed — video uses native autoPlay, ref was never
+  // called and produced a dead-ref lint warning.
+  const hasSpokeRef = useRef(false);
 
   // Layer 1: real hook APIs (no invented methods)
   const { transition, intensity } = useEmotionEngine();   // was: setEmotion()
   const { trigger, resume }       = useMultiSensory();    // was: playHapticFeedback/playAmbientSound
   const { isHovering }            = useMagneticCursor();  // read-only, no setCursorState
-  const { speak, isAvailable: ttsAvailable } = useSpeech();
+  const { speak }                 = useSpeech();          // Bug 5: ttsAvailable removed — see below
 
   // Layer 2: real market data from /api/trading
   const fetchData = useCallback(async () => {
@@ -209,8 +216,18 @@ export default function SentientTradingFloor() {
     trigger('processing');
     void fetchData();
 
+    /**
+     * Bug 5 fix: stale closure — ttsAvailable is false at mount time because
+     * useSpeech() initialises browserMode as 'unavailable' and promotes it to
+     * 'browser' in its own internal useEffect (runs after this one).
+     * Capturing it here always evaluated to false, so the whisper never fired.
+     *
+     * Fix: remove the guard entirely.  useSpeech.speak() already returns early
+     * when audio is unavailable (`if (!audio) return`) — duplicating that check
+     * here only introduced the stale-closure bug without adding safety.
+     */
     const whisperTimeout = setTimeout(() => {
-      if (!hasSpokeRef.current && ttsAvailable) {
+      if (!hasSpokeRef.current) {
         hasSpokeRef.current = true;
         void speak('Liquidity matrix online. ZAR corridor nodes are active. Real-time XRPL data is streaming.');
       }
@@ -223,7 +240,7 @@ export default function SentientTradingFloor() {
       clearInterval(refreshInterval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // stable on mount — deps are stable refs and functions
+  }, []); // stable on mount — all deps are stable refs/functions
 
   // Layer 3+4: react to real market state
   useEffect(() => {
@@ -276,7 +293,7 @@ export default function SentientTradingFloor() {
       <TransactionBeam isActive={showBeam} startColor="#00FF88" endColor="#00AAFF" onComplete={() => setShowBeam(false)} />
 
       {/* Layer 5: cinematic background */}
-      <video ref={videoRef} autoPlay muted loop playsInline preload="none" style={videoStyle} src="https://cdn.pixabay.com/video/2020/05/24/40090-424754578_large.mp4" aria-hidden="true" />
+      <video autoPlay muted loop playsInline preload="none" style={videoStyle} src="https://cdn.pixabay.com/video/2020/05/24/40090-424754578_large.mp4" aria-hidden="true" />
 
       {/* Gradient overlay */}
       <div className="absolute inset-0 pointer-events-none z-10" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.10) 45%, rgba(0,0,0,0.90) 100%)' } as CSSProperties} />
@@ -479,5 +496,19 @@ export default function SentientTradingFloor() {
         </footer>
       </div>
     </main>
+  );
+}
+
+/**
+ * Bug 4 fix: EmotionProvider wraps the inner component so useEmotionEngine(),
+ * useMultiSensory(), and useSpeech() (which calls useEmotionEngine internally)
+ * all have a valid context.  Without this the page throws on mount:
+ * "useEmotionEngine requires <EmotionProvider>"
+ */
+export default function SentientTradingFloor() {
+  return (
+    <EmotionProvider>
+      <SentientTradingFloorInner />
+    </EmotionProvider>
   );
 }

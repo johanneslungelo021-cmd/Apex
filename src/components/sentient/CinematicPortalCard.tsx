@@ -13,7 +13,7 @@
  * Each layer multiplies the previous — zero stand-alone effects.
  */
 
-import { useState, useRef, useCallback, type CSSProperties } from 'react';
+import { useState, useRef, useCallback, useEffect, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -39,6 +39,35 @@ export interface PortalProps {
   videoSrc: string;
   href: string;
   emotionState: PortalEmotion;
+}
+
+// ─── Colour helpers ───────────────────────────────────────────────────────────
+
+/**
+ * replaceAlpha — swap the alpha channel of an rgba() string.
+ *
+ * BUG FIXED: naive `.replace(')', ',0.12)')` appended a 5th arg to rgba(),
+ * producing `rgba(r,g,b,orig,new)` — invalid CSS, renders transparent.
+ * This helper correctly rewrites only the 4th arg.
+ *
+ *   'rgba(148,163,184,0.25)', 0.12  →  'rgba(148,163,184,0.12)'
+ */
+function replaceAlpha(rgba: string, alpha: number): string {
+  return rgba.replace(/[\d.]+\)$/, `${alpha})`);
+}
+
+/**
+ * scaleGlowSpread — scale the px radii of a box-shadow string by factor.
+ *
+ * BUG FIXED: the original `config.glow.replace(/[\d.]+\)$/, intensity)` was
+ * replacing the rgba alpha with the intensity value (e.g. 1.4), leaving the
+ * visible spread unchanged.  Intensity should enlarge the glow radius.
+ *
+ *   '0 0 60px 8px rgba(16,185,129,0.35)', 1.4
+ *     →  '0 0 84.0px 11.2px rgba(16,185,129,0.35)'
+ */
+function scaleGlowSpread(shadow: string, factor: number): string {
+  return shadow.replace(/([\d.]+)px/g, (_, n) => `${(parseFloat(n) * factor).toFixed(1)}px`);
 }
 
 // ─── Layer 2: Emotion mapping ─────────────────────────────────────────────────
@@ -156,9 +185,9 @@ export default function CinematicPortalCard({
     videoRef.current?.pause();
   }, [transition, trigger]);
 
-  // Layer 4: intensity from engine scales the card's glow size
+  // Layer 4: intensity from engine scales the card's glow SPREAD RADIUS (not alpha)
   const dynamicGlow = isHovered
-    ? config.glow.replace(/[\d.]+\)$/, `${Math.min(intensity, 2)})`)
+    ? scaleGlowSpread(config.glow, Math.min(intensity, 2))
     : 'none';
 
   // Layer 5: scan-line shimmer — visible only while hovered
@@ -166,20 +195,35 @@ export default function CinematicPortalCard({
     ? { animation: 'apexScanline 2.4s linear infinite' }
     : {};
 
+  // Bug 3 fix: inject keyframes once per document, not once per card instance.
+  // 6 cards × naive <style> = 12 duplicate @keyframes blocks in the DOM.
+  // useEffect with a data-attribute guard fires only on the first card mount.
+  useEffect(() => {
+    const MARKER = 'data-apex-portal-keyframes';
+    if (document.querySelector(`[${MARKER}]`)) return;
+    const style = document.createElement('style');
+    style.setAttribute(MARKER, '');
+    style.textContent = `
+      @keyframes apexScanline {
+        0%   { transform: translateY(-100%); }
+        100% { transform: translateY(200%); }
+      }
+      @keyframes apexPulseRing {
+        0%   { opacity: 0.6; transform: scale(0.96); }
+        50%  { opacity: 0.2; transform: scale(1.04); }
+        100% { opacity: 0.6; transform: scale(0.96); }
+      }
+    `;
+    document.head.appendChild(style);
+    return () => {
+      // Only remove if this component was the one that injected it
+      document.querySelector(`[${MARKER}]`)?.remove();
+    };
+  }, []);
+
   return (
     <>
-      {/* Layer 5: keyframe injection — once per document */}
-      <style>{`
-        @keyframes apexScanline {
-          0%   { transform: translateY(-100%); }
-          100% { transform: translateY(200%); }
-        }
-        @keyframes apexPulseRing {
-          0%   { opacity: 0.6; transform: scale(0.96); }
-          50%  { opacity: 0.2; transform: scale(1.04); }
-          100% { opacity: 0.6; transform: scale(0.96); }
-        }
-      `}</style>
+      {/* Layer 5: keyframe injection — guard prevents duplicate injection across 6 cards */}
 
       <Link
         href={href}
@@ -229,7 +273,7 @@ export default function CinematicPortalCard({
             <div
               className="absolute left-0 right-0 h-[30%]"
               style={{
-                background: `linear-gradient(to bottom, transparent 0%, ${config.border.replace(')', ',0.12)')} 50%, transparent 100%)`,
+                background: `linear-gradient(to bottom, transparent 0%, ${replaceAlpha(config.border, 0.12)} 50%, transparent 100%)`,
                 ...shimmerStyle,
               }}
             />
@@ -260,7 +304,7 @@ export default function CinematicPortalCard({
             <motion.span
               className="px-3 py-1 rounded-full text-[10px] font-mono tracking-[3px] uppercase"
               style={{
-                background: config.border.replace(')', ',0.15)'),
+                background: replaceAlpha(config.border, 0.15),
                 border: `1px solid ${config.border}`,
                 color: 'rgba(255,255,255,0.70)',
               }}
@@ -336,7 +380,7 @@ export default function CinematicPortalCard({
                       background: 'rgba(255,255,255,0.10)',
                       backdropFilter: 'blur(14px)',
                       border: `1px solid ${config.border}`,
-                      boxShadow: `0 0 20px ${config.border.replace(')', ',0.20)')}`,
+                      boxShadow: `0 0 20px ${replaceAlpha(config.border, 0.20)}`,
                     }}
                   >
                     ENTER
