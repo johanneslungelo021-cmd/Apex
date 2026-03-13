@@ -71,7 +71,6 @@ export async function POST(req: Request): Promise<Response> {
   const normalizedEmail = email.toLowerCase().trim();
 
   try {
-    // Find user
     const user = await findUserByEmail(normalizedEmail);
 
     if (!user) {

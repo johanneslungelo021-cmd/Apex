@@ -35,7 +35,7 @@ export async function GET(req: Request): Promise<Response> {
     );
   }
 
-  // findUserById is now async Supabase I/O — wrap in try/catch so a transient
+  // findUserById is async Supabase I/O — wrap in try/catch so a transient
   // DB/network error returns a stable JSON response instead of an opaque 500.
   let user: StoredUser | null;
   try {

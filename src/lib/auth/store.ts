@@ -1,16 +1,27 @@
 /**
- * User Store — Supabase Postgres backend.
+ * User Store — Supabase Postgres (persistent across Vercel cold starts).
  *
  * Replaces the in-memory Map that reset on every Vercel cold start.
  * All operations go through the service-role Supabase client which
  * bypasses RLS — only called from Vercel API routes, never the browser.
  *
- * Table: public.users  (created by supabase/migrations/001_users.sql)
+ * Table: public.users  (created by supabase/migrations/001_create_users_table.sql)
+ *
+ * Column mapping:
+ *   StoredUser.id            → users.id
+ *   StoredUser.email         → users.email
+ *   StoredUser.passwordHash  → users.password_hash
+ *   StoredUser.displayName   → users.display_name
+ *   StoredUser.createdAt     → users.created_at
+ *   StoredUser.lastLoginAt   → users.last_login_at
+ *   StoredUser.province      → users.province
  *
  * @module lib/auth/store
  */
 
 import { getSupabaseClient } from '@/lib/supabase';
+
+// ── Types ────────────────────────────────────────────────────────────────────
 
 export interface StoredUser {
   id: string;
@@ -22,17 +33,20 @@ export interface StoredUser {
   province: string | null;
 }
 
-// ─── Row shape returned by Supabase (snake_case) ──────────────────────────────
+/** Raw row shape returned by Supabase (snake_case). */
 interface UserRow {
   id: string;
   email: string;
-  password_hash: string;  // empty string when not selected (profile-only queries)
+  password_hash: string; // empty string when not selected (profile-only queries)
   display_name: string;
   created_at: string;
   last_login_at: string | null;
   province: string | null;
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Convert a Supabase row to the application-layer StoredUser shape. */
 function rowToUser(row: UserRow): StoredUser {
   return {
     id: row.id,
@@ -45,14 +59,12 @@ function rowToUser(row: UserRow): StoredUser {
   };
 }
 
-// ─── Public async API ─────────────────────────────────────────────────────────
+// ── Public async API ──────────────────────────────────────────────────────────
 // All exported functions return Promises — always await at the call site.
-// (Breaking change from the previous synchronous in-memory Map API.)
 
 /**
- * Credential lookup — projects id, email, password_hash, display_name,
- * created_at, last_login_at, province. Includes password_hash for bcrypt
- * verification in login. Never expose the result directly to the client.
+ * Credential lookup — includes password_hash for bcrypt verification.
+ * Never expose the result directly to the client.
  */
 export async function findUserByEmail(email: string): Promise<StoredUser | null> {
   const db = getSupabaseClient();
@@ -63,15 +75,11 @@ export async function findUserByEmail(email: string): Promise<StoredUser | null>
     .maybeSingle();
 
   if (error) throw new Error(`[store] findUserByEmail: ${error.message}`);
-  // Supabase returns an untyped Json union without a Database generic.
-  // The double cast (unknown → UserRow) is intentional: shape guaranteed by migration.
   return data ? rowToUser(data as unknown as UserRow) : null;
 }
 
 /**
- * Profile lookup — projects id, email, display_name, created_at,
- * last_login_at, province. password_hash is intentionally NOT selected
- * to minimise sensitive-data exposure in /api/auth/me and duplicate checks.
+ * Profile lookup — password_hash intentionally NOT selected.
  */
 export async function findUserById(id: string): Promise<StoredUser | null> {
   const db = getSupabaseClient();
@@ -86,6 +94,9 @@ export async function findUserById(id: string): Promise<StoredUser | null> {
   return data ? rowToUser(data as unknown as UserRow) : null;
 }
 
+/**
+ * Insert a new user row. Throws 'DUPLICATE_EMAIL' if email already exists.
+ */
 export async function createUser(user: StoredUser): Promise<void> {
   const db = getSupabaseClient();
   const { error } = await db.from('users').insert({
@@ -99,9 +110,6 @@ export async function createUser(user: StoredUser): Promise<void> {
   });
 
   if (error) {
-    // Only map to DUPLICATE_EMAIL when the violated constraint is the email
-    // unique index. A primary-key collision (also code 23505) would have
-    // error.details containing '(id)' not '(email)' and must not be swallowed.
     if (
       error.code === '23505' &&
       error.details?.toLowerCase().includes('(email)')
@@ -112,6 +120,9 @@ export async function createUser(user: StoredUser): Promise<void> {
   }
 }
 
+/**
+ * Update the province for a user (set during onboarding).
+ */
 export async function updateUserProvince(id: string, province: string): Promise<void> {
   const db = getSupabaseClient();
   const { error } = await db
@@ -122,6 +133,9 @@ export async function updateUserProvince(id: string, province: string): Promise<
   if (error) throw new Error(`[store] updateUserProvince: ${error.message}`);
 }
 
+/**
+ * Stamp last_login_at with the current UTC time.
+ */
 export async function updateLastLogin(id: string): Promise<void> {
   const db = getSupabaseClient();
   const { error } = await db
@@ -132,6 +146,9 @@ export async function updateLastLogin(id: string): Promise<void> {
   if (error) throw new Error(`[store] updateLastLogin: ${error.message}`);
 }
 
+/**
+ * Return the total number of registered users.
+ */
 export async function getUserCount(): Promise<number> {
   const db = getSupabaseClient();
   const { count, error } = await db
