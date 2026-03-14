@@ -32,7 +32,7 @@ import { ArrowLeft, RefreshCw, Zap } from 'lucide-react';
 
 import { useVoiceInput }    from '@/hooks/useVoiceInput';
 import { useSpeech }        from '@/hooks/useSpeech';
-import { useEmotionEngine } from '@/hooks/useEmotionEngine';
+import { useEmotionEngine, EmotionProvider } from '@/hooks/useEmotionEngine';
 import { useMultiSensory }  from '@/hooks/useMultiSensory';
 import type { NewsArticle } from '@/app/api/news/route';
 
@@ -135,7 +135,7 @@ function CommentCard({ comment }: { comment: ResonanceComment }) {
   );
 }
 
-export default function SentientNewsPage() {
+function SentientNewsPageInner() {
   const [articles, setArticles]             = useState<NewsArticle[]>([]);
   const [loading, setLoading]               = useState(true);
   const [error, setError]                   = useState(false);
@@ -525,5 +525,13 @@ export default function SentientNewsPage() {
 
       </main>
     </div>
+  );
+}
+
+export default function SentientNewsPage() {
+  return (
+    <EmotionProvider>
+      <SentientNewsPageInner />
+    </EmotionProvider>
   );
 }
