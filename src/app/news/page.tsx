@@ -135,7 +135,7 @@ function CommentCard({ comment }: { comment: ResonanceComment }) {
   );
 }
 
-function SentientNewsPageInner() {
+function SentientNewsPageInner({ isResonanceActive }: { isResonanceActive: boolean }) {
   const [articles, setArticles]             = useState<NewsArticle[]>([]);
   const [loading, setLoading]               = useState(true);
   const [error, setError]                   = useState(false);
@@ -450,7 +450,7 @@ function SentientNewsPageInner() {
 
         {/* ── LIVE RESONANCE MATRIX ─────────────────────────────────────────── */}
         <AnimatePresence>
-          {resonanceReady && (
+          {isResonanceActive && resonanceReady && (
             <motion.section className="w-full max-w-[1200px] mx-auto mt-24 py-12"
               initial={{ opacity:0, y:32 }} animate={{ opacity:1, y:0 }}
               transition={{ duration:.8, ease:[.16,1,.3,1] }}>
@@ -531,7 +531,7 @@ function SentientNewsPageInner() {
 export default function SentientNewsPage() {
   return (
     <EmotionProvider>
-      <SentientNewsPageInner />
+      <SentientNewsPageInner isResonanceActive={true} />
     </EmotionProvider>
   );
 }
