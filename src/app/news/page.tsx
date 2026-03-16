@@ -529,6 +529,9 @@ function SentientNewsPageInner({ isResonanceActive }: { isResonanceActive: boole
 }
 
 export default function SentientNewsPage() {
+  // Resonance matrix visibility is gated by resonanceReady state inside the inner
+  // component. The Vercel flag can be re-introduced via a proper server component
+  // wrapper once the file is split. Defaults to true so real AI data drives display.
   return (
     <EmotionProvider>
       <SentientNewsPageInner isResonanceActive={true} />
