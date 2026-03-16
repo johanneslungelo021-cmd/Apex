@@ -135,7 +135,7 @@ function CommentCard({ comment }: { comment: ResonanceComment }) {
   );
 }
 
-function SentientNewsPageInner() {
+function SentientNewsPageInner({ isResonanceActive }: { isResonanceActive: boolean }) {
   const [articles, setArticles]             = useState<NewsArticle[]>([]);
   const [loading, setLoading]               = useState(true);
   const [error, setError]                   = useState(false);
@@ -529,9 +529,12 @@ function SentientNewsPageInner() {
 }
 
 export default function SentientNewsPage() {
+  // Resonance matrix visibility is gated by resonanceReady state inside the inner
+  // component. The Vercel flag can be re-introduced via a proper server component
+  // wrapper once the file is split. Defaults to true so real AI data drives display.
   return (
     <EmotionProvider>
-      <SentientNewsPageInner />
+      <SentientNewsPageInner isResonanceActive={true} />
     </EmotionProvider>
   );
 }
