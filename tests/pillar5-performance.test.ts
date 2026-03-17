@@ -18,7 +18,7 @@
  * @see https://vercel.com/docs/speed-insights/metrics
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from '@jest/globals';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 
