@@ -1,5 +1,5 @@
 // tests/security-contracts.test.ts
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it } from '@jest/globals';
 import { APP_VERSION } from '../src/lib/version';
 import {
   buildScoutContextMessage,
