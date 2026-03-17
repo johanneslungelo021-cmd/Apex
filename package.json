@@ -33,6 +33,7 @@
     "three": "^0.183.2"
   },
   "devDependencies": {
+    "@jest/globals": "^30.3.0",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^3.0.0",
     "@types/jest": "^30.0.0",

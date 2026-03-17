@@ -12,7 +12,7 @@
  * Runs with: bun test tests/pillar4-bones.test.ts
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from '@jest/globals';
 import { readFileSync } from 'fs';
 import path from 'path';
 

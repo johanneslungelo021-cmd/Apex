@@ -1,5 +1,5 @@
 // tests/pillar3-heart.test.ts
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it } from '@jest/globals';
 
 // ─── Identity Matrix ──────────────────────────────────────────────────────────
 import {
