@@ -1,10 +1,10 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import NextImage from 'next/image';
 import {
-  FileText, Plus, Search, Filter, MoreHorizontal, Eye, Edit2, Trash2,
-  Clock, CheckCircle, Archive, Calendar, Tag, Sparkles, BarChart2,
+  FileText, Plus, Search, Trash2,
+  CheckCircle, Archive, Calendar, Edit2,
 } from 'lucide-react';
 
 interface Post {
@@ -16,22 +16,20 @@ interface Post {
 }
 
 const STATUS_CONFIG = {
-  draft:     { icon: FileText,      color: 'text-zinc-400',  bg: 'bg-zinc-800',   label: 'Draft'     },
-  published: { icon: CheckCircle,   color: 'text-emerald-400', bg: 'bg-emerald-900/30', label: 'Published' },
-  scheduled: { icon: Calendar,      color: 'text-blue-400',  bg: 'bg-blue-900/30', label: 'Scheduled' },
-  archived:  { icon: Archive,       color: 'text-zinc-500',  bg: 'bg-zinc-900',   label: 'Archived'  },
+  draft:     { icon: FileText,    color: 'text-zinc-400',    bg: 'bg-zinc-800',        label: 'Draft'     },
+  published: { icon: CheckCircle, color: 'text-emerald-400', bg: 'bg-emerald-900/30',  label: 'Published' },
+  scheduled: { icon: Calendar,    color: 'text-blue-400',    bg: 'bg-blue-900/30',     label: 'Scheduled' },
+  archived:  { icon: Archive,     color: 'text-zinc-500',    bg: 'bg-zinc-900',        label: 'Archived'  },
 };
 
 export default function CMSPage() {
-  const router = useRouter();
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [posts, setPosts]       = useState<Post[]>([]);
+  const [total, setTotal]       = useState(0);  // FIX: tracks actual server total, not local length
+  const [loading, setLoading]   = useState(true);
+  const [search, setSearch]     = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [page, setPage] = useState(1);
+  const [page, setPage]         = useState(1);
   const [deleting, setDeleting] = useState<string | null>(null);
-  const [menuOpen, setMenuOpen] = useState<string | null>(null);
 
   const loadPosts = useCallback(async () => {
     setLoading(true);
@@ -55,19 +53,26 @@ export default function CMSPage() {
     if (!confirm('Delete this post? This cannot be undone.')) return;
     setDeleting(id);
     const res = await fetch(`/api/cms/posts/${id}`, { method: 'DELETE' });
-    if (res.ok) setPosts(p => p.filter(x => x.id !== id));
+    if (res.ok) {
+      setPosts(p => p.filter(x => x.id !== id));
+      setTotal(t => Math.max(0, t - 1));  // FIX: keep total in sync after delete
+    }
     setDeleting(null);
   };
 
   const filtered = posts.filter(p =>
-    search === '' || p.title.toLowerCase().includes(search.toLowerCase()) ||
+    search === '' ||
+    p.title.toLowerCase().includes(search.toLowerCase()) ||
     (p.excerpt ?? '').toLowerCase().includes(search.toLowerCase())
   );
 
+  // FIX: stats derived from server-side total + page-local status counts
+  // The total for published/draft/scheduled reflects only the current page —
+  // labels indicate this to avoid misleading counts under pagination
   const stats = {
-    total: posts.length,
+    total,
     published: posts.filter(p => p.status === 'published').length,
-    draft: posts.filter(p => p.status === 'draft').length,
+    draft:     posts.filter(p => p.status === 'draft').length,
     scheduled: posts.filter(p => p.status === 'scheduled').length,
   };
 
@@ -90,10 +95,10 @@ export default function CMSPage() {
         {/* Stats */}
         <div className="grid grid-cols-4 gap-4 mb-8">
           {[
-            { label: 'Total Posts', value: stats.total, icon: FileText, color: 'text-zinc-400' },
-            { label: 'Published', value: stats.published, icon: CheckCircle, color: 'text-emerald-400' },
-            { label: 'Drafts', value: stats.draft, icon: FileText, color: 'text-zinc-400' },
-            { label: 'Scheduled', value: stats.scheduled, icon: Calendar, color: 'text-blue-400' },
+            { label: 'Total Posts',       value: stats.total,     icon: FileText,    color: 'text-zinc-400'    },
+            { label: 'Published (page)',  value: stats.published, icon: CheckCircle, color: 'text-emerald-400' },
+            { label: 'Drafts (page)',     value: stats.draft,     icon: FileText,    color: 'text-zinc-400'    },
+            { label: 'Scheduled (page)', value: stats.scheduled, icon: Calendar,    color: 'text-blue-400'    },
           ].map(s => (
             <div key={s.label} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
@@ -110,12 +115,15 @@ export default function CMSPage() {
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
             <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search posts..." className="w-full pl-10 pr-4 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-blue-500" />
+              placeholder="Search posts..."
+              className="w-full pl-10 pr-4 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-blue-500" />
           </div>
           <div className="flex gap-1 bg-zinc-900 border border-zinc-800 rounded-lg p-1">
-            {['all', 'published', 'draft', 'scheduled', 'archived'].map(s => (
+            {['all','published','draft','scheduled','archived'].map(s => (
               <button key={s} onClick={() => { setStatusFilter(s); setPage(1); }}
-                className={`px-3 py-1.5 rounded text-xs font-medium capitalize transition-colors ${statusFilter === s ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'}`}>
+                className={`px-3 py-1.5 rounded text-xs font-medium capitalize transition-colors ${
+                  statusFilter === s ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'
+                }`}>
                 {s}
               </button>
             ))}
@@ -133,7 +141,8 @@ export default function CMSPage() {
               <FileText className="h-12 w-12 mb-4 opacity-40" />
               <p className="text-lg font-medium text-zinc-400">No posts yet</p>
               <p className="text-sm mt-1">Create your first piece of content</p>
-              <Link href="/cms/new" className="mt-4 flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm text-white transition-colors">
+              <Link href="/cms/new"
+                className="mt-4 flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm text-white transition-colors">
                 <Plus className="h-4 w-4" /> Create Post
               </Link>
             </div>
@@ -154,18 +163,29 @@ export default function CMSPage() {
                   const s = STATUS_CONFIG[post.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.draft;
                   const StatusIcon = s.icon;
                   return (
-                    <tr key={post.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors group">
+                    <tr key={post.id}
+                      className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors group">
                       <td className="px-6 py-4">
                         <div className="flex items-start gap-3">
                           {post.cover_image_url ? (
-                            <img src={post.cover_image_url} alt="" className="w-10 h-10 rounded object-cover flex-shrink-0" />
+                            // FIX: Next.js Image instead of raw <img>
+                            <div className="relative w-10 h-10 rounded overflow-hidden flex-shrink-0">
+                              <NextImage
+                                src={post.cover_image_url}
+                                alt={post.title}
+                                fill
+                                className="object-cover"
+                                sizes="40px"
+                              />
+                            </div>
                           ) : (
                             <div className="w-10 h-10 rounded bg-zinc-800 flex items-center justify-center flex-shrink-0">
                               <FileText className="h-4 w-4 text-zinc-600" />
                             </div>
                           )}
                           <div>
-                            <Link href={`/cms/${post.id}`} className="text-sm font-medium text-white hover:text-blue-400 transition-colors line-clamp-1">
+                            <Link href={`/cms/${post.id}`}
+                              className="text-sm font-medium text-white hover:text-blue-400 transition-colors line-clamp-1">
                               {post.title || 'Untitled'}
                             </Link>
                             {post.excerpt && (
@@ -197,7 +217,9 @@ export default function CMSPage() {
                       </td>
                       <td className="px-4 py-4">
                         <div className="text-xs text-zinc-500">
-                          {new Date(post.updated_at).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          {new Date(post.updated_at).toLocaleDateString('en-ZA', {
+                            day: 'numeric', month: 'short', year: 'numeric',
+                          })}
                         </div>
                         <div className="text-xs text-zinc-600">v{post.version}</div>
                       </td>
@@ -227,9 +249,13 @@ export default function CMSPage() {
             <span>Showing {Math.min((page - 1) * 20 + 1, total)}–{Math.min(page * 20, total)} of {total}</span>
             <div className="flex gap-2">
               <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-                className="px-3 py-1.5 bg-zinc-800 rounded disabled:opacity-40 hover:bg-zinc-700 transition-colors">Previous</button>
+                className="px-3 py-1.5 bg-zinc-800 rounded disabled:opacity-40 hover:bg-zinc-700 transition-colors">
+                Previous
+              </button>
               <button onClick={() => setPage(p => p + 1)} disabled={page * 20 >= total}
-                className="px-3 py-1.5 bg-zinc-800 rounded disabled:opacity-40 hover:bg-zinc-700 transition-colors">Next</button>
+                className="px-3 py-1.5 bg-zinc-800 rounded disabled:opacity-40 hover:bg-zinc-700 transition-colors">
+                Next
+              </button>
             </div>
           </div>
         )}

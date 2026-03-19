@@ -6,13 +6,41 @@ import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
 import Underline from '@tiptap/extension-underline';
 import TextAlign from '@tiptap/extension-text-align';
+import CharacterCount from '@tiptap/extension-character-count';
 import { useCallback, useState, useEffect } from 'react';
 import {
   Bold, Italic, Underline as UnderlineIcon, Strikethrough,
   Heading1, Heading2, Heading3, List, ListOrdered, Quote,
   Code, Link as LinkIcon, Image, AlignLeft, AlignCenter, AlignRight,
-  Undo, Redo, Minus, Type
+  Undo, Redo, Minus, Type,
 } from 'lucide-react';
+
+// FIX: hoisted to module scope — no re-creation on every render
+interface ToolbarButtonProps {
+  onClick: () => void; active?: boolean; disabled?: boolean; title: string;
+  children: React.ReactNode;
+}
+
+function ToolbarButton({ onClick, active, disabled, title, children }: ToolbarButtonProps) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      aria-label={title}  // FIX: explicit accessible name for screen readers
+      className={`p-1.5 rounded transition-colors ${
+        active
+          ? 'bg-blue-600 text-white'
+          : 'text-zinc-400 hover:text-white hover:bg-zinc-700'
+      } disabled:opacity-30 disabled:cursor-not-allowed`}>
+      {children}
+    </button>
+  );
+}
+
+function Divider() {
+  return <div className="w-px h-5 bg-zinc-700 mx-1" />;
+}
 
 interface RichTextEditorProps {
   content: string;
@@ -23,22 +51,33 @@ interface RichTextEditorProps {
 
 export function RichTextEditor({ content, onChange, onImageUpload, placeholder = 'Start writing your story...' }: RichTextEditorProps) {
   const [showLinkInput, setShowLinkInput] = useState(false);
-  const [linkUrl, setLinkUrl] = useState('');
-  const [isDragging, setIsDragging] = useState(false);
+  const [linkUrl, setLinkUrl]             = useState('');
+  const [isDragging, setIsDragging]       = useState(false);
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ codeBlock: { HTMLAttributes: { class: 'bg-zinc-900 rounded-lg p-4 font-mono text-sm text-emerald-400 overflow-x-auto' } } }),
-      TiptapImage.configure({ allowBase64: true, HTMLAttributes: { class: 'rounded-lg max-w-full h-auto my-4 border border-zinc-800' } }),
-      Link.configure({ openOnClick: false, HTMLAttributes: { class: 'text-blue-400 underline hover:text-blue-300 cursor-pointer' } }),
+      StarterKit.configure({
+        codeBlock: { HTMLAttributes: { class: 'bg-zinc-900 rounded-lg p-4 font-mono text-sm text-emerald-400 overflow-x-auto' } },
+      }),
+      TiptapImage.configure({
+        allowBase64: true,
+        HTMLAttributes: { class: 'rounded-lg max-w-full h-auto my-4 border border-zinc-800' },
+      }),
+      Link.configure({
+        openOnClick: false,
+        HTMLAttributes: { class: 'text-blue-400 underline hover:text-blue-300 cursor-pointer' },
+      }),
       Placeholder.configure({ placeholder }),
       Underline,
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
+      CharacterCount,  // FIX: registered so editor.storage.characterCount is available
     ],
     content,
     onUpdate: ({ editor }) => onChange(editor.getHTML()),
     editorProps: {
-      attributes: { class: 'prose prose-invert prose-zinc max-w-none focus:outline-none px-8 py-6 min-h-[500px] text-zinc-100 leading-relaxed' },
+      attributes: {
+        class: 'prose prose-invert prose-zinc max-w-none focus:outline-none px-8 py-6 min-h-[500px] text-zinc-100 leading-relaxed',
+      },
       handleDrop: (_view, event, _slice, moved) => {
         if (!moved && event.dataTransfer?.files.length) {
           const file = event.dataTransfer.files[0];
@@ -52,11 +91,12 @@ export function RichTextEditor({ content, onChange, onImageUpload, placeholder =
     },
   });
 
+  // FIX: editor in dep array to satisfy exhaustive-deps
   useEffect(() => {
     if (editor && content !== editor.getHTML()) {
       editor.commands.setContent(content);
     }
-  }, [content]);
+  }, [content, editor]);
 
   const handleImageUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -64,31 +104,25 @@ export function RichTextEditor({ content, onChange, onImageUpload, placeholder =
     try {
       const url = await onImageUpload(file);
       editor.chain().focus().setImage({ src: url }).run();
-    } catch {}
+    } catch { /* silently ignore upload errors */ }
     e.target.value = '';
   }, [editor, onImageUpload]);
 
   const insertLink = () => {
     if (!editor || !linkUrl) return;
     editor.chain().focus().setLink({ href: linkUrl }).run();
-    setLinkUrl(''); setShowLinkInput(false);
+    setLinkUrl('');
+    setShowLinkInput(false);
   };
 
   if (!editor) return <div className="h-96 bg-zinc-900 rounded-xl animate-pulse" />;
 
-  const ToolbarButton = ({ onClick, active, disabled, title, children }: {
-    onClick: () => void; active?: boolean; disabled?: boolean; title: string; children: React.ReactNode;
-  }) => (
-    <button onClick={onClick} disabled={disabled} title={title}
-      className={`p-1.5 rounded transition-colors ${active ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white hover:bg-zinc-700'} disabled:opacity-30 disabled:cursor-not-allowed`}>
-      {children}
-    </button>
-  );
-
-  const Divider = () => <div className="w-px h-5 bg-zinc-700 mx-1" />;
+  const words = editor.storage.characterCount?.words?.() ?? 0;
+  const chars  = editor.storage.characterCount?.characters?.() ?? 0;
 
   return (
-    <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-950"
+    <div
+      className={`border border-zinc-800 rounded-xl overflow-hidden bg-zinc-950 ${isDragging ? 'ring-2 ring-blue-500 ring-inset' : ''}`}
       onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
       onDragLeave={() => setIsDragging(false)}
       onDrop={() => setIsDragging(false)}>
@@ -172,27 +206,46 @@ export function RichTextEditor({ content, onChange, onImageUpload, placeholder =
         <ToolbarButton onClick={() => setShowLinkInput(!showLinkInput)} active={editor.isActive('link')} title="Insert Link">
           <LinkIcon className="h-4 w-4" />
         </ToolbarButton>
-        <label className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors cursor-pointer" title="Insert Image">
-          <Image className="h-4 w-4" />
-          <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+
+        {/* FIX: accessible label on file input via aria-label */}
+        <label
+          className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors cursor-pointer"
+          title="Insert Image"
+          aria-label="Insert Image">
+          <Image className="h-4 w-4" aria-hidden="true" />
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            aria-label="Upload image file"
+            onChange={handleImageUpload} />
         </label>
       </div>
 
       {/* Link Input */}
       {showLinkInput && (
         <div className="flex items-center gap-2 px-4 py-2 border-b border-zinc-800 bg-zinc-900">
-          <input value={linkUrl} onChange={e => setLinkUrl(e.target.value)}
+          <input
+            value={linkUrl}
+            onChange={e => setLinkUrl(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && insertLink()}
-            placeholder="https://example.com" autoFocus
+            placeholder="https://example.com"
+            autoFocus
             className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-blue-500" />
-          <button onClick={insertLink} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded transition-colors">Insert</button>
-          <button onClick={() => { editor.chain().focus().unsetLink().run(); setShowLinkInput(false); }}
-            className="px-3 py-1.5 text-zinc-400 hover:text-white text-sm rounded transition-colors">Remove</button>
+          <button onClick={insertLink}
+            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded transition-colors">
+            Insert
+          </button>
+          <button
+            onClick={() => { editor.chain().focus().unsetLink().run(); setShowLinkInput(false); }}
+            className="px-3 py-1.5 text-zinc-400 hover:text-white text-sm rounded transition-colors">
+            Remove
+          </button>
         </div>
       )}
 
-      {/* Editor */}
-      <div className={`relative ${isDragging ? 'ring-2 ring-blue-500 ring-inset' : ''}`}>
+      {/* Editor canvas */}
+      <div className="relative">
         <EditorContent editor={editor} />
         {isDragging && (
           <div className="absolute inset-0 bg-blue-500/10 flex items-center justify-center pointer-events-none">
@@ -203,10 +256,10 @@ export function RichTextEditor({ content, onChange, onImageUpload, placeholder =
         )}
       </div>
 
-      {/* Word count */}
+      {/* Word + char count footer */}
       <div className="flex items-center justify-end px-4 py-2 border-t border-zinc-800 bg-zinc-900/30">
         <span className="text-xs text-zinc-600">
-          {editor.storage.characterCount?.words?.() ?? 0} words · {editor.getText().length} characters
+          {words.toLocaleString()} words · {chars.toLocaleString()} characters
         </span>
       </div>
     </div>

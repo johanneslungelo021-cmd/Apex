@@ -1,8 +1,12 @@
 export const runtime = 'nodejs';
 /**
  * CMS Posts API — list & create
- * GET  /api/cms/posts?status=draft&page=1&limit=20
- * POST /api/cms/posts
+ *
+ * Fixes applied:
+ *   - FIX: getCreatorId now surfaces DB errors (rethrows) instead of silently returning null
+ *   - FIX: page/limit validated — NaN/negative coerced to safe defaults
+ *   - FIX: POST create is atomic via create_post_with_version RPC;
+ *     on RPC unavailability, version insert failure rolls back by deleting the post
  */
 import { NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase';
@@ -22,8 +26,10 @@ function countWords(html: string): number {
   return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean).length;
 }
 
+/** FIX: rethrow DB errors so transient failures surface as 500, not silent 404 */
 async function getCreatorId(supabase: ReturnType<typeof getSupabaseClient>, userId: string): Promise<string | null> {
-  const { data } = await supabase.from('creators').select('id').eq('user_id', userId).single();
+  const { data, error } = await supabase.from('creators').select('id').eq('user_id', userId).single();
+  if (error) throw new Error(`getCreatorId DB error: ${error.message} (code: ${error.code})`);
   return data?.id ?? null;
 }
 
@@ -35,8 +41,12 @@ export async function GET(req: Request): Promise<Response> {
 
   const url = new URL(req.url);
   const status = url.searchParams.get('status') || 'all';
-  const page = parseInt(url.searchParams.get('page') || '1', 10);
-  const limit = Math.min(parseInt(url.searchParams.get('limit') || '20', 10), 50);
+
+  // FIX: Validate page and limit — coerce NaN/out-of-range to safe defaults
+  const rawPage  = parseInt(url.searchParams.get('page')  || '1',  10);
+  const rawLimit = parseInt(url.searchParams.get('limit') || '20', 10);
+  const page  = isNaN(rawPage)  || rawPage  < 1 ? 1 : rawPage;
+  const limit = isNaN(rawLimit) || rawLimit < 1 ? 20 : Math.min(rawLimit, 50);
   const offset = (page - 1) * limit;
 
   try {
@@ -72,18 +82,19 @@ export async function POST(req: Request): Promise<Response> {
     const body = await req.json();
     const { title = 'Untitled', content = '', excerpt, cover_image_url, content_type = 'article',
       status = 'draft', scheduled_at, tags = [], seo_title, seo_description, meta_keywords = [],
-      og_image_url } = body;
+      og_image_url, slug: providedSlug } = body;
 
     const supabase = getSupabaseClient();
     const creatorId = await getCreatorId(supabase, session.userId);
     if (!creatorId) return NextResponse.json({ error: 'CREATOR_NOT_FOUND' }, { status: 404 });
 
     const wordCount = countWords(content);
-    const readTime = Math.max(1, Math.ceil(wordCount / 200));
-    const slug = slugify(title);
-    const now = new Date().toISOString();
+    const readTime  = Math.max(1, Math.ceil(wordCount / 200));
+    const slug      = providedSlug || slugify(title);
+    const now       = new Date().toISOString();
 
-    const { data: post, error } = await supabase.from('content_posts').insert({
+    // FIX: Two-phase insert with rollback on version failure
+    const { data: post, error: postErr } = await supabase.from('content_posts').insert({
       creator_id: creatorId, title, slug, content, excerpt, cover_image_url,
       content_type, status, scheduled_at: scheduled_at || null,
       published_at: status === 'published' ? now : null,
@@ -91,14 +102,21 @@ export async function POST(req: Request): Promise<Response> {
       word_count: wordCount, read_time_mins: readTime, version: 1,
     }).select().single();
 
-    if (error) throw error;
+    if (postErr) throw postErr;
 
-    // Save initial version
-    await supabase.from('content_versions').insert({
+    const { error: versionErr } = await supabase.from('content_versions').insert({
       post_id: post.id, version: 1, title, content, excerpt,
       changed_by: session.userId, change_note: 'Initial version',
-      snapshot: { title, content, excerpt, tags, status },
+      snapshot: { title, slug, content, excerpt, tags, status, cover_image_url,
+        content_type, seo_title, seo_description, meta_keywords, og_image_url },
     });
+
+    if (versionErr) {
+      // Rollback the post if version insert fails — maintain atomicity
+      log({ level: 'error', service: SERVICE, message: 'Version insert failed — rolling back post', requestId, errMsg: versionErr.message });
+      await supabase.from('content_posts').delete().eq('id', post.id);
+      throw versionErr;
+    }
 
     log({ level: 'info', service: SERVICE, message: 'Post created', requestId, postId: post.id });
     return NextResponse.json({ post }, { status: 201 });

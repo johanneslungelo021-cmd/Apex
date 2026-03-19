@@ -1,20 +1,31 @@
 'use client';
+/**
+ * Content Editor
+ *
+ * Fixes:
+ *   - dirty flag gates autosave — prevents loop from server-load triggering saves
+ *   - save(statusOverride?) — publish passes 'published' directly, no stale closure
+ *   - slug included in every payload (create + update + autosave)
+ *   - res.ok checked before router.replace / setPost / setSaved
+ *   - handleRollback accepts full Version object (no TOCTOU re-fetch)
+ *   - <img> replaced with next/image NextImage
+ */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import NextImage from 'next/image';
 import {
-  Save, ArrowLeft, Sparkles, Clock, Eye, Settings, History,
-  Globe, FileText, Image as ImageIcon, Calendar, ChevronDown,
-  Check, Loader2, X, Upload, Tag, Hash
+  Save, ArrowLeft, Sparkles, Clock, Settings, History,
+  Globe, Image as ImageIcon,
+  Check, Loader2, X, Upload, Tag, Hash,
 } from 'lucide-react';
 import { AIPanel } from '@/components/cms/editor/AIPanel';
 import { SEOPanel } from '@/components/cms/editor/SEOPanel';
 import { VersionHistory } from '@/components/cms/editor/VersionHistory';
 
-// Dynamic import to prevent SSR issues with TipTap
 const RichTextEditor = dynamic(
   () => import('@/components/cms/editor/RichTextEditor').then(m => ({ default: m.RichTextEditor })),
-  { ssr: false, loading: () => <div className="h-96 bg-zinc-900 rounded-xl animate-pulse" /> }
+  { ssr: false, loading: () => <div className="h-96 bg-zinc-900 rounded-xl animate-pulse" /> },
 );
 
 interface PostData {
@@ -22,6 +33,11 @@ interface PostData {
   cover_image_url: string; content_type: string; status: string; scheduled_at: string;
   tags: string[]; seo_title: string; seo_description: string; meta_keywords: string[];
   og_image_url: string; version: number; word_count: number; read_time_mins: number;
+}
+
+interface Version {
+  id: string; version: number; title: string; content: string; excerpt: string;
+  change_note: string | null; created_at: string; snapshot: Record<string, unknown> | null;
 }
 
 const DEFAULT_POST: PostData = {
@@ -34,24 +50,26 @@ const DEFAULT_POST: PostData = {
 type SidebarTab = 'settings' | 'seo' | 'media';
 
 export default function ContentEditor() {
-  const params = useParams();
-  const router = useRouter();
-  const postId = params?.id as string | undefined;
-  const isNew = !postId;
+  const params  = useParams();
+  const router  = useRouter();
+  const postId  = params?.id as string | undefined;
+  const isNew   = !postId;
 
-  const [post, setPost] = useState<PostData>(DEFAULT_POST);
-  const [saving, setSaving] = useState(false);
-  const [loading, setLoading] = useState(!isNew);
-  const [saved, setSaved] = useState(false);
+  const [post, setPost]             = useState<PostData>(DEFAULT_POST);
+  const [saving, setSaving]         = useState(false);
+  const [loading, setLoading]       = useState(!isNew);
+  const [saved, setSaved]           = useState(false);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('settings');
-  const [showAI, setShowAI] = useState(false);
+  const [showAI, setShowAI]         = useState(false);
   const [showVersions, setShowVersions] = useState(false);
-  const [showSchedule, setShowSchedule] = useState(false);
-  const [tagInput, setTagInput] = useState('');
+  const [tagInput, setTagInput]     = useState('');
   const [uploadingCover, setUploadingCover] = useState(false);
   const autoSaveRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  // Load existing post
+  // FIX: dirty flag — autosave only fires after user edits, not server-data loads
+  const dirtyRef = useRef(false);
+
+  // Load existing post — does NOT set dirty
   useEffect(() => {
     if (!postId) return;
     fetch(`/api/cms/posts/${postId}`)
@@ -60,37 +78,36 @@ export default function ContentEditor() {
       .finally(() => setLoading(false));
   }, [postId]);
 
-  // Auto-save draft
-  const autoSave = useCallback(() => {
-    if (!post.title && !post.content) return;
-    clearTimeout(autoSaveRef.current);
-    autoSaveRef.current = setTimeout(() => save(true), 3000);
-  }, [post]);
-
-  useEffect(() => { autoSave(); return () => { if (autoSaveRef.current) clearTimeout(autoSaveRef.current); }; }, [autoSave]);
-
+  // update() — marks dirty (user edit)
   const update = useCallback((updates: Partial<PostData> | Record<string, unknown>) => {
+    dirtyRef.current = true;
     setPost(p => ({ ...p, ...updates }));
   }, []);
 
-  const save = async (isAutoSave = false) => {
+  // FIX: save accepts optional statusOverride — publish passes 'published' directly
+  // avoiding stale closure on post.status
+  const save = async (isAutoSave = false, statusOverride?: string) => {
+    // FIX: autosave gate — skip if not dirty
+    if (isAutoSave && !dirtyRef.current) return;
     if (!post.title && !post.content && isAutoSave) return;
+
     setSaving(true);
     try {
       const payload = {
-        title: post.title || 'Untitled',
-        content: post.content,
-        excerpt: post.excerpt,
-        cover_image_url: post.cover_image_url,
-        content_type: post.content_type,
-        status: post.status,
-        scheduled_at: post.scheduled_at || null,
-        tags: post.tags,
-        seo_title: post.seo_title,
-        seo_description: post.seo_description,
-        meta_keywords: post.meta_keywords,
-        og_image_url: post.og_image_url,
-        change_note: isAutoSave ? 'Auto-save' : 'Manual save',
+        title:            post.title || 'Untitled',
+        slug:             post.slug,                         // FIX: always include slug
+        content:          post.content,
+        excerpt:          post.excerpt,
+        cover_image_url:  post.cover_image_url,
+        content_type:     post.content_type,
+        status:           statusOverride ?? post.status,    // FIX: use override when provided
+        scheduled_at:     post.scheduled_at || null,
+        tags:             post.tags,
+        seo_title:        post.seo_title,
+        seo_description:  post.seo_description,
+        meta_keywords:    post.meta_keywords,
+        og_image_url:     post.og_image_url,
+        change_note:      isAutoSave ? 'Auto-save' : statusOverride === 'published' ? 'Published' : 'Manual save',
       };
 
       let res: Response;
@@ -98,8 +115,10 @@ export default function ContentEditor() {
         res = await fetch('/api/cms/posts', {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
         });
+        // FIX: only navigate + update state when res.ok
         if (res.ok) {
           const data = await res.json();
+          dirtyRef.current = false;
           router.replace(`/cms/${data.post.id}`);
           setPost(p => ({ ...p, ...data.post }));
         }
@@ -107,19 +126,41 @@ export default function ContentEditor() {
         res = await fetch(`/api/cms/posts/${postId}`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
         });
+        // FIX: only update version when res.ok — setSaved not reached on error
         if (res.ok) {
           const data = await res.json();
+          dirtyRef.current = false;
           setPost(p => ({ ...p, version: data.post.version }));
         }
       }
 
-      if (!isAutoSave) { setSaved(true); setTimeout(() => setSaved(false), 2500); }
-    } finally { setSaving(false); }
+      // FIX: setSaved only runs after a confirmed successful response
+      if (!isAutoSave && res!.ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2500);
+      }
+    } finally {
+      setSaving(false);
+    }
   };
 
+  // saveRef — lets autosave useEffect call latest save() without adding it to deps
+  const saveRef = useRef(save);
+  useEffect(() => { saveRef.current = save; });
+
+  // Auto-save 3 s after user edits title or content
+  useEffect(() => {
+    if (!post.title && !post.content) return;
+    clearTimeout(autoSaveRef.current);
+    autoSaveRef.current = setTimeout(() => saveRef.current(true), 3000);
+    return () => { if (autoSaveRef.current) clearTimeout(autoSaveRef.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [post.title, post.content]);
+
+  // FIX: publish passes statusOverride — no stale post.status in payload
   const publish = async () => {
-    update({ status: 'published' });
-    await save();
+    update({ status: 'published' }); // optimistic UI update
+    await save(false, 'published');   // payload uses 'published' directly
   };
 
   const uploadCover = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -146,15 +187,10 @@ export default function ContentEditor() {
     setTagInput('');
   };
 
-  const handleRollback = async (version: number) => {
-    if (!postId) return;
-    const res = await fetch(`/api/cms/posts/${postId}?versions=true`);
-    const data = await res.json();
-    const v = data.versions?.find((x: { version: number; title: string; content: string; excerpt: string }) => x.version === version);
-    if (v) {
-      update({ title: v.title, content: v.content, excerpt: v.excerpt });
-      setShowVersions(false);
-    }
+  // FIX: handleRollback accepts full Version object — no TOCTOU re-fetch by number
+  const handleRollback = async (versionObj: Version) => {
+    update({ title: versionObj.title, content: versionObj.content, excerpt: versionObj.excerpt });
+    setShowVersions(false);
   };
 
   const applyAI = (field: string, value: string) => {
@@ -182,7 +218,8 @@ export default function ContentEditor() {
       {/* Top Bar */}
       <header className="sticky top-0 z-30 flex items-center justify-between px-4 py-3 bg-zinc-900/95 backdrop-blur border-b border-zinc-800">
         <div className="flex items-center gap-3">
-          <button onClick={() => router.push('/cms')} className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
+          <button onClick={() => router.push('/cms')}
+            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
             <ArrowLeft className="h-4 w-4" />
           </button>
           <div className="flex items-center gap-2 text-sm">
@@ -211,7 +248,9 @@ export default function ContentEditor() {
 
           <button onClick={() => save()} disabled={saving}
             className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors disabled:opacity-60">
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : saved ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Save className="h-3.5 w-3.5" />}
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              : saved ? <Check className="h-3.5 w-3.5 text-emerald-400" />
+              : <Save className="h-3.5 w-3.5" />}
             {saved ? 'Saved!' : 'Save'}
           </button>
 
@@ -221,7 +260,6 @@ export default function ContentEditor() {
               <Globe className="h-3.5 w-3.5" /> Publish
             </button>
           )}
-
           {post.status === 'published' && (
             <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-emerald-400 bg-emerald-900/20 border border-emerald-800/40 rounded-lg">
               <Check className="h-3.5 w-3.5" /> Published
@@ -232,14 +270,23 @@ export default function ContentEditor() {
 
       <div className="flex flex-1 overflow-hidden">
 
-        {/* Main Editor Area */}
+        {/* Main Editor */}
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-4xl mx-auto px-6 py-8">
 
             {/* Cover Image */}
             {post.cover_image_url ? (
               <div className="relative mb-6 rounded-2xl overflow-hidden">
-                <img src={post.cover_image_url} alt="Cover" className="w-full h-56 object-cover" />
+                {/* FIX: Next.js Image instead of <img> */}
+                <div className="relative w-full h-56">
+                  <NextImage
+                    src={post.cover_image_url}
+                    alt="Cover"
+                    fill
+                    className="object-cover"
+                    sizes="(max-width: 896px) 100vw, 896px"
+                  />
+                </div>
                 <button onClick={() => update({ cover_image_url: '' })}
                   className="absolute top-3 right-3 p-1.5 bg-black/60 hover:bg-black/80 rounded-lg text-white transition-colors">
                   <X className="h-4 w-4" />
@@ -248,11 +295,9 @@ export default function ContentEditor() {
             ) : (
               <label className="flex items-center justify-center w-full h-32 mb-6 border-2 border-dashed border-zinc-800 rounded-2xl cursor-pointer hover:border-zinc-600 transition-colors group">
                 <div className="text-center">
-                  {uploadingCover ? (
-                    <Loader2 className="h-6 w-6 animate-spin text-zinc-400 mx-auto mb-2" />
-                  ) : (
-                    <Upload className="h-6 w-6 text-zinc-600 group-hover:text-zinc-400 mx-auto mb-2 transition-colors" />
-                  )}
+                  {uploadingCover
+                    ? <Loader2 className="h-6 w-6 animate-spin text-zinc-400 mx-auto mb-2" />
+                    : <Upload className="h-6 w-6 text-zinc-600 group-hover:text-zinc-400 mx-auto mb-2 transition-colors" />}
                   <span className="text-sm text-zinc-600 group-hover:text-zinc-400 transition-colors">
                     {uploadingCover ? 'Uploading...' : 'Add cover image'}
                   </span>
@@ -262,26 +307,17 @@ export default function ContentEditor() {
             )}
 
             {/* Title */}
-            <input
-              value={post.title}
-              onChange={e => update({ title: e.target.value })}
+            <input value={post.title} onChange={e => update({ title: e.target.value })}
               placeholder="Untitled post..."
-              className="w-full text-4xl font-bold text-white bg-transparent border-none outline-none placeholder:text-zinc-700 mb-4 leading-tight"
-            />
+              className="w-full text-4xl font-bold text-white bg-transparent border-none outline-none placeholder:text-zinc-700 mb-4 leading-tight" />
 
             {/* Excerpt */}
-            <textarea
-              value={post.excerpt}
-              onChange={e => update({ excerpt: e.target.value })}
-              placeholder="Write a short excerpt (optional — used in listings and SEO)..."
-              rows={2}
-              className="w-full text-lg text-zinc-400 bg-transparent border-none outline-none placeholder:text-zinc-700 mb-6 resize-none leading-relaxed"
-            />
+            <textarea value={post.excerpt} onChange={e => update({ excerpt: e.target.value })}
+              placeholder="Write a short excerpt (optional)..." rows={2}
+              className="w-full text-lg text-zinc-400 bg-transparent border-none outline-none placeholder:text-zinc-700 mb-6 resize-none leading-relaxed" />
 
-            {/* Divider */}
             <div className="h-px bg-zinc-800 mb-6" />
 
-            {/* Rich Text Editor */}
             <RichTextEditor
               content={post.content}
               onChange={c => update({ content: c })}
@@ -292,15 +328,18 @@ export default function ContentEditor() {
 
         {/* Right Sidebar */}
         <aside className="w-72 flex-shrink-0 border-l border-zinc-800 bg-zinc-900/50 overflow-y-auto">
-          {/* Sidebar Tabs */}
           <div className="flex border-b border-zinc-800">
             {[
               { id: 'settings', icon: Settings, label: 'Settings' },
-              { id: 'seo', icon: Hash, label: 'SEO' },
-              { id: 'media', icon: ImageIcon, label: 'Media' },
+              { id: 'seo',      icon: Hash,     label: 'SEO'      },
+              { id: 'media',    icon: ImageIcon, label: 'Media'   },
             ].map(t => (
               <button key={t.id} onClick={() => setSidebarTab(t.id as SidebarTab)}
-                className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs transition-colors ${sidebarTab === t.id ? 'text-blue-400 border-b-2 border-blue-500 -mb-px' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs transition-colors ${
+                  sidebarTab === t.id
+                    ? 'text-blue-400 border-b-2 border-blue-500 -mb-px'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                }`}>
                 <t.icon className="h-4 w-4" />
                 {t.label}
               </button>
@@ -308,23 +347,23 @@ export default function ContentEditor() {
           </div>
 
           <div className="p-4">
-            {/* Settings Panel */}
+            {/* Settings Tab */}
             {sidebarTab === 'settings' && (
               <div className="space-y-5">
-                {/* Status */}
                 <div>
                   <label className="text-xs text-zinc-500 uppercase tracking-wide block mb-2">Status</label>
                   <div className="grid grid-cols-2 gap-1.5">
                     {['draft','published','scheduled','archived'].map(s => (
                       <button key={s} onClick={() => update({ status: s })}
-                        className={`py-2 rounded-lg text-xs font-medium capitalize transition-colors ${post.status === s ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>
+                        className={`py-2 rounded-lg text-xs font-medium capitalize transition-colors ${
+                          post.status === s ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                        }`}>
                         {s}
                       </button>
                     ))}
                   </div>
                 </div>
 
-                {/* Schedule */}
                 {post.status === 'scheduled' && (
                   <div>
                     <label className="text-xs text-zinc-500 uppercase tracking-wide block mb-2">Schedule Date & Time</label>
@@ -335,18 +374,16 @@ export default function ContentEditor() {
                   </div>
                 )}
 
-                {/* Content Type */}
                 <div>
                   <label className="text-xs text-zinc-500 uppercase tracking-wide block mb-2">Content Type</label>
                   <select value={post.content_type} onChange={e => update({ content_type: e.target.value })}
                     className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
                     {['article','video','course','template','ebook'].map(t => (
-                      <option key={t} value={t} className="capitalize">{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+                      <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
                     ))}
                   </select>
                 </div>
 
-                {/* Tags */}
                 <div>
                   <label className="text-xs text-zinc-500 uppercase tracking-wide block mb-2">Tags</label>
                   <div className="flex gap-2 mb-2">
@@ -354,7 +391,8 @@ export default function ContentEditor() {
                       onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())}
                       placeholder="Add tag..."
                       className="flex-1 min-w-0 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-blue-500" />
-                    <button onClick={addTag} className="px-3 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg text-sm text-white transition-colors flex-shrink-0">
+                    <button onClick={addTag}
+                      className="px-3 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg text-sm text-white transition-colors flex-shrink-0">
                       <Tag className="h-3.5 w-3.5" />
                     </button>
                   </div>
@@ -362,7 +400,8 @@ export default function ContentEditor() {
                     {post.tags.map(t => (
                       <span key={t} className="flex items-center gap-1 text-xs px-2 py-1 bg-zinc-800 text-zinc-300 rounded-full">
                         {t}
-                        <button onClick={() => update({ tags: post.tags.filter(x => x !== t) })} className="text-zinc-500 hover:text-zinc-300">
+                        <button onClick={() => update({ tags: post.tags.filter(x => x !== t) })}
+                          className="text-zinc-500 hover:text-zinc-300">
                           <X className="h-3 w-3" />
                         </button>
                       </span>
@@ -370,7 +409,6 @@ export default function ContentEditor() {
                   </div>
                 </div>
 
-                {/* Slug */}
                 <div>
                   <label className="text-xs text-zinc-500 uppercase tracking-wide block mb-2">URL Slug</label>
                   <input value={post.slug} onChange={e => update({ slug: e.target.value })}
@@ -378,13 +416,12 @@ export default function ContentEditor() {
                     className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-400 focus:outline-none focus:border-blue-500 font-mono" />
                 </div>
 
-                {/* Stats */}
                 {post.id && (
                   <div className="p-3 bg-zinc-800/50 rounded-xl border border-zinc-800">
                     <p className="text-xs text-zinc-500 mb-2 uppercase tracking-wide">Statistics</p>
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div><span className="text-zinc-400 block">{wordCount.toLocaleString()}</span><span className="text-zinc-600">words</span></div>
-                      <div><span className="text-zinc-400 block">{Math.max(1, Math.ceil(wordCount/200))} min</span><span className="text-zinc-600">read time</span></div>
+                      <div><span className="text-zinc-400 block">{Math.max(1, Math.ceil(wordCount / 200))} min</span><span className="text-zinc-600">read time</span></div>
                       <div><span className="text-zinc-400 block">v{post.version}</span><span className="text-zinc-600">version</span></div>
                     </div>
                   </div>
@@ -392,7 +429,7 @@ export default function ContentEditor() {
               </div>
             )}
 
-            {/* SEO Panel */}
+            {/* SEO Tab */}
             {sidebarTab === 'seo' && (
               <SEOPanel
                 title={post.title} content={post.content}
@@ -402,7 +439,7 @@ export default function ContentEditor() {
               />
             )}
 
-            {/* Media Panel */}
+            {/* Media Tab */}
             {sidebarTab === 'media' && (
               <div className="space-y-4">
                 <div>
@@ -426,7 +463,7 @@ export default function ContentEditor() {
                     <input type="file" accept="image/*,video/*,application/pdf" className="hidden"
                       onChange={async e => {
                         const file = e.target.files?.[0]; if (!file) return;
-                        try { const url = await uploadImage(file); update({ cover_image_url: url }); } catch {}
+                        try { const url = await uploadImage(file); update({ cover_image_url: url }); } catch { /* ignore */ }
                         e.target.value = '';
                       }} />
                   </label>
@@ -438,9 +475,15 @@ export default function ContentEditor() {
       </div>
 
       {/* Modals */}
-      <AIPanel open={showAI} onClose={() => setShowAI(false)} title={post.title} content={post.content} onApply={applyAI} />
+      <AIPanel open={showAI} onClose={() => setShowAI(false)}
+        title={post.title} content={post.content} onApply={applyAI} />
       {showVersions && post.id && (
-        <VersionHistory postId={post.id} currentVersion={post.version} onRollback={handleRollback} onClose={() => setShowVersions(false)} />
+        <VersionHistory
+          postId={post.id}
+          currentVersion={post.version}
+          onRollback={handleRollback}
+          onClose={() => setShowVersions(false)}
+        />
       )}
     </div>
   );

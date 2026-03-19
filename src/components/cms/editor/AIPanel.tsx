@@ -12,7 +12,7 @@ interface AIPanelProps {
 
 type AIAction = 'title' | 'excerpt' | 'content' | 'seo' | 'tags' | 'rewrite' | 'expand';
 
-const ACTIONS: { id: AIAction; label: string; icon: React.ElementType; desc: string }[] = [
+const ACTIONS: { id: AIAction; label: string; icon: React.ComponentType<{ className?: string }>; desc: string }[] = [
   { id: 'title',   label: 'Title',   icon: Type,       desc: 'Generate catchy titles' },
   { id: 'excerpt', label: 'Excerpt', icon: AlignLeft,  desc: 'Write a summary' },
   { id: 'content', label: 'Content', icon: Wand2,      desc: 'Generate full article' },
@@ -28,14 +28,22 @@ const FIELD_MAP: Record<AIAction, string> = {
 };
 
 export function AIPanel({ open, onClose, title, content, onApply }: AIPanelProps) {
-  const [action, setAction] = useState<AIAction>('title');
-  const [prompt, setPrompt] = useState('');
-  const [tone, setTone] = useState('professional');
-  const [length, setLength] = useState('medium');
-  const [result, setResult] = useState('');
+  const [action, setAction]           = useState<AIAction>('title');
+  const [prompt, setPrompt]           = useState('');
+  const [tone, setTone]               = useState('professional');
+  const [length, setLength]           = useState('medium');
+  const [result, setResult]           = useState('');
   const [alternatives, setAlternatives] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [loading, setLoading]         = useState(false);
+  const [copied, setCopied]           = useState(false);
+
+  /** FIX: switching action clears stale generated state */
+  const switchAction = (id: AIAction) => {
+    setAction(id);
+    setResult('');
+    setAlternatives([]);
+    setCopied(false);
+  };
 
   const generate = async () => {
     setLoading(true);
@@ -59,22 +67,45 @@ export function AIPanel({ open, onClose, title, content, onApply }: AIPanelProps
     if (result) { onApply(FIELD_MAP[action], result); onClose(); }
   };
 
-  const copy = () => {
-    navigator.clipboard.writeText(result);
-    setCopied(true); setTimeout(() => setCopied(false), 2000);
+  /** FIX: clipboard copy with DOM fallback for restricted contexts */
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(result);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // DOM fallback
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = result;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch {
+        // Both methods failed — silently ignore
+      }
+    }
   };
 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
           <div className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-purple-400" />
             <h2 className="font-semibold text-white">AI Content Assistant</h2>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
+          <button onClick={onClose}
+            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -83,10 +114,15 @@ export function AIPanel({ open, onClose, title, content, onApply }: AIPanelProps
           {/* Action list */}
           <div className="w-44 border-r border-zinc-800 p-3 flex-shrink-0">
             {ACTIONS.map(a => {
-              const Icon = a.icon as React.ComponentType<{ className?: string }>;
+              const Icon = a.icon;
               return (
-                <button key={a.id} onClick={() => { const id = a.id as AIAction; setAction(id); }}
-                  className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-left text-sm mb-1 transition-colors ${action === a.id ? 'bg-purple-500/15 text-purple-400' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'}`}>
+                <button key={a.id}
+                  onClick={() => switchAction(a.id)}
+                  className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-left text-sm mb-1 transition-colors ${
+                    action === a.id
+                      ? 'bg-purple-500/15 text-purple-400'
+                      : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                  }`}>
                   <Icon className="h-4 w-4 flex-shrink-0" />
                   <span>{a.label}</span>
                 </button>
@@ -102,7 +138,7 @@ export function AIPanel({ open, onClose, title, content, onApply }: AIPanelProps
                 <select value={tone} onChange={e => setTone(e.target.value)}
                   className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500">
                   {['professional','casual','friendly','formal','engaging','conversational'].map(t => (
-                    <option key={t} value={t} className="capitalize">{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+                    <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
                   ))}
                 </select>
               </div>
@@ -111,7 +147,7 @@ export function AIPanel({ open, onClose, title, content, onApply }: AIPanelProps
                   <label className="text-xs text-zinc-500 block mb-1">Length</label>
                   <select value={length} onChange={e => setLength(e.target.value)}
                     className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500">
-                    {['short','medium','long'].map(l => <option key={l} value={l} className="capitalize">{l.charAt(0).toUpperCase() + l.slice(1)}</option>)}
+                    {['short','medium','long'].map(l => <option key={l} value={l}>{l.charAt(0).toUpperCase() + l.slice(1)}</option>)}
                   </select>
                 </div>
               )}
