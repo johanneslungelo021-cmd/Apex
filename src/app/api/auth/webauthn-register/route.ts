@@ -107,8 +107,28 @@ export async function GET(request: Request): Promise<Response> {
       },
     });
 
-    // Store challenge server-side with DB TTL
-    await supabase.from('webauthn_challenges').insert({ email: session.email, challenge: options.challenge });
+    // Store challenge server-side with DB TTL — halt if insert fails.
+    // Silently swallowing this error would mean every subsequent verify attempt
+    // is rejected (no matching challenge), locking the user out with no explanation.
+    const { error: challengeInsertErr } = await supabase
+      .from('webauthn_challenges')
+      .insert({ email: session.email, challenge: options.challenge });
+
+    if (challengeInsertErr) {
+      log({
+        level: 'error',
+        service: SERVICE,
+        message: 'Challenge store failed',
+        requestId,
+        userToken: hashForLog(session.userId),
+        dbCode: challengeInsertErr.code,
+      });
+      return NextResponse.json(
+        { error: 'CHALLENGE_STORE_FAILED', message: 'Failed to issue challenge.' },
+        { status: 500 },
+      );
+    }
+
     void supabase.rpc('purge_expired_webauthn_challenges').then(() => null);
 
     log({

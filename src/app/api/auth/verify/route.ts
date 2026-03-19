@@ -172,8 +172,10 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    // FIX #01: Update counter — mandatory to block cloned-authenticator replay attacks
-    await supabase
+    // FIX #01: Update counter — mandatory to block cloned-authenticator replay attacks.
+    // If this fails and we proceed anyway, an attacker with a cloned key can reuse
+    // the old counter value indefinitely — replay protection is completely bypassed.
+    const { error: counterErr } = await supabase
       .from('identities_private')
       .update({
         counter: verification.authenticationInfo.newCounter,
@@ -181,8 +183,43 @@ export async function POST(request: Request): Promise<Response> {
       })
       .eq('id', identity.id);
 
-    // Consume challenge atomically — single-use guarantee
-    await supabase.from('webauthn_challenges').delete().eq('id', challengeRow.id);
+    if (counterErr) {
+      log({
+        level: 'error',
+        service: SERVICE,
+        message: 'Counter update failed — potential replay vulnerability, halting auth',
+        requestId,
+        userToken: hashForLog(email),
+        dbCode: counterErr.code,
+      });
+      return NextResponse.json(
+        { error: 'INTERNAL_ERROR', message: 'Authentication failed.' },
+        { status: 500 },
+      );
+    }
+
+    // Consume challenge atomically — single-use guarantee.
+    // If deletion fails the challenge remains valid and could be replayed.
+    const { error: deleteErr } = await supabase
+      .from('webauthn_challenges')
+      .delete()
+      .eq('id', challengeRow.id);
+
+    if (deleteErr) {
+      log({
+        level: 'error',
+        service: SERVICE,
+        message: 'Failed to delete used challenge — potential replay window',
+        requestId,
+        userToken: hashForLog(email),
+        dbCode: deleteErr.code,
+        challengeId: challengeRow.id,
+      });
+      return NextResponse.json(
+        { error: 'INTERNAL_ERROR', message: 'Authentication cleanup failed.' },
+        { status: 500 },
+      );
+    }
 
     // Fetch public user record for session payload
     const { data: userRow } = await supabase

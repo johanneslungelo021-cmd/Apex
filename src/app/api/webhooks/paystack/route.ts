@@ -54,9 +54,22 @@ export async function POST(request: Request): Promise<Response> {
   // The HMAC is computed over raw bytes — JSON.parse() would modify the body.
   const rawBody = await request.text();
 
+  // FIX: Runtime guard — non-null assertion (!) crashes the entire route before
+  // the try/catch can even log the failure if the env var is missing in Vercel.
+  const paystackSecret = process.env.PAYSTACK_SECRET_KEY;
+  if (!paystackSecret) {
+    log({
+      level: 'error',
+      service: SERVICE,
+      message: 'PAYSTACK_SECRET_KEY is not set in environment — treasury bridge offline',
+      requestId,
+    });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+
   // Compute expected HMAC SHA-512
   const expectedHash = crypto
-    .createHmac('sha512', process.env.PAYSTACK_SECRET_KEY!)
+    .createHmac('sha512', paystackSecret)
     .update(rawBody)
     .digest('hex');
 
