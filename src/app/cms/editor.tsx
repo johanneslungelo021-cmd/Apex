@@ -58,6 +58,7 @@ export default function ContentEditor() {
   const [post, setPost]             = useState<PostData>(DEFAULT_POST);
   const [saving, setSaving]         = useState(false);
   const [loading, setLoading]       = useState(!isNew);
+  const [fetchError, setFetchError] = useState<string | null>(null);  // FIX: track load errors
   const [saved, setSaved]           = useState(false);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('settings');
   const [showAI, setShowAI]         = useState(false);
@@ -68,19 +69,28 @@ export default function ContentEditor() {
 
   // FIX: dirty flag — autosave only fires after user edits, not server-data loads
   const dirtyRef = useRef(false);
+  // FIX: dirtyTick — incremented on every update() call so autosave useEffect
+  // fires for ALL field changes (slug, tags, SEO…), not just title/content
+  const [dirtyTick, setDirtyTick] = useState(0);
 
   // Load existing post — does NOT set dirty
   useEffect(() => {
     if (!postId) return;
     fetch(`/api/cms/posts/${postId}`)
-      .then(r => r.json())
+      .then(r => {
+        // FIX: check r.ok before parsing — non-OK responses set error state, never overwrite post
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
       .then(d => { if (d.post) setPost({ ...DEFAULT_POST, ...d.post }); })
+      .catch(err => setFetchError(String(err)))
       .finally(() => setLoading(false));
   }, [postId]);
 
-  // update() — marks dirty (user edit)
+  // update() — marks dirty (user edit) and bumps dirtyTick to re-arm autosave
   const update = useCallback((updates: Partial<PostData> | Record<string, unknown>) => {
     dirtyRef.current = true;
+    setDirtyTick(t => t + 1);  // FIX: signal autosave for any field change
     setPost(p => ({ ...p, ...updates }));
   }, []);
 
@@ -148,14 +158,15 @@ export default function ContentEditor() {
   const saveRef = useRef(save);
   useEffect(() => { saveRef.current = save; });
 
-  // Auto-save 3 s after user edits title or content
+  // FIX: autosave re-arms on dirtyTick — covers ALL fields (slug, tags, SEO, cover…),
+  // not just title/content. dirtyRef gate prevents server-load from triggering saves.
   useEffect(() => {
-    if (!post.title && !post.content) return;
+    if (!dirtyRef.current) return;
     clearTimeout(autoSaveRef.current);
     autoSaveRef.current = setTimeout(() => saveRef.current(true), 3000);
     return () => { if (autoSaveRef.current) clearTimeout(autoSaveRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [post.title, post.content]);
+  }, [dirtyTick]);
 
   // FIX: publish passes statusOverride — no stale post.status in payload
   const publish = async () => {
@@ -206,6 +217,20 @@ export default function ContentEditor() {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // FIX: render error state when post failed to load — never show a blank editor over a failed fetch
+  if (fetchError) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center gap-4">
+        <p className="text-red-400 text-lg font-medium">Failed to load post</p>
+        <p className="text-zinc-500 text-sm">{fetchError}</p>
+        <button onClick={() => router.push('/cms')}
+          className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-sm transition-colors">
+          Back to Content Studio
+        </button>
       </div>
     );
   }
@@ -369,7 +394,12 @@ export default function ContentEditor() {
                     <label className="text-xs text-zinc-500 uppercase tracking-wide block mb-2">Schedule Date & Time</label>
                     <input type="datetime-local" value={post.scheduled_at}
                       onChange={e => update({ scheduled_at: e.target.value })}
-                      min={new Date().toISOString().slice(0, 16)}
+                      min={(() => {
+                        // FIX: use local wall-clock time — toISOString() is UTC and wrong for datetime-local
+                        const d = new Date();
+                        const pad = (n: number) => String(n).padStart(2, '0');
+                        return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                      })()}
                       className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500" />
                   </div>
                 )}
@@ -463,7 +493,11 @@ export default function ContentEditor() {
                     <input type="file" accept="image/*,video/*,application/pdf" className="hidden"
                       onChange={async e => {
                         const file = e.target.files?.[0]; if (!file) return;
-                        try { const url = await uploadImage(file); update({ cover_image_url: url }); } catch { /* ignore */ }
+                        try {
+                          const url = await uploadImage(file);
+                          // FIX: only set cover_image_url for image files — videos/PDFs go to library only
+                          if (file.type.startsWith('image/')) update({ cover_image_url: url });
+                        } catch { /* ignore */ }
                         e.target.value = '';
                       }} />
                   </label>

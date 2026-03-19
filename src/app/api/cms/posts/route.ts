@@ -26,9 +26,9 @@ function countWords(html: string): number {
   return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean).length;
 }
 
-/** FIX: rethrow DB errors so transient failures surface as 500, not silent 404 */
+/** FIX: maybeSingle() — zero rows returns null instead of throwing PGRST116 as a 500 */
 async function getCreatorId(supabase: ReturnType<typeof getSupabaseClient>, userId: string): Promise<string | null> {
-  const { data, error } = await supabase.from('creators').select('id').eq('user_id', userId).single();
+  const { data, error } = await supabase.from('creators').select('id').eq('user_id', userId).maybeSingle();
   if (error) throw new Error(`getCreatorId DB error: ${error.message} (code: ${error.code})`);
   return data?.id ?? null;
 }

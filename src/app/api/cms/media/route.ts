@@ -17,9 +17,18 @@ import { getTokenFromRequest, verifySession } from '@/lib/auth/session';
 import crypto from 'crypto';
 
 const SERVICE     = 'cms-media';
-const SUPABASE_URL = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
 const MAX_SIZE     = 50 * 1024 * 1024; // 50 MB
 const UPLOAD_TIMEOUT_MS = 60_000;
+
+// FIX: read at request time, not module-load time — avoids capturing empty string during next build
+function getSupabaseUrl(): string {
+  return process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+}
+
+// FIX: encode each path segment individually — preserves / as a literal separator
+function encodeStoragePath(path: string): string {
+  return path.split('/').map(encodeURIComponent).join('/');
+}
 
 // FIX: allowlist maps MIME → safe alphanumeric ext (no user filename trust)
 const MIME_TO_EXT: Record<string, string> = {
@@ -102,9 +111,9 @@ export async function POST(req: Request): Promise<Response> {
     const bucket      = 'cms-media';
     const arrayBuffer = await file.arrayBuffer();
 
-    // FIX: fetchWithTimeout (60 s) — upload can't hang indefinitely
+    // fetchWithTimeout (60 s) — upload can't hang indefinitely
     const uploadRes = await fetchWithTimeout(
-      `${SUPABASE_URL}/storage/v1/object/${bucket}/${encodeURIComponent(storagePath)}`,
+      `${getSupabaseUrl()}/storage/v1/object/${bucket}/${encodeStoragePath(storagePath)}`,
       {
         method:  'POST',
         headers: {
@@ -129,7 +138,7 @@ export async function POST(req: Request): Promise<Response> {
       );
     }
 
-    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${encodeURIComponent(storagePath)}`;
+    const publicUrl = `${getSupabaseUrl()}/storage/v1/object/public/${bucket}/${encodeStoragePath(storagePath)}`;
 
     const { data: asset, error: dbErr } = await supabase.from('media_assets').insert({
       creator_id:    creatorId,

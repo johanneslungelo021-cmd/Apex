@@ -16,13 +16,20 @@ interface VersionHistoryProps {
 
 export function VersionHistory({ postId, currentVersion, onRollback, onClose }: VersionHistoryProps) {
   const [versions, setVersions] = useState<Version[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [rolling, setRolling] = useState<number | null>(null);
+  const [loading, setLoading]   = useState(true);
+  const [rolling, setRolling]   = useState<number | null>(null);
+  // FIX: separate error state — "no versions" and "fetch failed" are different conditions
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`/api/cms/posts/${postId}?versions=true`)
-      .then(r => r.json())
+      .then(r => {
+        // FIX: check r.ok before parsing — non-OK throws to catch, doesn't silently empty versions
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
       .then(d => setVersions(d.versions ?? []))
+      .catch(err => setFetchError(String(err)))
       .finally(() => setLoading(false));
   }, [postId]);
 
@@ -56,6 +63,13 @@ export function VersionHistory({ postId, currentVersion, onRollback, onClose }: 
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : fetchError ? (
+            // FIX: distinct error UI — not the same as "no history yet"
+            <div className="text-center py-12 text-zinc-500">
+              <History className="h-8 w-8 mx-auto mb-3 opacity-40 text-red-400" />
+              <p className="text-red-400 text-sm font-medium">Failed to load history</p>
+              <p className="text-zinc-600 text-xs mt-1">{fetchError}</p>
             </div>
           ) : versions.length === 0 ? (
             <div className="text-center py-12 text-zinc-500">

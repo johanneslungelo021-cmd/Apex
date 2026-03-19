@@ -2,15 +2,11 @@ export const runtime = 'nodejs';
 /**
  * CMS Post by ID — GET / PATCH / DELETE + versions
  *
- * Fixes:
- *   - getCreatorId uses .maybeSingle() — no 500 on "not found"
- *   - versions query includes content, excerpt, snapshot for full rollback
- *   - existing select uses * for complete snapshot
- *   - slug destructured and persisted
- *   - countWords called once, result reused
- *   - version insert failure: compensating rollback reverts post
- *   - optimistic concurrency via eq('version', existing.version)
- *   - DELETE checks affected rows — surfaces silent no-ops as 404
+ * Fixes in this revision:
+ *   - versions query checks error, surfaces 500 on DB failure
+ *   - update uses .maybeSingle() so version-mismatch PGRST116 → null (→ 409), not 500
+ *   - compensating rollback constrained by eq('version', newVersion) + eq('creator_id')
+ *     and checks row count to detect whether revert actually matched
  */
 import { NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase';
@@ -24,7 +20,7 @@ function countWords(html: string): number {
 }
 
 async function getCreatorId(supabase: ReturnType<typeof getSupabaseClient>, userId: string): Promise<string | null> {
-  // FIX: maybeSingle() — zero rows → null (not a thrown error)
+  // maybeSingle() — zero rows → null (not a thrown PGRST116 error)
   const { data, error } = await supabase.from('creators').select('id').eq('user_id', userId).maybeSingle();
   if (error) throw new Error(`getCreatorId DB error: ${error.message} (code: ${error.code})`);
   return data?.id ?? null;
@@ -46,15 +42,19 @@ export async function GET(req: Request, ctx: Ctx): Promise<Response> {
     const creatorId = await getCreatorId(supabase, session.userId);
     if (!creatorId) return NextResponse.json({ error: 'CREATOR_NOT_FOUND' }, { status: 404 });
 
-    const { data: post, error } = await supabase.from('content_posts')
+    const { data: post, error: postError } = await supabase.from('content_posts')
       .select('*').eq('id', id).eq('creator_id', creatorId).single();
-    if (error || !post) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
+    if (postError || !post) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
 
     if (showVersions) {
-      // FIX: include content, excerpt, snapshot so editor rollback has all restore data
-      const { data: versions } = await supabase.from('content_versions')
+      // FIX: destructure error — surface DB failures as 500 instead of empty array
+      const { data: versions, error: versionsError } = await supabase.from('content_versions')
         .select('id,version,title,content,excerpt,snapshot,change_note,changed_by,created_at')
         .eq('post_id', id).order('version', { ascending: false });
+      if (versionsError) {
+        log({ level: 'error', service: SERVICE, message: 'Versions query failed', requestId, errMsg: versionsError.message });
+        return NextResponse.json({ error: 'INTERNAL_ERROR', message: 'Failed to load version history' }, { status: 500 });
+      }
       return NextResponse.json({ post, versions: versions ?? [] });
     }
     return NextResponse.json({ post });
@@ -78,19 +78,18 @@ export async function PATCH(req: Request, ctx: Ctx): Promise<Response> {
     const creatorId = await getCreatorId(supabase, session.userId);
     if (!creatorId) return NextResponse.json({ error: 'CREATOR_NOT_FOUND' }, { status: 404 });
 
-    // FIX: select * — captures slug/SEO/scheduling for complete version snapshot
+    // select * for complete snapshot — slug/SEO/scheduling all preserved
     const { data: existing, error: existingErr } = await supabase.from('content_posts')
       .select('*').eq('id', id).eq('creator_id', creatorId).single();
     if (existingErr || !existing) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
 
-    // FIX: slug destructured from body
     const { title, content, excerpt, cover_image_url, content_type, status,
       scheduled_at, slug, tags, seo_title, seo_description, meta_keywords,
       og_image_url, change_note } = body;
 
     const updates: Record<string, unknown> = {};
     if (title           !== undefined) updates.title           = title;
-    if (slug            !== undefined) updates.slug            = slug;  // FIX: persist slug edits
+    if (slug            !== undefined) updates.slug            = slug;
     if (excerpt         !== undefined) updates.excerpt         = excerpt;
     if (cover_image_url !== undefined) updates.cover_image_url = cover_image_url;
     if (content_type    !== undefined) updates.content_type    = content_type;
@@ -101,7 +100,6 @@ export async function PATCH(req: Request, ctx: Ctx): Promise<Response> {
     if (og_image_url    !== undefined) updates.og_image_url    = og_image_url;
     if (scheduled_at    !== undefined) updates.scheduled_at    = scheduled_at;
     if (content !== undefined) {
-      // FIX: compute countWords once, reuse for both fields
       const wc = countWords(content);
       updates.content        = content;
       updates.word_count     = wc;
@@ -117,12 +115,12 @@ export async function PATCH(req: Request, ctx: Ctx): Promise<Response> {
     const newVersion = existing.version + 1;
     updates.version  = newVersion;
 
-    // FIX: optimistic concurrency — rejects if another write raced ahead
+    // FIX: maybeSingle() — PGRST116 (zero rows = version mismatch) → null → 409, not 500
     const { data: post, error: updateErr } = await supabase.from('content_posts')
       .update(updates)
       .eq('id', id)
-      .eq('version', existing.version)
-      .select().single();
+      .eq('version', existing.version)  // optimistic concurrency lock
+      .select().maybeSingle();
 
     if (updateErr) throw updateErr;
     if (!post) {
@@ -132,26 +130,34 @@ export async function PATCH(req: Request, ctx: Ctx): Promise<Response> {
       );
     }
 
-    // FIX: check version insert — compensating rollback if it fails
     const { error: insertError } = await supabase.from('content_versions').insert({
       post_id:     id,
       version:     newVersion,
-      title:       (title    ?? existing.title)   as string,
-      content:     (content  ?? existing.content) as string,
-      excerpt:     (excerpt  ?? existing.excerpt) as string,
+      title:       (title   ?? existing.title)   as string,
+      content:     (content ?? existing.content) as string,
+      excerpt:     (excerpt ?? existing.excerpt) as string,
       changed_by:  session.userId,
       change_note: (change_note || `Version ${newVersion}`) as string,
       snapshot:    { ...existing, ...updates },
     });
 
     if (insertError) {
-      // Compensating rollback: revert post back to previous version
       log({ level: 'error', service: SERVICE, requestId,
-        message: 'Version insert failed — reverting post to previous version',
+        message: 'Version insert failed — attempting compensating rollback',
         errMsg: insertError.message });
-      await supabase.from('content_posts')
+
+      // FIX: rollback constrained by newVersion + creator_id to avoid clobbering newer concurrent writes
+      const { data: revertData, error: revertErr } = await supabase.from('content_posts')
         .update({ ...existing, version: existing.version })
-        .eq('id', id);
+        .eq('id', id)
+        .eq('version', newVersion)           // only revert if our write is still current
+        .eq('creator_id', existing.creator_id)
+        .select('id').maybeSingle();
+
+      if (revertErr || !revertData) {
+        log({ level: 'warn', service: SERVICE, requestId,
+          message: 'Compensating rollback did not match any row — post may have been updated concurrently' });
+      }
       throw insertError;
     }
 
@@ -176,9 +182,10 @@ export async function DELETE(req: Request, ctx: Ctx): Promise<Response> {
     const creatorId = await getCreatorId(supabase, session.userId);
     if (!creatorId) return NextResponse.json({ error: 'CREATOR_NOT_FOUND' }, { status: 404 });
 
-    // FIX: select the row first so we know it existed and belongs to this creator
-    const { data: existing } = await supabase.from('content_posts')
+    // Pre-check ownership — surfaces 404 before attempting delete
+    const { data: existing, error: checkErr } = await supabase.from('content_posts')
       .select('id').eq('id', id).eq('creator_id', creatorId).maybeSingle();
+    if (checkErr) throw checkErr;
     if (!existing) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
 
     const { error } = await supabase.from('content_posts')

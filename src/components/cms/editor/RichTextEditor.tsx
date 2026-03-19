@@ -60,7 +60,9 @@ export function RichTextEditor({ content, onChange, onImageUpload, placeholder =
         codeBlock: { HTMLAttributes: { class: 'bg-zinc-900 rounded-lg p-4 font-mono text-sm text-emerald-400 overflow-x-auto' } },
       }),
       TiptapImage.configure({
-        allowBase64: true,
+        // FIX: allowBase64 disabled — pasted images must go through /api/cms/media upload
+        // instead of being inlined as data: URLs in post content (bloats DB, breaks CDN caching)
+        allowBase64: false,
         HTMLAttributes: { class: 'rounded-lg max-w-full h-auto my-4 border border-zinc-800' },
       }),
       Link.configure({
@@ -207,16 +209,26 @@ export function RichTextEditor({ content, onChange, onImageUpload, placeholder =
           <LinkIcon className="h-4 w-4" />
         </ToolbarButton>
 
-        {/* FIX: accessible label on file input via aria-label */}
+        {/* FIX: keyboard-accessible image upload — label has htmlFor matching input id;
+            input uses sr-only (visually hidden but tabbable) instead of hidden (removes from tab order) */}
         <label
+          htmlFor="rte-image-upload"
           className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors cursor-pointer"
           title="Insert Image"
-          aria-label="Insert Image">
+          aria-label="Insert Image"
+          tabIndex={0}
+          onKeyDown={e => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              document.getElementById('rte-image-upload')?.click();
+            }
+          }}>
           <Image className="h-4 w-4" aria-hidden="true" />
           <input
+            id="rte-image-upload"
             type="file"
             accept="image/*"
-            className="hidden"
+            className="sr-only"
             aria-label="Upload image file"
             onChange={handleImageUpload} />
         </label>

@@ -52,12 +52,20 @@ export default function CMSPage() {
   const deletePost = async (id: string) => {
     if (!confirm('Delete this post? This cannot be undone.')) return;
     setDeleting(id);
-    const res = await fetch(`/api/cms/posts/${id}`, { method: 'DELETE' });
-    if (res.ok) {
-      setPosts(p => p.filter(x => x.id !== id));
-      setTotal(t => Math.max(0, t - 1));  // FIX: keep total in sync after delete
+    try {
+      const res = await fetch(`/api/cms/posts/${id}`, { method: 'DELETE' });
+      if (!res.ok) return; // silently no-op on error — do not mutate UI state
+      const newPosts = posts.filter(x => x.id !== id);
+      setPosts(newPosts);
+      setTotal(t => Math.max(0, t - 1));
+      // FIX: if last item on page > 1 is deleted, step back to previous page
+      if (newPosts.length === 0 && page > 1) {
+        setPage(p => p - 1);
+      }
+    } finally {
+      // FIX: always clear deleting state even on network error
+      setDeleting(null);
     }
-    setDeleting(null);
   };
 
   const filtered = posts.filter(p =>

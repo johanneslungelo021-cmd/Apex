@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Sparkles, Loader2, Copy, Check, X, Type, AlignLeft, Wand2, RefreshCw, Hash, Tag } from 'lucide-react';
 
 interface AIPanelProps {
@@ -28,38 +28,56 @@ const FIELD_MAP: Record<AIAction, string> = {
 };
 
 export function AIPanel({ open, onClose, title, content, onApply }: AIPanelProps) {
-  const [action, setAction]           = useState<AIAction>('title');
-  const [prompt, setPrompt]           = useState('');
-  const [tone, setTone]               = useState('professional');
-  const [length, setLength]           = useState('medium');
-  const [result, setResult]           = useState('');
+  const [action, setAction]             = useState<AIAction>('title');
+  const [prompt, setPrompt]             = useState('');
+  const [tone, setTone]                 = useState('professional');
+  const [length, setLength]             = useState('medium');
+  const [result, setResult]             = useState('');
   const [alternatives, setAlternatives] = useState<string[]>([]);
-  const [loading, setLoading]         = useState(false);
-  const [copied, setCopied]           = useState(false);
+  const [loading, setLoading]           = useState(false);
+  const [copied, setCopied]             = useState(false);
+  // FIX: AbortController ref — abort in-flight request when action switches or new generate fires
+  const abortRef = useRef<AbortController | null>(null);
 
-  /** FIX: switching action clears stale generated state */
+  /** FIX: switching action aborts in-flight request + clears stale state */
   const switchAction = (id: AIAction) => {
+    abortRef.current?.abort();
+    abortRef.current = null;
     setAction(id);
     setResult('');
     setAlternatives([]);
     setCopied(false);
+    setLoading(false);
   };
 
   const generate = async () => {
+    // Abort any previous in-flight request before starting a new one
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
     setLoading(true);
     try {
       const res = await fetch('/api/cms/ai-generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: action, prompt: prompt || title, context: content.substring(0, 1000), tone, length }),
+        signal: ac.signal,
       });
-      if (res.ok) {
+      // FIX: only update state if this request is still the active one (not aborted)
+      if (!ac.signal.aborted && res.ok) {
         const data = await res.json();
         setResult(data.result ?? '');
         setAlternatives(data.alternatives ?? []);
       }
+    } catch (err: unknown) {
+      // Ignore AbortError — it's an intentional cancellation
+      if (err instanceof Error && err.name !== 'AbortError') {
+        setResult('');
+        setAlternatives([]);
+      }
     } finally {
-      setLoading(false);
+      // Only clear loading for the active request
+      if (!ac.signal.aborted) setLoading(false);
     }
   };
 

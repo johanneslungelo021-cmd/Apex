@@ -40,8 +40,8 @@ export function SEOPanel({ title, content, seoTitle, seoDescription, metaKeyword
     if (!title && !content) return;
     setGenerating(true);
     try {
-      // FIX: check res.ok for each request independently — only apply fields that succeeded
-      const [titleRes, descRes] = await Promise.all([
+      // FIX: Promise.allSettled — one fetch failure no longer aborts both operations
+      const [titleSettled, descSettled] = await Promise.allSettled([
         fetch('/api/cms/ai-generate', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ type: 'seo', prompt: title, context: content.substring(0, 500) }),
@@ -54,12 +54,13 @@ export function SEOPanel({ title, content, seoTitle, seoDescription, metaKeyword
 
       const updates: Record<string, unknown> = {};
 
-      if (titleRes.ok) {
-        const titleData = await titleRes.json();
+      // FIX: check status === 'fulfilled' AND res.ok independently for each request
+      if (titleSettled.status === 'fulfilled' && titleSettled.value.ok) {
+        const titleData = await titleSettled.value.json();
         if (titleData.result) updates.seo_title = titleData.result.substring(0, 60);
       }
-      if (descRes.ok) {
-        const descData = await descRes.json();
+      if (descSettled.status === 'fulfilled' && descSettled.value.ok) {
+        const descData = await descSettled.value.json();
         if (descData.result) updates.seo_description = descData.result.substring(0, 160);
       }
 
