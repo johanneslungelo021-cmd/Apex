@@ -135,8 +135,9 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    // Non-blocking: opportunistically purge expired challenges
-    void supabase.rpc('purge_expired_webauthn_challenges').then(() => null);
+    // .catch() prevents an unhandled promise rejection if the RPC fails —
+    // purging is non-critical maintenance, never worth crashing the request.
+    void Promise.resolve(supabase.rpc('purge_expired_webauthn_challenges')).catch(() => null);
 
     log({
       level: 'info',

@@ -198,15 +198,28 @@ describe('FIX #02 — Paystack HMAC SHA-512 signature verification (CRITICAL)', 
     expect(crypto.timingSafeEqual(a, b)).toBe(true);
   });
 
-  it('raw body must be read with .text() before JSON parsing (contract assertion)', () => {
-    // Re-stringify a parsed body and verify HMAC differs from the original raw bytes
-    const originalSig = crypto.createHmac('sha512', secret).update(body).digest('hex');
-    const reparsed = JSON.stringify(JSON.parse(body)); // simulates req.json() then re-stringify
-    const reparsedSig = crypto.createHmac('sha512', secret).update(reparsed).digest('hex');
-    // In this case they happen to match because JSON.stringify is deterministic for this payload,
-    // but the test confirms we read body before parsing (the route uses req.text() first)
-    expect(typeof reparsedSig).toBe('string');
-    expect(originalSig).toBeDefined();
+  it('raw body must be read with .text() before JSON parsing — reparsed body has different HMAC', () => {
+    // Use a body with meaningful whitespace/formatting — JSON.stringify(JSON.parse(body))
+    // collapses it to compact form, changing the raw bytes and therefore the HMAC.
+    // This directly proves that reading req.json() instead of req.text() would break
+    // signature verification for any webhook body that isn't already minimal compact JSON.
+    const bodyWithWhitespace = `{
+  "event": "charge.success",
+  "data": {
+    "id": 123,
+    "amount": 10000,
+    "reference": "ref_123",
+    "status": "success"
+  }
+}`;
+    const originalSig = crypto.createHmac('sha512', secret).update(bodyWithWhitespace).digest('hex');
+
+    // Simulate what happens if the route called req.json() then JSON.stringify() instead of req.text()
+    const reparsedBody = JSON.stringify(JSON.parse(bodyWithWhitespace)); // compact — different bytes
+    const reparsedSig = crypto.createHmac('sha512', secret).update(reparsedBody).digest('hex');
+
+    // Proves that parsing + re-stringifying changes the HMAC — req.text() is mandatory
+    expect(originalSig).not.toBe(reparsedSig);
   });
 });
 
