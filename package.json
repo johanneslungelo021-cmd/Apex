@@ -18,7 +18,9 @@
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
+    "@simplewebauthn/server": "^13.3.0",
     "@supabase/supabase-js": "^2.49.4",
+    "@vercel/firewall": "^1.1.2",
     "@vercel/otel": "^2.1.1",
     "@vercel/speed-insights": "^2.0.0",
     "bcryptjs": "^3.0.3",
@@ -30,7 +32,8 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "server-only": "^0.0.1",
-    "three": "^0.183.2"
+    "three": "^0.183.2",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@jest/globals": "^30.3.0",
