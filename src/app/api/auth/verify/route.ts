@@ -27,6 +27,7 @@ import crypto from 'crypto';
 import { verifyAuthenticationResponse } from '@simplewebauthn/server';
 import type { AuthenticationResponseJSON } from '@simplewebauthn/server';
 import { z } from 'zod';
+import { checkRateLimit as vercelCheckRateLimit } from '@vercel/firewall';
 import { getSupabaseClient } from '@/lib/supabase';
 import { createSession, buildSessionCookie } from '@/lib/auth/session';
 import { log, generateRequestId, checkRateLimit } from '@/lib/api-utils';
@@ -62,20 +63,46 @@ export async function POST(request: Request): Promise<Response> {
   const requestId = generateRequestId();
 
   // Rate limit: 10 verification attempts per 5 minutes per IP.
-  // NOTE: checkRateLimit uses an in-memory Map which does not persist across
-  // serverless cold starts or concurrent Vercel function instances. For full
-  // enforcement configure a Vercel Firewall rate-limit rule targeting this path
-  // (preferred, zero code change) or replace with @vercel/firewall SDK using the
-  // same key pattern (`webauthn_verify:${ip}`) and the same 429 / Retry-After
-  // response shape. The in-memory fallback still provides meaningful protection
-  // within a single warm instance and is acceptable for the current traffic scale.
+  //
+  // Primary: @vercel/firewall SDK — uses Vercel WAF-backed storage that persists
+  // across cold starts and concurrent function instances. Requires a matching
+  // Firewall rule with ID 'webauthn-verify' configured in the Vercel Dashboard
+  // (Security → Firewall → New Rule → Rate Limit).
+  //
+  // Fallback: in-memory checkRateLimit — engaged automatically when the WAF rule
+  // ID is not found (development / non-Vercel envs). Provides protection within
+  // a single warm instance; not horizontally consistent but better than nothing.
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
-  if (!checkRateLimit(`webauthn_verify:${ip}`, 10, 5 * 60 * 1000)) {
-    log({ level: 'warn', service: SERVICE, message: 'Rate limit exceeded', requestId });
-    return NextResponse.json(
-      { error: 'RATE_LIMITED', message: 'Too many attempts. Try again in 5 minutes.' },
-      { status: 429, headers: { 'Retry-After': '300' } },
-    );
+  try {
+    const { rateLimited, error: rlError } = await vercelCheckRateLimit('webauthn-verify', {
+      request,
+      rateLimitKey: ip,
+    });
+    if (rlError === 'not-found') {
+      // WAF rule not configured — fall back to in-memory guard
+      if (!checkRateLimit(`webauthn_verify:${ip}`, 10, 5 * 60 * 1000)) {
+        log({ level: 'warn', service: SERVICE, message: 'Rate limit exceeded (in-memory fallback)', requestId });
+        return NextResponse.json(
+          { error: 'RATE_LIMITED', message: 'Too many attempts. Try again in 5 minutes.' },
+          { status: 429, headers: { 'Retry-After': '300' } },
+        );
+      }
+    } else if (rateLimited) {
+      log({ level: 'warn', service: SERVICE, message: 'Rate limit exceeded (Vercel WAF)', requestId });
+      return NextResponse.json(
+        { error: 'RATE_LIMITED', message: 'Too many attempts. Try again in 5 minutes.' },
+        { status: 429, headers: { 'Retry-After': '300' } },
+      );
+    }
+  } catch {
+    // If @vercel/firewall throws (unexpected), fall back to in-memory guard
+    if (!checkRateLimit(`webauthn_verify:${ip}`, 10, 5 * 60 * 1000)) {
+      log({ level: 'warn', service: SERVICE, message: 'Rate limit exceeded (in-memory fallback after SDK error)', requestId });
+      return NextResponse.json(
+        { error: 'RATE_LIMITED', message: 'Too many attempts. Try again in 5 minutes.' },
+        { status: 429, headers: { 'Retry-After': '300' } },
+      );
+    }
   }
 
   // FIX #03: Parse + validate — malformed JSON returns 400

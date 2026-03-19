@@ -20,6 +20,7 @@
     "@react-three/fiber": "^9.5.0",
     "@simplewebauthn/server": "^13.3.0",
     "@supabase/supabase-js": "^2.49.4",
+    "@vercel/firewall": "^1.1.2",
     "@vercel/otel": "^2.1.1",
     "@vercel/speed-insights": "^2.0.0",
     "bcryptjs": "^3.0.3",
