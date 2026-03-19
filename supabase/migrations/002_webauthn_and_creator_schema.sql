@@ -188,3 +188,89 @@ BEGIN
   DELETE FROM public.webauthn_challenges WHERE expires_at < now();
 END;
 $$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- Post-merge hardening: set explicit search_path on all functions
+-- Prevents search_path injection attacks (Supabase security advisor lint)
+-- Applied: March 2026
+-- ══════════════════════════════════════════════════════════════════════
+
+CREATE OR REPLACE FUNCTION public.set_updated_at()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.purge_expired_webauthn_challenges()
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  DELETE FROM public.webauthn_challenges WHERE expires_at < now();
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.process_treasury_split()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  v_split_pct   NUMERIC(5,2) := 5.00;
+  v_pool_amount NUMERIC(12,2);
+BEGIN
+  IF NEW.status != 'success' THEN RETURN NEW; END IF;
+  v_pool_amount := ROUND(NEW.amount_zar * (v_split_pct / 100), 2);
+  IF NEW.community_impact = true THEN
+    INSERT INTO public.vaal_development_pool (transaction_id, amount_zar, split_pct)
+    VALUES (NEW.id, v_pool_amount, v_split_pct);
+  END IF;
+  UPDATE public.creators
+  SET total_earnings = total_earnings + COALESCE(NEW.creator_payout_zar, NEW.amount_zar)
+  WHERE id = NEW.creator_id;
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.process_treasury_split_on_update()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  v_split_pct   NUMERIC(5,2) := 5.00;
+  v_pool_amount NUMERIC(12,2);
+BEGIN
+  IF OLD.status = NEW.status THEN RETURN NEW; END IF;
+  IF NEW.status != 'success' THEN RETURN NEW; END IF;
+  v_pool_amount := ROUND(NEW.amount_zar * (v_split_pct / 100), 2);
+  IF NEW.community_impact = true THEN
+    INSERT INTO public.vaal_development_pool (transaction_id, amount_zar, split_pct)
+    VALUES (NEW.id, v_pool_amount, v_split_pct)
+    ON CONFLICT DO NOTHING;
+  END IF;
+  UPDATE public.creators
+  SET total_earnings = total_earnings + COALESCE(NEW.creator_payout_zar, NEW.amount_zar)
+  WHERE id = NEW.creator_id;
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.register_webauthn_credential(
+  p_user_id UUID, p_email TEXT, p_credential_id TEXT,
+  p_credential_public_key TEXT, p_counter BIGINT, p_transports TEXT[],
+  p_device_type TEXT, p_backed_up BOOLEAN, p_registered_at TIMESTAMPTZ,
+  p_challenge_id UUID
+)
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  INSERT INTO public.identities_private (
+    user_id, email, credential_id, credential_public_key,
+    counter, transports, device_type, backed_up, registered_at
+  ) VALUES (
+    p_user_id, p_email, p_credential_id, p_credential_public_key,
+    p_counter, p_transports, p_device_type, p_backed_up, p_registered_at
+  );
+  DELETE FROM public.webauthn_challenges WHERE id = p_challenge_id;
+  RETURN jsonb_build_object('success', true);
+EXCEPTION
+  WHEN unique_violation THEN
+    RETURN jsonb_build_object('error', 'Credential already registered', 'code', '23505');
+  WHEN OTHERS THEN
+    RETURN jsonb_build_object('error', SQLERRM, 'code', SQLSTATE);
+END;
+$$;
