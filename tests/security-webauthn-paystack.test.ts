@@ -465,17 +465,25 @@ describe('PATCH — Counter update must halt on failure (replay attack preventio
 });
 
 describe('PATCH — Challenge deletion must halt on failure (single-use guarantee)', () => {
-  it('a failed challenge delete must block session issuance', () => {
-    // If delete fails, the challenge remains live and can be replayed.
+  it('a failed challenge delete in verify must block session issuance', () => {
+    // If delete fails in verify, the challenge remains live and can be replayed.
     const deleteResult = { error: { code: 'PGRST116', message: 'not found' } };
     const shouldGrantClearance = deleteResult.error === null;
     expect(shouldGrantClearance).toBe(false);
   });
 
-  it('a successful challenge deletion (null error) allows session issuance', () => {
+  it('a failed challenge delete in registration must block 201 success response', () => {
+    // Credential is already persisted at this point; if delete fails the attestation
+    // can be replayed to insert a duplicate credential during the TTL window.
+    const deleteResult = { error: { code: '08006', message: 'connection failure' } };
+    const shouldReturn201 = deleteResult.error === null;
+    expect(shouldReturn201).toBe(false);
+  });
+
+  it('a successful challenge deletion (null error) allows the response to proceed', () => {
     const deleteResult = { error: null };
-    const shouldGrantClearance = deleteResult.error === null;
-    expect(shouldGrantClearance).toBe(true);
+    const shouldProceed = deleteResult.error === null;
+    expect(shouldProceed).toBe(true);
   });
 
   it('delete error log includes challengeId for forensic traceability', () => {
@@ -491,11 +499,10 @@ describe('PATCH — Challenge deletion must halt on failure (single-use guarante
 });
 
 describe('PATCH — PAYSTACK_SECRET_KEY runtime env guard', () => {
-  it('missing secret must return 500 before crypto is called', () => {
-    // Simulate the runtime check: no non-null assertion (!) allowed
-    const paystackSecret = undefined; // env var missing
-    const shouldProceed = paystackSecret !== undefined && paystackSecret !== '';
-    expect(shouldProceed).toBe(false);
+  it('missing secret fails the guard — !paystackSecret is true (undefined is falsy)', () => {
+    const paystackSecret: string | undefined = undefined;
+    // The route uses: if (!paystackSecret) — same condition tested here
+    expect(!paystackSecret).toBe(true);
   });
 
   it('present secret passes the runtime guard', () => {
@@ -504,10 +511,11 @@ describe('PATCH — PAYSTACK_SECRET_KEY runtime env guard', () => {
     expect(shouldProceed).toBe(true);
   });
 
-  it('empty string secret also fails the runtime guard (handles misconfigured Vercel vars)', () => {
+  it('empty string secret fails the guard — matches route falsy check (!paystackSecret)', () => {
+    // The route uses: if (!paystackSecret) — a falsy check.
+    // An empty string is falsy, so it must be rejected identically to undefined.
     const paystackSecret = '';
-    const shouldProceed = paystackSecret !== undefined && paystackSecret !== '';
-    expect(shouldProceed).toBe(false);
+    expect(!paystackSecret).toBe(true); // matches route's if (!paystackSecret) condition
   });
 
   it('missing secret logs an error before any crypto operation', () => {

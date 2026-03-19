@@ -252,8 +252,30 @@ export async function POST(request: Request): Promise<Response> {
       return NextResponse.json({ error: 'DB_ERROR', message: 'Failed to register passkey.' }, { status: 500 });
     }
 
-    // Consume challenge — single-use guarantee
-    await supabase.from('webauthn_challenges').delete().eq('id', challengeRow.id);
+    // Consume challenge — single-use guarantee.
+    // Must check the error: credential is already persisted above; if delete fails,
+    // the challenge stays live and the same attestation could be replayed to insert
+    // a duplicate credential during the TTL window. Mirror verify/route.ts pattern.
+    const { error: deleteErr } = await supabase
+      .from('webauthn_challenges')
+      .delete()
+      .eq('id', challengeRow.id);
+
+    if (deleteErr) {
+      log({
+        level: 'error',
+        service: SERVICE,
+        message: 'Failed to delete used challenge — potential replay window in registration',
+        requestId,
+        userToken: hashForLog(session.userId),
+        dbCode: deleteErr.code,
+        challengeId: challengeRow.id,
+      });
+      return NextResponse.json(
+        { error: 'INTERNAL_ERROR', message: 'Registration cleanup failed.' },
+        { status: 500 },
+      );
+    }
 
     log({
       level: 'info',

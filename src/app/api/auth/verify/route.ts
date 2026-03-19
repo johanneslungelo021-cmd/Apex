@@ -61,7 +61,14 @@ function hashForLog(value: string): string {
 export async function POST(request: Request): Promise<Response> {
   const requestId = generateRequestId();
 
-  // Rate limit: 10 verification attempts per 5 minutes per IP
+  // Rate limit: 10 verification attempts per 5 minutes per IP.
+  // NOTE: checkRateLimit uses an in-memory Map which does not persist across
+  // serverless cold starts or concurrent Vercel function instances. For full
+  // enforcement configure a Vercel Firewall rate-limit rule targeting this path
+  // (preferred, zero code change) or replace with @vercel/firewall SDK using the
+  // same key pattern (`webauthn_verify:${ip}`) and the same 429 / Retry-After
+  // response shape. The in-memory fallback still provides meaningful protection
+  // within a single warm instance and is acceptable for the current traffic scale.
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
   if (!checkRateLimit(`webauthn_verify:${ip}`, 10, 5 * 60 * 1000)) {
     log({ level: 'warn', service: SERVICE, message: 'Rate limit exceeded', requestId });

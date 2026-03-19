@@ -142,10 +142,19 @@ export async function POST(request: Request): Promise<Response> {
   // ── Insert into immutable ledger ──────────────────────────────────────────────
   try {
     const supabaseAdmin = getSupabaseClient(); // Service role — bypasses RLS
-    const amountZar = amountKobo / 100; // Paystack sends amounts in kobo (cents)
+    // Paystack sends all monetary amounts in the smallest currency unit
+    // (kobo for NGN, cents for ZAR). Divide by 100 to convert to the major unit
+    // (rand). amountZar here represents the full rand value of the transaction.
+    const amountZar = amountKobo / 100;
 
     const platformFeePct = 0.05; // 5% platform fee
     const platformFeeZar = parseFloat((amountZar * platformFeePct).toFixed(2));
+
+    // Derive both `type` and `source_type` from a single normalised value so they
+    // are always consistent. Previously they used different fallback expressions
+    // which could produce contradictory values (e.g. type='subscription' but
+    // source_type='one_time') if metadata.source_type changed between the two reads.
+    const normalizedSource = typeof metadata.source_type === 'string' ? metadata.source_type : undefined;
 
     const { error: dbError } = await supabaseAdmin.from('transactions').insert({
       creator_id: creatorId,
@@ -155,8 +164,8 @@ export async function POST(request: Request): Promise<Response> {
       gateway_ref: reference, // Paystack unique reference
       external_id: reference, // UNIQUE constraint — idempotency key
       status: 'success',
-      type: metadata.source_type === 'one_time' ? 'one_time' : 'subscription',
-      source_type: (metadata.source_type as string) ?? 'standard_subscription',
+      type: normalizedSource === 'one_time' ? 'one_time' : 'subscription',
+      source_type: normalizedSource ?? 'standard_subscription',
       community_impact: metadata.community_impact === true || metadata.community_impact === 'true',
       emotion_state: 'neutral',
       metadata: data, // Store full Paystack payload for audit
