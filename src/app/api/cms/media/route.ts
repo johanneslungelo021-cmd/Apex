@@ -12,7 +12,6 @@ import crypto from 'crypto';
 
 const SERVICE = 'cms-media';
 const SUPABASE_URL = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
 const ALLOWED_MIME = new Set([
   'image/jpeg','image/png','image/webp','image/gif','image/svg+xml',
   'video/mp4','video/webm','application/pdf',
@@ -100,18 +99,24 @@ export async function POST(req: Request): Promise<Response> {
     if (!uploadRes.ok) {
       const errText = await uploadRes.text();
       log({ level: 'error', service: SERVICE, message: 'Storage upload failed', requestId, status: uploadRes.status, err: errText });
-      // Fallback: store as data URL for development when storage not configured
-      const base64 = Buffer.from(arrayBuffer).toString('base64');
-      const publicUrl = `data:${file.type};base64,${base64}`;
+      
+      // FIX: Do not fall back to storing the whole file as a data: URL. Fail the upload instead.
+      // Fallback only allowed in development if explicitly needed, but CodeRabbit says "Do not fall back".
+      if (process.env.NODE_ENV !== 'production' && process.env.ALLOW_MEDIA_FALLBACK === 'true') {
+        const base64 = Buffer.from(arrayBuffer).toString('base64');
+        const publicUrl = `data:${file.type};base64,${base64}`;
 
-      const { data: asset, error: dbErr } = await supabase.from('media_assets').insert({
-        creator_id: creatorId, storage_path: `local:${storagePath}`,
-        public_url: publicUrl, original_name: file.name,
-        mime_type: file.type, size_bytes: file.size, bucket: 'local',
-      }).select().single();
+        const { data: asset, error: dbErr } = await supabase.from('media_assets').insert({
+          creator_id: creatorId, storage_path: `local:${storagePath}`,
+          public_url: publicUrl, original_name: file.name,
+          mime_type: file.type, size_bytes: file.size, bucket: 'local',
+        }).select().single();
 
-      if (dbErr) throw dbErr;
-      return NextResponse.json({ asset }, { status: 201 });
+        if (dbErr) throw dbErr;
+        return NextResponse.json({ asset }, { status: 201 });
+      }
+
+      return NextResponse.json({ error: 'UPLOAD_FAILED', message: 'Failed to upload to storage' }, { status: 502 });
     }
 
     const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${storagePath}`;

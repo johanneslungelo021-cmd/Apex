@@ -38,6 +38,10 @@ export async function POST(req: Request): Promise<Response> {
 
     const groqKey = process.env.GROQ_API_KEY;
     if (!groqKey) {
+      // FIX: Do not return mock AI output when GROQ_API_KEY is missing in non-dev environments.
+      if (process.env.NODE_ENV === 'production') {
+        return NextResponse.json({ error: 'AI_CONFIG_ERROR', message: 'AI service not configured' }, { status: 500 });
+      }
       // Return mock response for development
       return NextResponse.json({
         result: `[AI Generated ${type}: ${prompt.substring(0, 50)}...]`,
@@ -52,41 +56,56 @@ export async function POST(req: Request): Promise<Response> {
       type === 'content' || type === 'expand' ? `Length: ${length}` : '',
     ].filter(Boolean).join('\n\n');
 
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${groqKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile', // Use versatile for quality generation
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPTS[type] },
-          { role: 'user', content: userMessage || 'Generate content' },
-        ],
-        max_tokens: LENGTH_TOKENS[length] ?? 600,
-        temperature: 0.75,
-        stream: false,
-      }),
-    });
+    // FIX: Add a network timeout for the Groq request.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
-    if (!res.ok) {
-      const errText = await res.text();
-      log({ level: 'warn', service: SERVICE, message: `Groq returned ${res.status}`, requestId, errText });
-      return NextResponse.json({ error: 'AI_UNAVAILABLE', message: 'AI temporarily unavailable' }, { status: 502 });
-    }
-
-    const data = await res.json();
-    const raw = data.choices?.[0]?.message?.content ?? '{}';
-
-    // Parse JSON response from LLM
-    let parsed: { result?: string; alternatives?: string[] };
     try {
-      const jsonMatch = raw.match(/\{[\s\S]*\}/);
-      parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : { result: raw };
-    } catch {
-      parsed = { result: raw };
-    }
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${groqKey}`, 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile', // Use versatile for quality generation
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPTS[type] },
+            { role: 'user', content: userMessage || 'Generate content' },
+          ],
+          max_tokens: LENGTH_TOKENS[length] ?? 600,
+          temperature: 0.75,
+          stream: false,
+        }),
+      });
 
-    log({ level: 'info', service: SERVICE, message: `Generated ${type}`, requestId });
-    return NextResponse.json({ result: parsed.result ?? '', alternatives: parsed.alternatives ?? [] });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        const errText = await res.text();
+        log({ level: 'warn', service: SERVICE, message: `Groq returned ${res.status}`, requestId, errText });
+        return NextResponse.json({ error: 'AI_UNAVAILABLE', message: 'AI temporarily unavailable' }, { status: 502 });
+      }
+
+      const data = await res.json();
+      const raw = data.choices?.[0]?.message?.content ?? '{}';
+
+      // Parse JSON response from LLM
+      let parsed: { result?: string; alternatives?: string[] };
+      try {
+        const jsonMatch = raw.match(/\{[\s\S]*\}/);
+        parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : { result: raw };
+      } catch {
+        parsed = { result: raw };
+      }
+
+      log({ level: 'info', service: SERVICE, message: `Generated ${type}`, requestId });
+      return NextResponse.json({ result: parsed.result ?? '', alternatives: parsed.alternatives ?? [] });
+    } catch (fetchErr: any) {
+      if (fetchErr.name === 'AbortError') {
+        log({ level: 'error', service: SERVICE, message: 'AI generation timed out', requestId });
+        return NextResponse.json({ error: 'AI_TIMEOUT', message: 'AI generation timed out' }, { status: 504 });
+      }
+      throw fetchErr;
+    }
   } catch (err) {
     log({ level: 'error', service: SERVICE, message: 'AI generation failed', requestId, errMsg: String(err) });
     return NextResponse.json({ error: 'INTERNAL_ERROR' }, { status: 500 });
