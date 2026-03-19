@@ -150,11 +150,14 @@ export async function POST(request: Request): Promise<Response> {
     const platformFeePct = 0.05; // 5% platform fee
     const platformFeeZar = parseFloat((amountZar * platformFeePct).toFixed(2));
 
-    // Derive both `type` and `source_type` from a single normalised value so they
-    // are always consistent. Previously they used different fallback expressions
-    // which could produce contradictory values (e.g. type='subscription' but
-    // source_type='one_time') if metadata.source_type changed between the two reads.
-    const normalizedSource = typeof metadata.source_type === 'string' ? metadata.source_type : undefined;
+    // Derive both `type` and `source_type` from a single normalised value with an
+    // explicit default. Previously normalizedSource could be undefined, causing
+    // type to fall back via ternary ('subscription') while source_type fell back
+    // via nullish-coalescing ('standard_subscription') — logically consistent but
+    // the relationship was invisible. Now both fields derive from one variable.
+    const normalizedSource = typeof metadata.source_type === 'string'
+      ? metadata.source_type
+      : 'standard_subscription';
 
     const { error: dbError } = await supabaseAdmin.from('transactions').insert({
       creator_id: creatorId,
@@ -165,7 +168,7 @@ export async function POST(request: Request): Promise<Response> {
       external_id: reference, // UNIQUE constraint — idempotency key
       status: 'success',
       type: normalizedSource === 'one_time' ? 'one_time' : 'subscription',
-      source_type: normalizedSource ?? 'standard_subscription',
+      source_type: normalizedSource,
       community_impact: metadata.community_impact === true || metadata.community_impact === 'true',
       emotion_state: 'neutral',
       metadata: data, // Store full Paystack payload for audit

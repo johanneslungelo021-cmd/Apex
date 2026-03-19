@@ -189,8 +189,9 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const supabase = getSupabaseClient();
 
-    // Retrieve expected challenge
-    const { data: challengeRow } = await supabase
+    // Retrieve expected challenge — destructure error so a DB failure returns 500,
+    // not a misleading 400 CHALLENGE_EXPIRED. Mirrors verify/route.ts:106-115.
+    const { data: challengeRow, error: challengeRetrieveErr } = await supabase
       .from('webauthn_challenges')
       .select('id, challenge')
       .eq('email', session.email)
@@ -199,10 +200,20 @@ export async function POST(request: Request): Promise<Response> {
       .limit(1)
       .single();
 
-    if (!challengeRow) {
+    if (challengeRetrieveErr || !challengeRow) {
+      if (challengeRetrieveErr) {
+        log({
+          level: 'error',
+          service: SERVICE,
+          message: 'Challenge retrieval failed — DB error masked as 400 previously',
+          requestId,
+          userToken: hashForLog(session.userId),
+          dbCode: challengeRetrieveErr.code,
+        });
+      }
       return NextResponse.json(
         { error: 'CHALLENGE_EXPIRED', message: 'Challenge expired. Please retry.' },
-        { status: 400 },
+        { status: challengeRetrieveErr ? 500 : 400 },
       );
     }
 
