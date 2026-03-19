@@ -488,60 +488,140 @@ export async function POST(req: Request): Promise<Response> {
         ? 'https://api.moonshot.cn/v1/chat/completions'
         : 'https://api.groq.com/openai/v1/chat/completions';
 
-    // Create abort controller that responds to BOTH timeout AND client disconnect
-    const abortController = new AbortController();
+    // ── Upstream fetch with Groq 429 retry + model fallback ───────────────────
+    //
+    // Groq enforces per-minute token limits per model tier. When the simple
+    // model (llama-3.1-8b-instant) is rate-limited we:
+    //   1. Respect the Retry-After header (capped at 2 s for serverless budget)
+    //   2. Retry once on the same model
+    //   3. If still 429, promote to the versatile model (llama-3.3-70b-versatile)
+    //      which has a separate rate-limit bucket
+    //   4. If that also fails, return a user-friendly 429 (not a cryptic 502)
+    //
+    // This mirrors the Groq best-practice: "use a separate model as a fallback
+    // when a rate limit is hit rather than indefinitely retrying."
+    //
+    // MAX total added latency: ~2 s (Retry-After cap) + 1 retry fetch — acceptable
+    // inside a serverless timeout budget of 15 s.
+
+    const GROQ_FALLBACK_MODEL = 'llama-3.3-70b-versatile';
+    const MAX_RETRY_DELAY_MS = 2_000; // never block the serverless fn >2 s
+    const MAX_GROQ_RETRIES = 2;       // 1 same-model retry + 1 fallback-model attempt
+
+    /**
+     * Fire one upstream request with its own AbortController + timeout.
+     * Returns the raw Response (may be non-ok — caller checks status).
+     */
+    async function callUpstream(cfg: typeof tierConfig, ac: AbortController): Promise<Response> {
+      const endpoint = cfg.provider === 'perplexity'
+        ? 'https://api.perplexity.ai/chat/completions'
+        : cfg.provider === 'kimi'
+          ? 'https://api.moonshot.cn/v1/chat/completions'
+          : 'https://api.groq.com/openai/v1/chat/completions';
+      return fetch(endpoint, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: cfg.model,
+          messages: upstreamMessages,
+          max_tokens: cfg.maxTokens,
+          temperature: cfg.temperature,
+          stream: true,
+        }),
+        signal: ac.signal,
+      });
+    }
+
     const timeoutMs = tierConfig.provider === 'perplexity'
       ? PERPLEXITY_TIMEOUT_MS
       : tierConfig.provider === 'kimi'
         ? KIMI_TIMEOUT_MS
         : GROQ_TIMEOUT_MS;
-    const timeoutId = setTimeout(() => abortController.abort('timeout'), timeoutMs);
 
     let response: Response;
-    try {
-      response = await fetch(apiEndpoint, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: tierConfig.model,
-          messages: upstreamMessages,
-          max_tokens: tierConfig.maxTokens,
-          temperature: tierConfig.temperature,
-          stream: true,
-        }),
-        signal: abortController.signal,
-      });
-    } catch (err) {
+    let groqRetries = 0;
+    // Hoisted so the stream cancel() callback can abort the final controller
+    let abortController = new AbortController();
+
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      abortController = new AbortController();
+      const timeoutId = setTimeout(() => abortController.abort('timeout'), timeoutMs);
+
+      try {
+        response = await callUpstream(tierConfig, abortController);
+      } catch (err) {
+        clearTimeout(timeoutId);
+        const isTimeout = err instanceof Error && (err.name === 'AbortError' || err.message.includes('timeout'));
+        log({
+          level: 'warn', service: SERVICE, requestId,
+          message: isTimeout ? 'Upstream timeout' : 'Upstream fetch failed',
+          durationMs: Date.now() - startMs,
+          tier: tierConfig.tier, provider: tierConfig.provider,
+        });
+        agentQueryCounter.add(1, { status: isTimeout ? 'timeout' : 'error', tier: tierConfig.tier });
+        return NextResponse.json(
+          { error: 'UPSTREAM_ERROR', message: 'The AI engine took too long. Please try again.', requestId },
+          { status: 504, headers: { 'X-Request-Id': requestId } },
+        );
+      }
+
       clearTimeout(timeoutId);
-      const isTimeout = err instanceof Error && (err.name === 'AbortError' || err.message.includes('timeout'));
-      log({
-        level: 'warn',
-        service: SERVICE,
-        requestId,
-        message: isTimeout ? 'Upstream timeout' : 'Upstream fetch failed',
-        durationMs: Date.now() - startMs,
-        tier: tierConfig.tier,
-        provider: tierConfig.provider,
-      });
-      agentQueryCounter.add(1, { status: isTimeout ? 'timeout' : 'error', tier: tierConfig.tier });
-      return NextResponse.json(
-        { error: 'UPSTREAM_ERROR', message: 'The AI engine took too long. Please try again.', requestId },
-        { status: 504, headers: { 'X-Request-Id': requestId } },
-      );
-    }
 
-    clearTimeout(timeoutId);
+      // ── Happy path ──────────────────────────────────────────────────────────
+      if (response.ok) break;
 
-    if (!response.ok) {
+      // ── Groq 429 — rate limited ─────────────────────────────────────────────
+      if (response.status === 429 && tierConfig.provider === 'groq') {
+        groqRetries += 1;
+
+        // Parse Retry-After (Groq sends seconds as a float string or integer)
+        const retryAfterRaw = response.headers.get('retry-after') ?? response.headers.get('x-ratelimit-reset-requests');
+        const retryAfterMs = Math.min(
+          retryAfterRaw ? Math.ceil(parseFloat(retryAfterRaw) * 1000) : 1_000,
+          MAX_RETRY_DELAY_MS,
+        );
+
+        if (groqRetries === 1) {
+          // First 429: wait briefly and retry the same model
+          log({
+            level: 'warn', service: SERVICE, requestId,
+            message: `groq returned HTTP 429 — retrying ${tierConfig.model} after ${retryAfterMs}ms`,
+            tier: tierConfig.tier, model: tierConfig.model, retryAfterMs,
+          });
+          await new Promise<void>((r) => setTimeout(r, retryAfterMs));
+          continue; // retry same model
+        }
+
+        if (groqRetries === MAX_GROQ_RETRIES && tierConfig.model !== GROQ_FALLBACK_MODEL) {
+          // Second 429: promote to fallback model (separate rate-limit bucket)
+          log({
+            level: 'warn', service: SERVICE, requestId,
+            message: `groq still 429 after retry — escalating to fallback model ${GROQ_FALLBACK_MODEL}`,
+            tier: tierConfig.tier, originalModel: tierConfig.model,
+          });
+          tierConfig = { ...tierConfig, model: GROQ_FALLBACK_MODEL, maxTokens: 512 };
+          continue; // retry with fallback model
+        }
+
+        // All retries exhausted — return a proper 429, not a misleading 502
+        log({
+          level: 'warn', service: SERVICE, requestId,
+          message: 'groq 429 exhausted all retries — returning 429 to client',
+          tier: tierConfig.tier,
+        });
+        agentQueryCounter.add(1, { status: 'rate_limited', tier: tierConfig.tier });
+        return NextResponse.json(
+          { error: 'RATE_LIMITED', message: 'AI engine is busy — please try again in a moment.', requestId },
+          { status: 429, headers: { 'X-Request-Id': requestId, 'Retry-After': '5' } },
+        );
+      }
+
+      // ── Any other non-ok status ─────────────────────────────────────────────
       log({
-        level: 'warn',
-        service: SERVICE,
+        level: 'warn', service: SERVICE,
         message: `${tierConfig.provider} returned HTTP ${response.status}`,
-        requestId,
-        tier: tierConfig.tier,
+        requestId, tier: tierConfig.tier,
       });
       agentQueryCounter.add(1, { status: 'error', tier: tierConfig.tier });
       return NextResponse.json(
