@@ -482,11 +482,7 @@ export async function POST(req: Request): Promise<Response> {
       }
     }
 
-    const apiEndpoint = tierConfig.provider === 'perplexity'
-      ? 'https://api.perplexity.ai/chat/completions'
-      : tierConfig.provider === 'kimi'
-        ? 'https://api.moonshot.cn/v1/chat/completions'
-        : 'https://api.groq.com/openai/v1/chat/completions';
+
 
     // ── Upstream fetch with Groq 429 retry + model fallback ───────────────────
     //
@@ -543,7 +539,6 @@ export async function POST(req: Request): Promise<Response> {
     // Hoisted so the stream cancel() callback can abort the final controller
     let abortController = new AbortController();
 
-    // eslint-disable-next-line no-constant-condition
     while (true) {
       abortController = new AbortController();
       const timeoutId = setTimeout(() => abortController.abort('timeout'), timeoutMs);
