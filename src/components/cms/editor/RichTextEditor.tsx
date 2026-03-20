@@ -223,6 +223,7 @@ export function RichTextEditor({ content, onChange, onImageUpload, placeholder =
               document.getElementById('rte-image-upload')?.click();
             }
           }}>
+          {/* eslint-disable-next-line jsx-a11y/alt-text -- lucide SVG, not an <img> */}
           <Image className="h-4 w-4" aria-hidden="true" />
           <input
             id="rte-image-upload"

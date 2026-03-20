@@ -165,7 +165,6 @@ export default function ContentEditor() {
     clearTimeout(autoSaveRef.current);
     autoSaveRef.current = setTimeout(() => saveRef.current(true), 3000);
     return () => { if (autoSaveRef.current) clearTimeout(autoSaveRef.current); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dirtyTick]);
 
   // FIX: publish passes statusOverride — no stale post.status in payload
