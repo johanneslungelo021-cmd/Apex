@@ -114,7 +114,11 @@ export async function POST(req: Request): Promise<Response> {
     if (versionErr) {
       // Rollback the post if version insert fails — maintain atomicity
       log({ level: 'error', service: SERVICE, message: 'Version insert failed — rolling back post', requestId, errMsg: versionErr.message });
-      await supabase.from('content_posts').delete().eq('id', post.id);
+      const { error: rollbackErr } = await supabase.from('content_posts').delete().eq('id', post.id);
+      // FIX: log rollback failure — orphaned post is a data integrity issue
+      if (rollbackErr) {
+        log({ level: 'warn', service: SERVICE, requestId, message: 'Rollback delete also failed — orphaned post', postId: post.id, rollbackError: rollbackErr.message });
+      }
       throw versionErr;
     }
 

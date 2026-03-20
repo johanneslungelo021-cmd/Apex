@@ -5,6 +5,16 @@
 -- This file documents the schema for version control / CI migrations.
 -- ══════════════════════════════════════════════════════════════════════
 
+-- FIX: Ensure set_updated_at() function exists before trigger references it
+-- (Guard against missing function if migrations run out of order)
+CREATE OR REPLACE FUNCTION public.set_updated_at()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
 -- ── content_posts ────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.content_posts (
   id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),

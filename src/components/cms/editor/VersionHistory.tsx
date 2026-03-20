@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { History, RotateCcw, Clock, X } from 'lucide-react';
 // FIX: removed unused ChevronRight import
 
@@ -20,6 +20,17 @@ export function VersionHistory({ postId, currentVersion, onRollback, onClose }: 
   const [rolling, setRolling]   = useState<number | null>(null);
   // FIX: separate error state — "no versions" and "fetch failed" are different conditions
   const [fetchError, setFetchError] = useState<string | null>(null);
+  // FIX: ref for close button — focus on mount for keyboard users
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
+  // FIX: store last focused element to restore focus on close
+  const lastActiveRef = useRef<HTMLElement | null>(null);
+
+  // FIX: focus management — focus close button on open, restore on close
+  useEffect(() => {
+    lastActiveRef.current = document.activeElement as HTMLElement;
+    closeBtnRef.current?.focus();
+    return () => lastActiveRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     fetch(`/api/cms/posts/${postId}?versions=true`)
@@ -46,14 +57,18 @@ export function VersionHistory({ postId, currentVersion, onRollback, onClose }: 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="version-history-title"
       onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
           <div className="flex items-center gap-2">
-            <History className="h-5 w-5 text-blue-400" />
-            <h2 className="font-semibold text-white">Version History</h2>
+            <History className="h-5 w-5 text-blue-400" aria-hidden="true" />
+            <h2 id="version-history-title" className="font-semibold text-white">Version History</h2>
           </div>
-          <button onClick={onClose}
+          <button ref={closeBtnRef} onClick={onClose}
+            aria-label="Close version history"
             className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
             <X className="h-4 w-4" />
           </button>

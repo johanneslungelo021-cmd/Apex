@@ -7,7 +7,7 @@ import Placeholder from '@tiptap/extension-placeholder';
 import Underline from '@tiptap/extension-underline';
 import TextAlign from '@tiptap/extension-text-align';
 import CharacterCount from '@tiptap/extension-character-count';
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import {
   Bold, Italic, Underline as UnderlineIcon, Strikethrough,
   Heading1, Heading2, Heading3, List, ListOrdered, Quote,
@@ -75,7 +75,12 @@ export function RichTextEditor({ content, onChange, onImageUpload, placeholder =
       CharacterCount,  // FIX: registered so editor.storage.characterCount is available
     ],
     content,
-    onUpdate: ({ editor }) => onChange(editor.getHTML()),
+    onUpdate: ({ editor }) => {
+      // FIX: skip onChange if this update is from external setContent (not user edit)
+      if (!isExternalUpdate.current) {
+        onChange(editor.getHTML());
+      }
+    },
     editorProps: {
       attributes: {
         class: 'prose prose-invert prose-zinc max-w-none focus:outline-none px-8 py-6 min-h-[500px] text-zinc-100 leading-relaxed',
@@ -84,7 +89,10 @@ export function RichTextEditor({ content, onChange, onImageUpload, placeholder =
         if (!moved && event.dataTransfer?.files.length) {
           const file = event.dataTransfer.files[0];
           if (file.type.startsWith('image/') && onImageUpload) {
-            onImageUpload(file).then(url => editor?.chain().focus().setImage({ src: url }).run());
+            // FIX: catch drag-drop upload failures to avoid unhandled rejection
+            onImageUpload(file)
+              .then(url => editor?.chain().focus().setImage({ src: url }).run())
+              .catch(() => { /* silently ignore drag-drop upload errors */ });
             return true;
           }
         }
@@ -93,10 +101,18 @@ export function RichTextEditor({ content, onChange, onImageUpload, placeholder =
     },
   });
 
+  // FIX: track whether content change is from external update vs user edit
+  // setContent triggers onUpdate, so we guard the onChange callback
+  const isExternalUpdate = useRef(false);
+
   // FIX: editor in dep array to satisfy exhaustive-deps
   useEffect(() => {
     if (editor && content !== editor.getHTML()) {
+      // Mark as external update so onChange doesn't trigger dirty
+      isExternalUpdate.current = true;
       editor.commands.setContent(content);
+      // Reset flag after setContent completes
+      isExternalUpdate.current = false;
     }
   }, [content, editor]);
 

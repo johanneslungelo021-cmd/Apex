@@ -182,15 +182,17 @@ export async function DELETE(req: Request, ctx: Ctx): Promise<Response> {
     const creatorId = await getCreatorId(supabase, session.userId);
     if (!creatorId) return NextResponse.json({ error: 'CREATOR_NOT_FOUND' }, { status: 404 });
 
-    // Pre-check ownership — surfaces 404 before attempting delete
-    const { data: existing, error: checkErr } = await supabase.from('content_posts')
-      .select('id').eq('id', id).eq('creator_id', creatorId).maybeSingle();
-    if (checkErr) throw checkErr;
-    if (!existing) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
+    // FIX: Single atomic delete with creator_id filter — no TOCTOU gap
+    // Returns empty result if no rows matched (not found or not owner)
+    const { data, error, count } = await supabase.from('content_posts')
+      .delete()
+      .eq('id', id)
+      .eq('creator_id', creatorId)
+      .select('id')
+      .maybeSingle();
 
-    const { error } = await supabase.from('content_posts')
-      .delete().eq('id', id).eq('creator_id', creatorId);
     if (error) throw error;
+    if (!data) return NextResponse.json({ error: 'NOT_FOUND' }, { status: 404 });
 
     log({ level: 'info', service: SERVICE, message: 'Post deleted', requestId, postId: id });
     return NextResponse.json({ success: true });

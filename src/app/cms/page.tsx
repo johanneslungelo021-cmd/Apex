@@ -30,18 +30,23 @@ export default function CMSPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [page, setPage]         = useState(1);
   const [deleting, setDeleting] = useState<string | null>(null);
+  // FIX: track fetch errors separately from "no posts" state
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const loadPosts = useCallback(async () => {
     setLoading(true);
+    setFetchError(null);  // FIX: clear previous error on new fetch
     try {
       const params = new URLSearchParams({ page: String(page), limit: '20' });
       if (statusFilter !== 'all') params.set('status', statusFilter);
       const res = await fetch(`/api/cms/posts?${params}`);
-      if (res.ok) {
-        const data = await res.json();
-        setPosts(data.posts ?? []);
-        setTotal(data.total ?? 0);
-      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);  // FIX: check res.ok before parsing
+      const data = await res.json();
+      setPosts(data.posts ?? []);
+      setTotal(data.total ?? 0);
+    } catch (err) {
+      // FIX: don't collapse failures into empty state — show error UI
+      setFetchError(String(err));
     } finally {
       setLoading(false);
     }
@@ -144,6 +149,17 @@ export default function CMSPage() {
             <div className="flex items-center justify-center py-20">
               <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
             </div>
+          ) : fetchError ? (
+            // FIX: distinct error UI — not collapsed into "no posts" state
+            <div className="flex flex-col items-center justify-center py-20 text-zinc-500">
+              <FileText className="h-12 w-12 mb-4 opacity-40 text-red-400" />
+              <p className="text-lg font-medium text-red-400">Failed to load posts</p>
+              <p className="text-sm mt-1 text-zinc-600">{fetchError}</p>
+              <button onClick={() => loadPosts()}
+                className="mt-4 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm text-white transition-colors">
+                Retry
+              </button>
+            </div>
           ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-zinc-500">
               <FileText className="h-12 w-12 mb-4 opacity-40" />
@@ -232,13 +248,16 @@ export default function CMSPage() {
                         <div className="text-xs text-zinc-600">v{post.version}</div>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {/* FIX: actions always visible for keyboard users; opacity-100 on focus-within */}
+                        <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                           <Link href={`/cms/${post.id}`}
-                            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors">
+                            aria-label={`Edit "${post.title || 'Untitled'}"`}
+                            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500">
                             <Edit2 className="h-4 w-4" />
                           </Link>
                           <button onClick={() => deletePost(post.id)} disabled={deleting === post.id}
-                            className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-900/20 transition-colors">
+                            aria-label={`Delete "${post.title || 'Untitled'}"`}
+                            className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-900/20 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500">
                             <Trash2 className="h-4 w-4" />
                           </button>
                         </div>

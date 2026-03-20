@@ -31,12 +31,13 @@ function encodeStoragePath(path: string): string {
 }
 
 // FIX: allowlist maps MIME → safe alphanumeric ext (no user filename trust)
+// FIX: SVG removed — allows embedded JavaScript (stored XSS risk)
 const MIME_TO_EXT: Record<string, string> = {
   'image/jpeg':       'jpg',
   'image/png':        'png',
   'image/webp':       'webp',
   'image/gif':        'gif',
-  'image/svg+xml':    'svg',
+  // 'image/svg+xml': REMOVED — stored XSS risk via embedded <script> tags
   'video/mp4':        'mp4',
   'video/webm':       'webm',
   'application/pdf':  'pdf',

@@ -168,9 +168,16 @@ export default function ContentEditor() {
   }, [dirtyTick]);
 
   // FIX: publish passes statusOverride — no stale post.status in payload
+  // FIX: rollback optimistic status on save failure
   const publish = async () => {
+    const prevStatus = post.status;
     update({ status: 'published' }); // optimistic UI update
-    await save(false, 'published');   // payload uses 'published' directly
+    try {
+      await save(false, 'published');   // payload uses 'published' directly
+    } catch {
+      // FIX: rollback optimistic update on failure
+      update({ status: prevStatus });
+    }
   };
 
   const uploadCover = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -317,7 +324,9 @@ export default function ContentEditor() {
                 </button>
               </div>
             ) : (
-              <label className="flex items-center justify-center w-full h-32 mb-6 border-2 border-dashed border-zinc-800 rounded-2xl cursor-pointer hover:border-zinc-600 transition-colors group">
+              <label className="flex items-center justify-center w-full h-32 mb-6 border-2 border-dashed border-zinc-800 rounded-2xl cursor-pointer hover:border-zinc-600 transition-colors group"
+                tabIndex={0}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); document.getElementById<HTMLInputElement>('cover-upload')?.click(); } }}>
                 <div className="text-center">
                   {uploadingCover
                     ? <Loader2 className="h-6 w-6 animate-spin text-zinc-400 mx-auto mb-2" />
@@ -326,7 +335,8 @@ export default function ContentEditor() {
                     {uploadingCover ? 'Uploading...' : 'Add cover image'}
                   </span>
                 </div>
-                <input type="file" accept="image/*" className="hidden" onChange={uploadCover} />
+                {/* FIX: sr-only keeps input in tab order via associated label */}
+                <input id="cover-upload" type="file" accept="image/*" className="sr-only" onChange={uploadCover} />
               </label>
             )}
 
@@ -486,10 +496,13 @@ export default function ContentEditor() {
                 </div>
                 <div className="pt-2">
                   <label className="text-xs text-zinc-500 uppercase tracking-wide block mb-2">Upload to Library</label>
-                  <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-zinc-700 rounded-xl cursor-pointer hover:border-zinc-500 transition-colors">
+                  <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-zinc-700 rounded-xl cursor-pointer hover:border-zinc-500 transition-colors"
+                    tabIndex={0}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); document.getElementById<HTMLInputElement>('library-upload')?.click(); } }}>
                     <Upload className="h-5 w-5 text-zinc-600 mb-1" />
                     <span className="text-xs text-zinc-600">Click to upload</span>
-                    <input type="file" accept="image/*,video/*,application/pdf" className="hidden"
+                    {/* FIX: sr-only keeps input in tab order via associated label */}
+                    <input id="library-upload" type="file" accept="image/*,video/*,application/pdf" className="sr-only"
                       onChange={async e => {
                         const file = e.target.files?.[0]; if (!file) return;
                         try {

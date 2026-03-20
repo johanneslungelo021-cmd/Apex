@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Sparkles, Loader2, Copy, Check, X, Type, AlignLeft, Wand2, RefreshCw, Hash, Tag } from 'lucide-react';
 
 interface AIPanelProps {
@@ -38,6 +38,14 @@ export function AIPanel({ open, onClose, title, content, onApply }: AIPanelProps
   const [copied, setCopied]             = useState(false);
   // FIX: AbortController ref — abort in-flight request when action switches or new generate fires
   const abortRef = useRef<AbortController | null>(null);
+
+  // FIX: abort on close — cancel active generation when panel is dismissed
+  useEffect(() => {
+    if (!open) {
+      abortRef.current?.abort();
+      abortRef.current = null;
+    }
+  }, [open]);
 
   /** FIX: switching action aborts in-flight request + clears stale state */
   const switchAction = (id: AIAction) => {
