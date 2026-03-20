@@ -111,3 +111,21 @@ CREATE POLICY "disbursement_log_auditor_read" ON public.disbursement_log
         AND (u.raw_user_meta_data->>'role')::text = 'auditor'
     )
   );
+
+-- ─── FX Rate Cache ────────────────────────────────────────────────────────────
+-- 1-hour TTL cache for SARB exchange rates used in cross-border transactions
+
+CREATE TABLE IF NOT EXISTS public.fx_rate_cache (
+  currency_code  TEXT        PRIMARY KEY,     -- e.g. 'USD', 'EUR', 'KES'
+  rate_to_zar    NUMERIC(18,6) NOT NULL,       -- 1 unit of currency = N ZAR
+  rate_source    TEXT        NOT NULL DEFAULT 'live'
+                              CHECK (rate_source IN ('live','fallback')),
+  expires_at     TIMESTAMPTZ NOT NULL,
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_fx_cache_expires ON public.fx_rate_cache(expires_at);
+
+ALTER TABLE public.fx_rate_cache ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "fx_cache_service_all" ON public.fx_rate_cache
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
