@@ -326,7 +326,7 @@ export default function ContentEditor() {
             ) : (
               <label className="flex items-center justify-center w-full h-32 mb-6 border-2 border-dashed border-zinc-800 rounded-2xl cursor-pointer hover:border-zinc-600 transition-colors group"
                 tabIndex={0}
-                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); document.getElementById<HTMLInputElement>('cover-upload')?.click(); } }}>
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (document.getElementById('cover-upload') as HTMLInputElement | null)?.click(); } }}>
                 <div className="text-center">
                   {uploadingCover
                     ? <Loader2 className="h-6 w-6 animate-spin text-zinc-400 mx-auto mb-2" />
@@ -498,7 +498,7 @@ export default function ContentEditor() {
                   <label className="text-xs text-zinc-500 uppercase tracking-wide block mb-2">Upload to Library</label>
                   <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-zinc-700 rounded-xl cursor-pointer hover:border-zinc-500 transition-colors"
                     tabIndex={0}
-                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); document.getElementById<HTMLInputElement>('library-upload')?.click(); } }}>
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (document.getElementById('library-upload') as HTMLInputElement | null)?.click(); } }}>
                     <Upload className="h-5 w-5 text-zinc-600 mb-1" />
                     <span className="text-xs text-zinc-600">Click to upload</span>
                     {/* FIX: sr-only keeps input in tab order via associated label */}

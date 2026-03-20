@@ -184,7 +184,7 @@ export async function DELETE(req: Request, ctx: Ctx): Promise<Response> {
 
     // FIX: Single atomic delete with creator_id filter — no TOCTOU gap
     // Returns empty result if no rows matched (not found or not owner)
-    const { data, error, count } = await supabase.from('content_posts')
+    const { data, error } = await supabase.from('content_posts')
       .delete()
       .eq('id', id)
       .eq('creator_id', creatorId)
