@@ -38,6 +38,11 @@ jobs:
       - name: Install Claude Code
         run: curl -fsSL https://claude.ai/install.sh | bash || true
 
+      - name: Configure git
+        run: |
+          git config user.email "dimakatsomoleli@gmail.com"
+          git config user.name "Lungelo Luda (Qwen)"
+
       - name: Run Qwen review and fix
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -48,7 +53,7 @@ jobs:
           PR_COMMENTS=$(gh api repos/${{ github.repository }}/pulls/52/reviews \
             --jq '[.[] | select(.user.login | contains("coderabbitai") or contains("devin")) | .body] | join("\n---\n")' 2>/dev/null || echo "")
 
-          claude --model qwen3.5 --dangerously-skip-permissions -p "
+          ~/.local/bin/claude --model qwen3.5 --dangerously-skip-permissions -p "
           You are reviewing PR #52 on branch MPP-config of the johanneslungelo021-cmd/Apex repo.
 
           Recent CodeRabbit/Devin review comments:
@@ -62,7 +67,86 @@ jobs:
           If tests pass, commit with: git add -A && git commit -m 'fix(qwen): address remaining review comments' && git push origin MPP-config
           " || echo "Claude Code not available — manual review needed"
 
+  kimi-visual-review:
+    needs: [qwen-review]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: MPP-config
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Ollama
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama serve &
+          sleep 5
+
+      - name: Pull Kimi K2 model
+        run: |
+          ollama pull kimi-k2.5:cloud || ollama pull kimi-k2:latest || ollama pull kimi2:latest || echo "Kimi K2 model not available in Ollama registry"
+          ollama list
+
+      - name: Install Claude Code
+        run: curl -fsSL https://claude.ai/install.sh | bash || true
+
       - name: Configure git
         run: |
           git config user.email "dimakatsomoleli@gmail.com"
-          git config user.name "Lungelo Luda (Qwen)"
+          git config user.name "Lungelo Luda (Kimi)"
+
+      - name: Run Kimi K2 visual review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_AUTH_TOKEN: ollama
+          ANTHROPIC_BASE_URL: http://localhost:11434
+          ANTHROPIC_API_KEY: ""
+        run: |
+          PR_COMMENTS=$(gh api repos/${{ github.repository }}/pulls/52/reviews \
+            --jq '[.[] | select(.user.login | contains("coderabbitai") or contains("devin")) | .body] | join("\n---\n")' 2>/dev/null || echo "")
+
+          KIMI_MODEL=$(ollama list 2>/dev/null | grep -E "kimi" | awk '{print $1}' | head -1 || echo "")
+
+          if [ -z "$KIMI_MODEL" ]; then
+            echo "No Kimi K2 model available — skipping visual review"
+            exit 0
+          fi
+
+          ~/.local/bin/claude --model "$KIMI_MODEL" --dangerously-skip-permissions -p "
+          You are Kimi K2, reviewing the VISUAL and FRONTEND components of PR #52 on branch MPP-config of johanneslungelo021-cmd/Apex.
+
+          Focus ONLY on these visual/frontend files:
+          - src/components/sentient/*.tsx (CinematicPortalCard, EmotionalGrid, EmotionalSwarm, MagneticReticle, ReducedMotionGate, SensoryControls, SentientCanvasScene)
+          - src/styles/sentient.css
+          - src/hooks/useEmotionEngine.tsx
+          - src/hooks/useMultiSensory.ts
+          - src/hooks/useMagneticCursor.ts
+          - src/hooks/useSensoryPreferences.ts
+
+          Recent review comments that may affect these files:
+          $PR_COMMENTS
+
+          For each file:
+          1. Read the file
+          2. Check for TypeScript errors
+          3. Check for missing 'use client' directives
+          4. Check for broken/missing imports
+          5. Verify accessibility (WCAG): aria labels, keyboard nav, reduced motion support
+          6. Check animation performance (no layout-thrashing, use transform/opacity)
+          7. Verify EmotionState types match useEmotionEngine.tsx definitions
+
+          Run: npm ci && npx tsc --noEmit
+
+          Fix any issues found. If fixes made:
+          git add -A && git commit -m 'fix(kimi): visual component review — accessibility + type safety' && git push origin MPP-config
+
+          If nothing to fix, report: All visual components look correct.
+          " || echo "Kimi K2 review failed — skipping"
