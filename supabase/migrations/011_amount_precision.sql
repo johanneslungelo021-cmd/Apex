@@ -1,12 +1,18 @@
 -- Migration 011: Increase monetary precision for sub-cent MPP micro-payments
--- Widens both table columns AND RPC function parameters to NUMERIC(18,6)
 
--- 1. Widen table columns
+-- Step 1: Drop all overloaded versions of insert_transaction_serializable
+DROP FUNCTION IF EXISTS public.insert_transaction_serializable(uuid,uuid,numeric,numeric,text,text,text,text,text,text,boolean,text,boolean,text,text,text,text,jsonb);
+DROP FUNCTION IF EXISTS public.insert_transaction_serializable(uuid,uuid,numeric,numeric,text,text,text,text,text,text,boolean,text,boolean,text,text,text,text,jsonb,text,text,text,text,numeric,uuid);
+DROP FUNCTION IF EXISTS public.insert_transaction_serializable(uuid,uuid,numeric,numeric,text,text,text,text,text,text,boolean,text,boolean,text,text,text,text,jsonb,text,text,text,text,text,integer,text,numeric);
+
+-- Step 2: Drop the existing check constraint and widen column
+ALTER TABLE public.transactions DROP CONSTRAINT IF EXISTS transactions_amount_zar_check;
 ALTER TABLE public.transactions
   ALTER COLUMN amount_zar       TYPE NUMERIC(18,6),
   ALTER COLUMN platform_fee_zar TYPE NUMERIC(18,6);
+ALTER TABLE public.transactions ADD CONSTRAINT transactions_amount_zar_check CHECK (amount_zar > 0::numeric);
 
--- 2. Recreate RPC function with matching NUMERIC(18,6) parameter precision
+-- Step 3: Recreate RPC function with NUMERIC(18,6)
 CREATE OR REPLACE FUNCTION public.insert_transaction_serializable(
   p_creator_id UUID, p_customer_id UUID, p_amount_zar NUMERIC(18,6),
   p_platform_fee_zar NUMERIC(18,6), p_gateway TEXT, p_gateway_ref TEXT,

@@ -1,0 +1,68 @@
+name: Qwen Review Loop
+on:
+  push:
+    branches: [MPP-config]
+  workflow_dispatch:
+
+concurrency:
+  group: qwen-review-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qwen-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: MPP-config
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Ollama
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama serve &
+          sleep 5
+
+      - name: Pull Qwen model
+        run: |
+          ollama pull qwen3.5 || ollama pull qwen3.5:cloud || true
+          ollama list
+
+      - name: Install Claude Code
+        run: curl -fsSL https://claude.ai/install.sh | bash || true
+
+      - name: Run Qwen review and fix
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_AUTH_TOKEN: ollama
+          ANTHROPIC_BASE_URL: http://localhost:11434
+          ANTHROPIC_API_KEY: ""
+        run: |
+          PR_COMMENTS=$(gh api repos/${{ github.repository }}/pulls/52/reviews \
+            --jq '[.[] | select(.user.login | contains("coderabbitai") or contains("devin")) | .body] | join("\n---\n")' 2>/dev/null || echo "")
+
+          claude --model qwen3.5 --yes -p "
+          You are reviewing PR #52 on branch MPP-config of the johanneslungelo021-cmd/Apex repo.
+
+          Recent CodeRabbit/Devin review comments:
+          $PR_COMMENTS
+
+          Check each file mentioned in the reviews. Fix any remaining issues.
+          Focus on: mpp-server.ts, analytics/route.ts, treasury/route.ts, tempo-chain.ts, tests/phase1-mpp-real.test.ts
+
+          After fixing, run: npm ci && npx tsc --noEmit && npm run test:ci
+
+          If tests pass, commit with: git add -A && git commit -m 'fix(qwen): address remaining review comments' && git push origin MPP-config
+          " || echo "Claude Code not available — manual review needed"
+
+      - name: Configure git
+        run: |
+          git config user.email "dimakatsomoleli@gmail.com"
+          git config user.name "Lungelo Luda (Qwen)"
