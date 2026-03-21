@@ -1,16 +1,16 @@
 name: Self-Annealing Meta-Agent
-# APEX Sentinel v3 — Autonomous CI failure analysis + T3 escalation
-# DeepSeek V3.2 analyzes failures. GLM-5 executes safe auto-fixes.
-# T3 escalation posts to PR if fix requires human approval.
-on:
+'on':
   workflow_run:
-    workflows: ["CI", "Qwen Review Loop", "Byzantine Consensus Gate"]
-    types: [completed]
-    branches: [MPP-config]
-
+    workflows:
+    - CI
+    - Qwen Review Loop
+    - Byzantine Consensus Gate
+    types:
+    - completed
+    branches:
+    - MPP-config
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 jobs:
   analyze-and-heal:
     if: ${{ github.event.workflow_run.conclusion == 'failure' }}
@@ -20,240 +20,50 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - name: Checkout MPP-config
-        uses: actions/checkout@v4
-        with:
-          ref: MPP-config
-          fetch-depth: 5
-          token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Checkout MPP-config
+      uses: actions/checkout@v4
+      with:
+        ref: MPP-config
+        fetch-depth: 5
+        token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Collect failure context
+      run: 'echo ''Failed workflow: ${{ github.event.workflow_run.name }}'' > /tmp/ctx.txt
 
-      - name: Collect failure context
-        id: context
-        run: |
-          echo "=== Failed workflow: ${{ github.event.workflow_run.name }} ===" > /tmp/failure_context.txt
-          echo "Conclusion: ${{ github.event.workflow_run.conclusion }}" >> /tmp/failure_context.txt
-          echo "Run ID: ${{ github.event.workflow_run.id }}" >> /tmp/failure_context.txt
-          echo "" >> /tmp/failure_context.txt
-          echo "=== Recent commits ===" >> /tmp/failure_context.txt
-          git log --oneline -5 >> /tmp/failure_context.txt
-          echo "" >> /tmp/failure_context.txt
-          echo "=== Files changed in last commit ===" >> /tmp/failure_context.txt
-          git diff HEAD~1 --stat >> /tmp/failure_context.txt
-          echo "" >> /tmp/failure_context.txt
-          echo "=== Last commit diff (first 200 lines) ===" >> /tmp/failure_context.txt
-          git diff HEAD~1 -- '*.ts' '*.yml' | head -200 >> /tmp/failure_context.txt
-          cat /tmp/failure_context.txt
+        echo ''Run ID: ${{ github.event.workflow_run.id }}'' >> /tmp/ctx.txt
 
-      - name: DeepSeek V3.2 — Failure analysis (R1-style deep reasoning)
-        id: analyze
-        env:
-          OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
-        run: |
-          python3 - <<'PYEOF'
-import os, json, urllib.request, sys, re
+        git log --oneline -5 >> /tmp/ctx.txt
 
-context = open('/tmp/failure_context.txt').read()[:4000]
-api_key = os.environ['OLLAMA_API_KEY']
+        git diff HEAD~1 --stat >> /tmp/ctx.txt
 
-prompt = f"""You are DeepSeek V3.2 operating in R1 deep-reasoning mode as the APEX Sentinel Self-Annealing Meta-Agent.
+        git diff HEAD~1 -- ''*.ts'' ''*.yml'' | head -200 >> /tmp/ctx.txt
 
-A CI workflow named "{os.environ.get('WORKFLOW_NAME', 'unknown')}" just failed.
-
-Analyze the failure context and determine:
-1. What caused the failure?
-2. Is this auto-fixable without human review?
-3. What exact fix should be applied?
-
-STRICT AUTO-FIX RULES — only auto_fixable=true if ALL of these are met:
-- Fix is purely mechanical (stale comment, typo, test env var, import path)
-- Does NOT touch: financial logic, security code, migrations, auth, payment flows
-- Confidence must be > 0.85
-
-Respond with ONLY valid JSON (no markdown):
-{{
-  "auto_fixable": true or false,
-  "confidence": 0.0-1.0,
-  "root_cause": "one sentence",
-  "fix_description": "exact fix to apply or empty string if not auto_fixable",
-  "files_to_change": ["list of files"] or [],
-  "escalate_reason": "why human is needed or empty string if auto_fixable"
-}}
-
-Failure context:
-{context}
-"""
-
-payload = json.dumps({
-    "model":   "deepseek-v3.2",
-    "prompt":  prompt,
-    "stream":  False,
-    "options": {"temperature": 0.1, "num_predict": 600},
-}).encode()
-
-req = urllib.request.Request(
-    "https://api.ollama.com/api/generate",
-    data=payload,
-    headers={
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type":  "application/json",
-    }
-)
-
-try:
-    with urllib.request.urlopen(req, timeout=180) as resp:
-        data = json.load(resp)
-    raw = data.get("response", "").strip()
-    raw = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL).strip()
-
-    m = re.search(r'\{.*\}', raw, re.DOTALL)
-    result = json.loads(m.group() if m else raw)
-
-except Exception as e:
-    print(f"DeepSeek analysis failed: {e}", file=sys.stderr)
-    result = {
-        "auto_fixable": False,
-        "confidence": 0.0,
-        "root_cause": f"Analysis agent failed: {e}",
-        "fix_description": "",
-        "files_to_change": [],
-        "escalate_reason": f"DeepSeek V3.2 agent could not analyze the failure: {e}",
-    }
-
-with open('/tmp/analysis.json', 'w') as f:
-    json.dump(result, f, indent=2)
-
-# Write to GITHUB_OUTPUT
-with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
-    out.write(f"AUTO_FIXABLE={str(result['auto_fixable']).lower()}\n")
-    out.write(f"CONFIDENCE={result['confidence']}\n")
-    out.write(f"ROOT_CAUSE={result['root_cause']}\n")
-    out.write(f"ESCALATE_REASON={result.get('escalate_reason', '')}\n")
-
-print(json.dumps(result, indent=2))
-PYEOF
-        env:
-          WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
-
-      - name: GLM-5 auto-fix (only for low-risk auto-fixable failures)
-        if: steps.analyze.outputs.AUTO_FIXABLE == 'true'
-        env:
-          OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
-          GIT_AUTHOR_NAME: "APEX Sentinel"
-          GIT_AUTHOR_EMAIL: "sentinel@apex-vaal.ai"
-          GIT_COMMITTER_NAME: "APEX Sentinel"
-          GIT_COMMITTER_EMAIL: "sentinel@apex-vaal.ai"
-        run: |
-          ANALYSIS=$(cat /tmp/analysis.json)
-
-          python3 - <<'PYEOF'
-import os, json, urllib.request, sys, re
-
-analysis = json.load(open('/tmp/analysis.json'))
-api_key  = os.environ['OLLAMA_API_KEY']
-context  = open('/tmp/failure_context.txt').read()[:2000]
-
-prompt = f"""You are GLM-5, an autonomous execution agent for APEX Sentinel.
-
-Your task: apply this specific safe fix to the codebase.
-
-Fix description: {analysis['fix_description']}
-Files to change: {analysis['files_to_change']}
-Root cause: {analysis['root_cause']}
-
-Context:
-{context}
-
-Respond with ONLY a valid shell script (no markdown, no explanation) that:
-1. Edits the necessary files using sed/python/echo to apply the fix
-2. Does NOT use git commands
-3. Is completely safe to execute
-4. Handles file-not-found gracefully
-
-If the fix cannot be safely expressed as a script, respond with exactly: SKIP
-"""
-
-payload = json.dumps({
-    "model":   "glm-5",
-    "prompt":  prompt,
-    "stream":  False,
-    "options": {"temperature": 0.05, "num_predict": 400},
-}).encode()
-
-req = urllib.request.Request(
-    "https://api.ollama.com/api/generate",
-    data=payload,
-    headers={
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type":  "application/json",
-    }
-)
-
-try:
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        data = json.load(resp)
-    script = data.get("response", "SKIP").strip()
-    script = re.sub(r'<think>.*?</think>', '', script, flags=re.DOTALL).strip()
-    # Strip markdown code fences
-    script = re.sub(r'^```(?:bash|sh)?\n?', '', script).rstrip('`').strip()
-except Exception as e:
-    print(f"GLM-5 failed: {e}", file=sys.stderr)
-    script = "SKIP"
-
-with open('/tmp/glm_fix.sh', 'w') as f:
-    f.write(script)
-
-print(f"GLM-5 script (first 200 chars):\n{script[:200]}")
-PYEOF
-
-          SCRIPT=$(cat /tmp/glm_fix.sh)
-          if [ "$SCRIPT" = "SKIP" ] || [ -z "$SCRIPT" ]; then
-            echo "GLM-5 determined fix cannot be safely automated — skipping"
-            exit 0
-          fi
-
-          echo "Executing GLM-5 fix script..."
-          bash /tmp/glm_fix.sh
-
-          # Commit if there are changes
-          git add -A
-          if git diff --cached --quiet; then
-            echo "No file changes after fix script — nothing to commit"
-          else
-            git commit -m "fix(sentinel): self-annealing auto-fix — ${{ steps.analyze.outputs.ROOT_CAUSE }}"
-            git push origin MPP-config
-            echo "Self-annealing fix committed and pushed ✅"
-          fi
-
-      - name: T3 escalation — post HITL comment if human needed
-        if: steps.analyze.outputs.AUTO_FIXABLE == 'false'
-        uses: actions/github-script@v7
-        env:
-          ROOT_CAUSE: ${{ steps.analyze.outputs.ROOT_CAUSE }}
-          ESCALATE_REASON: ${{ steps.analyze.outputs.ESCALATE_REASON }}
-          CONFIDENCE: ${{ steps.analyze.outputs.CONFIDENCE }}
-          WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
-        with:
-          script: |
-            const rootCause     = process.env.ROOT_CAUSE || 'Unknown';
-            const escalateReason = process.env.ESCALATE_REASON || 'Analysis inconclusive';
-            const confidence    = process.env.CONFIDENCE || '0';
-            const workflowName  = process.env.WORKFLOW_NAME || 'CI';
-
-            await github.rest.issues.createComment({
-              owner:        context.repo.owner,
-              repo:         context.repo.repo,
-              issue_number: 52,
-              body: `## 🔴 Self-Annealing Meta-Agent — T3 Escalation Required
-
-**Workflow failed:** \`${workflowName}\`
-
-**Root cause:** ${rootCause}
-
-**Why human review is needed:** ${escalateReason}
-
-**DeepSeek confidence:** ${(parseFloat(confidence) * 100).toFixed(0)}%
-
----
-*APEX Sentinel v3 · DeepSeek V3.2 analysis · T3 Human Approval Required*
-*@johanneslungelo021-cmd please review and fix manually*`,
-            });
+        '
+    - name: DeepSeek V3.2 failure analysis
+      id: analyze
+      env:
+        OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+        WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+      run: python3 .github/scripts/ollama_deepseek_analyze.py
+    - name: GLM-5 auto-fix
+      if: steps.analyze.outputs.AUTO_FIXABLE == 'true'
+      env:
+        OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+        GIT_AUTHOR_NAME: APEX Sentinel
+        GIT_AUTHOR_EMAIL: sentinel@apex-vaal.ai
+        GIT_COMMITTER_NAME: APEX Sentinel
+        GIT_COMMITTER_EMAIL: sentinel@apex-vaal.ai
+      run: "python3 .github/scripts/ollama_glm_fix.py\nSCRIPT=$(cat /tmp/glm_fix.sh)\nif [ \"$SCRIPT\" = 'SKIP' ] || [ -z \"$SCRIPT\" ]; then echo 'No auto-fix applied.'; exit 0; fi\nbash /tmp/glm_fix.sh\n\
+        git add -A\nif git diff --cached --quiet; then echo 'No changes.'; else\n  git commit -m 'fix(sentinel): auto-fix by GLM-5 - ${{ steps.analyze.outputs.ROOT_CAUSE }}'\n  git push origin MPP-config\n\
+        fi\n"
+    - name: T3 escalation comment
+      if: steps.analyze.outputs.AUTO_FIXABLE == 'false'
+      uses: actions/github-script@v7
+      env:
+        ROOT_CAUSE: ${{ steps.analyze.outputs.ROOT_CAUSE }}
+        ESCALATE_REASON: ${{ steps.analyze.outputs.ESCALATE_REASON }}
+        CONFIDENCE: ${{ steps.analyze.outputs.CONFIDENCE }}
+        WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+      with:
+        script: await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:52,body:`## T3 Escalation - Human Review Required\n\n**Workflow:** \`${process.env.WORKFLOW_NAME}\`\n**Root
+          cause:** ${process.env.ROOT_CAUSE}\n**Why human needed:** ${process.env.ESCALATE_REASON}\n**Confidence:** ${(parseFloat(process.env.CONFIDENCE||'0')*100).toFixed(0)}%\n\n*APEX Sentinel v3 - DeepSeek
+          V3.2 - T3 HITL Required - @johanneslungelo021-cmd*`});

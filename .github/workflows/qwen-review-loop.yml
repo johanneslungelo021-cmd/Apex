@@ -1,224 +1,69 @@
 name: Qwen Review Loop
-# APEX Sentinel v3 — Automated code review on every MPP-config push
-# Agent assignment:
-#   qwen-review    → Qwen3.5:397b  (security + code quality)
-#   kimi-visual    → Kimi-K2.5     (financial precision + frontend)
-#   deepseek-plan  → deepseek-v3.2 (architectural planning, triggers after commit)
-on:
+'on':
   push:
-    branches: [MPP-config]
-  workflow_dispatch:
-
+    branches:
+    - MPP-config
+  workflow_dispatch: null
 env:
-  OLLAMA_BASE: https://api.ollama.com/api/generate
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 concurrency:
   group: qwen-review-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
   qwen-review:
     name: Qwen3.5 Code Review
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: MPP-config
-          fetch-depth: 2
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Get diff (last commit only)
-        id: diff
-        run: |
-          git diff HEAD~1 -- '*.ts' '*.tsx' '*.sql' '*.yml' | head -500 > /tmp/diff.txt
-          echo "Lines: $(wc -l < /tmp/diff.txt)"
-
-      - name: Qwen3.5 review via Ollama
-        id: review
-        env:
-          OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
-        run: |
-          python3 - <<'PYEOF'
-import os, json, urllib.request, sys, re
-
-diff    = open('/tmp/diff.txt').read()[:4000]
-api_key = os.environ['OLLAMA_API_KEY']
-
-prompt = f"""You are Qwen3.5 — security-focused code reviewer for the Apex MPP financial platform.
-
-Review this diff for:
-1. Auth bypasses or missing RLS policies
-2. Exposed secrets or API keys in code
-3. Injection vulnerabilities (SQL, command, template)
-4. Financial precision issues (rounding, truncation)
-5. Missing error handling on payment flows
-6. TypeScript type safety issues
-
-Respond in markdown. Start with a clear verdict line:
-**VERDICT: APPROVE** or **VERDICT: REQUEST CHANGES**
-
-Then list findings by severity: 🔴 Critical | 🟠 Major | 🟡 Minor
-
-Diff:
-{diff}
-"""
-
-payload = json.dumps({
-    "model":   "qwen3.5:397b",
-    "prompt":  prompt,
-    "stream":  False,
-    "options": {"temperature": 0.2, "num_predict": 800},
-}).encode()
-
-req = urllib.request.Request(
-    "https://api.ollama.com/api/generate",
-    data=payload,
-    headers={
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type":  "application/json",
-    }
-)
-
-try:
-    with urllib.request.urlopen(req, timeout=180) as resp:
-        data = json.load(resp)
-    review = data.get("response", "").strip()
-    # Strip <think> blocks (Qwen sometimes emits these)
-    review = re.sub(r'<think>.*?</think>', '', review, flags=re.DOTALL).strip()
-    if not review:
-        review = "Qwen review returned empty response."
-except Exception as e:
-    review = f"⚠️ Qwen agent failed: {e}"
-
-with open('/tmp/qwen_review.txt', 'w') as f:
-    f.write(review)
-print(review[:300])
-PYEOF
-
-      - name: Post Qwen review on PR
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SHA: ${{ github.sha }}
-        run: |
-          REVIEW=$(cat /tmp/qwen_review.txt 2>/dev/null || echo "No review output.")
-          BODY="## 🔍 Qwen3.5 Code Review (Automated)
-
-${REVIEW}
-
----
-*APEX Sentinel v3 · Qwen3.5:397b via Ollama Cloud · Commit: ${SHA::8}*"
-
-          gh api repos/${{ github.repository }}/issues/52/comments \
-            -f body="$BODY" || true
-
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        ref: MPP-config
+        fetch-depth: 2
+        token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Get diff
+      run: git diff HEAD~1 -- '*.ts' '*.tsx' '*.sql' '*.yml' | head -500 > /tmp/diff.txt
+    - name: Run Qwen3.5 via Ollama
+      env:
+        OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+      run: python3 .github/scripts/ollama_qwen_review.py
+    - name: Post Qwen review on PR
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SHA: ${{ github.sha }}
+      run: "REVIEW=$(cat /tmp/qwen_review.txt 2>/dev/null || echo 'No review output.')\ngh api repos/${{ github.repository }}/issues/52/comments \\\n  -f body=\"## Qwen3.5 Code Review (Automated)\n\n${REVIEW}\n\
+        \n---\n*APEX Sentinel v3 - Qwen3.5:397b via Ollama Cloud - Commit: ${SHA:0:8}*\" || true\n"
   kimi-visual-review:
-    name: Kimi K2 Visual + Financial Review
-    needs: [qwen-review]
+    name: Kimi K2 Financial Review
+    needs:
+    - qwen-review
     runs-on: ubuntu-latest
     timeout-minutes: 15
     continue-on-error: true
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: MPP-config
-          fetch-depth: 2
-          token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        ref: MPP-config
+        fetch-depth: 2
+        token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Get payment diff
+      run: 'git diff HEAD~1 -- ''src/lib/payments/**'' ''src/app/api/mpp/**'' ''src/components/**'' | head -400 > /tmp/kimi_diff.txt
 
-      - name: Get frontend + payment diff
-        id: diff
-        run: |
-          git diff HEAD~1 -- \
-            'src/components/**' 'src/hooks/**' \
-            'src/lib/payments/**' 'src/app/api/mpp/**' \
-            | head -400 > /tmp/kimi_diff.txt
-          LINES=$(wc -l < /tmp/kimi_diff.txt)
-          echo "Lines: $LINES"
-          if [ "$LINES" -lt 3 ]; then
-            echo "SKIP=true" >> $GITHUB_ENV
-          else
-            echo "SKIP=false" >> $GITHUB_ENV
-          fi
+        echo "Lines: $(wc -l < /tmp/kimi_diff.txt)"
 
-      - name: Kimi K2 review via Ollama
-        if: env.SKIP != 'true'
-        id: review
-        env:
-          OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
-        run: |
-          python3 - <<'PYEOF'
-import os, json, urllib.request, sys, re
+        [ $(wc -l < /tmp/kimi_diff.txt) -gt 3 ] && echo ''HAS_CHANGES=true'' >> $GITHUB_ENV || echo ''HAS_CHANGES=false'' >> $GITHUB_ENV
 
-diff    = open('/tmp/kimi_diff.txt').read()[:4000]
-api_key = os.environ['OLLAMA_API_KEY']
-
-prompt = f"""You are Kimi K2 Thinking — financial precision and frontend reviewer for Apex.
-
-Review this diff for:
-1. MPP micro-payment precision: amounts < $0.01 handled correctly?
-2. USD vs ZAR currency confusion — are columns correctly named and documented?
-3. NUMERIC(18,6) used throughout — any truncation to NUMERIC(12,2)?
-4. Frontend: missing 'use client' directives, broken imports
-5. React hooks correctness, missing keys in lists
-6. TypeScript: any unsafe casts, missing null checks on financial values
-
-Respond in markdown. Start with:
-**VERDICT: APPROVE** or **VERDICT: REQUEST CHANGES**
-
-List findings by severity: 🔴 Critical | 🟠 Major | 🟡 Minor
-
-Diff:
-{diff}
-"""
-
-payload = json.dumps({
-    "model":   "kimi-k2.5",
-    "prompt":  prompt,
-    "stream":  False,
-    "options": {"temperature": 0.15, "num_predict": 800},
-}).encode()
-
-req = urllib.request.Request(
-    "https://api.ollama.com/api/generate",
-    data=payload,
-    headers={
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type":  "application/json",
-    }
-)
-
-try:
-    with urllib.request.urlopen(req, timeout=180) as resp:
-        data = json.load(resp)
-    review = data.get("response", "").strip()
-    # Strip <think> blocks
-    review = re.sub(r'<think>.*?</think>', '', review, flags=re.DOTALL).strip()
-    if not review:
-        review = "Kimi review returned empty response."
-except Exception as e:
-    review = f"⚠️ Kimi agent failed: {e}"
-
-with open('/tmp/kimi_review.txt', 'w') as f:
-    f.write(review)
-print(review[:300])
-PYEOF
-
-      - name: Post Kimi review on PR
-        if: env.SKIP != 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SHA: ${{ github.sha }}
-        run: |
-          REVIEW=$(cat /tmp/kimi_review.txt 2>/dev/null || echo "No review output.")
-          BODY="## 🎨 Kimi K2 Visual + Financial Review (Automated)
-
-${REVIEW}
-
----
-*APEX Sentinel v3 · Kimi-K2.5 via Ollama Cloud · Commit: ${SHA::8}*"
-
-          gh api repos/${{ github.repository }}/issues/52/comments \
-            -f body="$BODY" || true
+        '
+    - name: Run Kimi K2 via Ollama
+      if: env.HAS_CHANGES == 'true'
+      env:
+        OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+      run: python3 .github/scripts/ollama_kimi_review.py
+    - name: Post Kimi review on PR
+      if: env.HAS_CHANGES == 'true'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SHA: ${{ github.sha }}
+      run: "REVIEW=$(cat /tmp/kimi_review.txt 2>/dev/null || echo 'No review output.')\ngh api repos/${{ github.repository }}/issues/52/comments \\\n  -f body=\"## Kimi K2 Financial Review (Automated)\n\
+        \n${REVIEW}\n\n---\n*APEX Sentinel v3 - Kimi-K2.5 via Ollama Cloud - Commit: ${SHA:0:8}*\" || true\n"
