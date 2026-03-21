@@ -21,6 +21,9 @@
 
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 
+// Real network latency to Tempo sandbox — allow 30 seconds for the whole file
+jest.setTimeout(30000);
+
 // ─── Supabase mock — only external dep we don't hit live in unit tests ─────────
 
 const mockSupabaseChain: Record<string, jest.Mock> = {
@@ -126,8 +129,6 @@ describe('Tempo Chain Config', () => {
 const describeRpc = process.env.TEMPO_RPC_ENABLED === 'true' ? describe : describe.skip;
 
 describeRpc('Tempo Live RPC — rpc.moderato.tempo.xyz (TEMPO_RPC_ENABLED=true)', () => {
-  // Real network latency to Tempo sandbox — allow 30 seconds
-  jest.setTimeout(30000);
 
   it('getTip20Balance returns a valid result from the live Tempo testnet RPC', async () => {
     const { getTip20Balance, TIP20 } = await import('@/lib/payments/tempo-chain');
@@ -365,6 +366,10 @@ describe('MPP Treasury Route — real mppx session intent', () => {
 // ══════════════════════════════════════════════════════════════════════════════
 
 describe('MPP DB Schema (migration 010)', () => {
+  // NOTE: These are compile-time type documentation tests.
+  // They verify TypeScript types align with expected DB schema shapes,
+  // not live DB connectivity. See integration tests for actual constraint validation.
+
   it('transactions MPP columns are correctly typed', () => {
     type TxMppCols = {
       mpp_receipt_reference:  string | null;

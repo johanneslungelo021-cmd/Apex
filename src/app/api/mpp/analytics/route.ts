@@ -65,15 +65,26 @@ export const GET = async (request: Request) => {
           .eq('creator_id', creatorId)
           .eq('status', 'success')
           .order('created_at', { ascending: false })
-          .limit(30),
+          .limit(1000),
         supabase
           .from('subscriptions')
           .select('status')
           .eq('creator_id', creatorId),
       ]);
 
-      const transactions  = txResult.data ?? [];
-      const subscriptions = subResult.data ?? [];
+      if (txResult.error) {
+        log({ level: 'error', service: 'mpp-analytics', requestId,
+          message: `transactions query failed: ${txResult.error.message}` });
+        return NextResponse.json({ error: 'Analytics query failed' }, { status: 500 });
+      }
+      if (subResult.error) {
+        log({ level: 'error', service: 'mpp-analytics', requestId,
+          message: `subscriptions query failed: ${subResult.error.message}` });
+        return NextResponse.json({ error: 'Analytics query failed' }, { status: 500 });
+      }
+
+      const transactions  = txResult.data;   // guaranteed non-null after error check above
+      const subscriptions = subResult.data;
 
       const totalRevenue   = transactions.reduce((s, t) => s + Number(t.amount_zar), 0);
       const totalFees      = transactions.reduce((s, t) => s + Number(t.platform_fee_zar), 0);
@@ -95,6 +106,7 @@ export const GET = async (request: Request) => {
         emotion_breakdown:   emotionBreakdown,
         latest_transactions: transactions.slice(0, 5),
         generated_at:        new Date().toISOString(),
+        note: transactions.length === 1000 ? 'Results capped at 1000 rows — paginate for complete history' : undefined,
       };
 
       // Non-blocking audit record
