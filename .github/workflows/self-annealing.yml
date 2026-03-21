@@ -1,0 +1,76 @@
+name: Self-Annealing Meta-Agent
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [MPP-config]
+
+jobs:
+  analyze-and-heal:
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: MPP-config
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Collect failure context
+        id: context
+        run: |
+          # Get the failed workflow's logs
+          WORKFLOW_ID="${{ github.event.workflow_run.id }}"
+          echo "Failed workflow: $WORKFLOW_ID"
+
+          # Get recent test output if available
+          git log --oneline -5 > /tmp/recent_commits.txt
+          git diff HEAD~1 --stat > /tmp/recent_changes.txt
+
+          echo "COMMIT_MSG=$(git log -1 --pretty=%B | head -5)" >> $GITHUB_OUTPUT
+
+      - name: DeepSeek R1 failure analysis
+        id: analyze
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          CONTEXT=$(cat /tmp/recent_commits.txt /tmp/recent_changes.txt 2>/dev/null | head -100)
+          ESCAPED_CONTEXT=$(echo "$CONTEXT" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))")
+
+          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "{
+              \"model\": \"claude-sonnet-4-20250514\",
+              \"max_tokens\": 1024,
+              \"messages\": [{
+                \"role\": \"user\",
+                \"content\": \"You are the APEX Sentinel Self-Annealing Meta-Agent (DeepSeek R1 reasoning mode).\n\nA CI workflow just failed. Analyze and determine if this is auto-fixable or requires human escalation.\n\nContext:\n${CONTEXT}\n\nRespond with JSON only:\n{\\\"auto_fixable\\\": true/false, \\\"confidence\\\": 0-1, \\\"fix_description\\\": \\\"...\\\", \\\"escalate_reason\\\": \\\"...\\\"}\n\nAuto-fix ONLY if confidence > 0.8 and fix is safe (typo, stale comment, test env var). NEVER auto-fix financial logic, security code, or migrations.\"
+              }]
+            }")
+
+          echo "$RESPONSE" > /tmp/analysis.json
+          python3 -c "
+          import json, sys
+          data = json.load(open('/tmp/analysis.json'))
+          text = data['content'][0]['text']
+          result = json.loads(text)
+          print(f'AUTO_FIXABLE={str(result[\"auto_fixable\"]).lower()}')
+          print(f'CONFIDENCE={result[\"confidence\"]}')
+          print(f'FIX_DESC={result[\"fix_description\"]}')
+          " >> $GITHUB_OUTPUT 2>/dev/null || echo "AUTO_FIXABLE=false" >> $GITHUB_OUTPUT
+
+      - name: Post HITL escalation if needed
+        if: steps.analyze.outputs.AUTO_FIXABLE == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: 52,
+              body: `## 🔴 Self-Annealing Meta-Agent — T3 Escalation Required\n\n**Workflow failed** and the meta-agent determined this requires human intervention.\n\nThe failure pattern exceeds autonomous repair confidence threshold.\n\n*APEX Sentinel v3 Self-Annealing — Human approval required (T3 tier)*`
+            });

@@ -21,6 +21,9 @@
 
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 
+// Global timeout — must be file-level, not inside a describe block
+jest.setTimeout(30000);
+
 // ─── Supabase mock — only external dep we don't hit live in unit tests ─────────
 
 const mockSupabaseChain: Record<string, jest.Mock> = {

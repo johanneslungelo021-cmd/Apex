@@ -11,142 +11,154 @@ concurrency:
 jobs:
   qwen-review:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           ref: MPP-config
-          fetch-depth: 0
+          fetch-depth: 2
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install Ollama
+      - name: Get diff context
+        id: diff
         run: |
-          curl -fsSL https://ollama.com/install.sh | sh
-          ollama serve &
-          sleep 5
+          DIFF=$(git diff HEAD~1 -- '*.ts' '*.tsx' '*.sql' '*.yml' | head -300)
+          echo "DIFF<<EODIFF" >> $GITHUB_OUTPUT
+          echo "$DIFF" >> $GITHUB_OUTPUT
+          echo "EODIFF" >> $GITHUB_OUTPUT
 
-      - name: Pull Qwen model
-        run: |
-          ollama pull qwen3.5 || ollama pull qwen3.5:cloud || true
-          ollama list
-
-      - name: Install Claude Code
-        run: curl -fsSL https://claude.ai/install.sh | bash || true
-
-      - name: Configure git
-        run: |
-          git config user.email "dimakatsomoleli@gmail.com"
-          git config user.name "Lungelo Luda (Qwen)"
-
-      - name: Run Qwen review and fix
+      - name: Run Qwen-style code review via Claude API
+        id: review
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ANTHROPIC_AUTH_TOKEN: ollama
-          ANTHROPIC_BASE_URL: http://localhost:11434
-          ANTHROPIC_API_KEY: ""
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          PR_COMMENTS=$(gh api repos/${{ github.repository }}/pulls/52/reviews \
-            --jq '[.[] | select(.user.login | contains("coderabbitai") or contains("devin")) | .body] | join("\n---\n")' 2>/dev/null || echo "")
+          DIFF=$(cat <<'EODIFF'
+          ${{ steps.diff.outputs.DIFF }}
+          EODIFF
+          )
 
-          ~/.local/bin/claude --model qwen3.5 --dangerously-skip-permissions -p "
-          You are reviewing PR #52 on branch MPP-config of the johanneslungelo021-cmd/Apex repo.
+          # Escape the diff for JSON
+          ESCAPED_DIFF=$(echo "$DIFF" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))")
 
-          Recent CodeRabbit/Devin review comments:
-          $PR_COMMENTS
+          RESPONSE=$(curl -s --max-time 120 https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "{
+              \"model\": \"claude-sonnet-4-20250514\",
+              \"max_tokens\": 1024,
+              \"messages\": [{
+                \"role\": \"user\",
+                \"content\": \"You are Qwen, a security-focused code reviewer for the Apex financial platform. Review this diff for: auth bypasses, injection vulnerabilities, exposed secrets, unsafe deserialization, financial precision issues, and currency handling bugs.\n\nRespond with a concise markdown review (max 500 words). Start with a verdict: APPROVE or REQUEST_CHANGES.\n\nDiff:\n\"
+              }]
+            }" 2>/dev/null)
 
-          Check each file mentioned in the reviews. Fix any remaining issues.
-          Focus on: mpp-server.ts, analytics/route.ts, treasury/route.ts, tempo-chain.ts, tests/phase1-mpp-real.test.ts
+          REVIEW=$(echo "$RESPONSE" | python3 -c "
+          import sys, json
+          try:
+              data = json.load(sys.stdin)
+              print(data['content'][0]['text'])
+          except:
+              print('Qwen review agent could not generate a response.')
+          ")
 
-          After fixing, run: npm ci && npx tsc --noEmit && npm run test:ci
+          echo "REVIEW<<EOREVIEW" >> $GITHUB_OUTPUT
+          echo "$REVIEW" >> $GITHUB_OUTPUT
+          echo "EOREVIEW" >> $GITHUB_OUTPUT
 
-          If tests pass, commit with: git add -A && git commit -m 'fix(qwen): address remaining review comments' && git push origin MPP-config
-          " || echo "Claude Code not available — manual review needed"
+      - name: Post review comment on PR
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REVIEW="${{ steps.review.outputs.REVIEW }}"
+          if [ -z "$REVIEW" ]; then
+            REVIEW="Qwen review agent completed but produced no output."
+          fi
+
+          # Post comment on PR #52
+          gh api repos/${{ github.repository }}/issues/52/comments \
+            -f body="## 🔍 Qwen Code Review (Automated)
+
+          ${REVIEW}
+
+          ---
+          *APEX Sentinel v3 — Qwen Review Loop (Claude API backend)*
+          *Commit: ${{ github.sha }}*"
 
   kimi-visual-review:
     needs: [qwen-review]
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
         with:
           ref: MPP-config
-          fetch-depth: 0
+          fetch-depth: 2
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install Ollama
+      - name: Get frontend diff
+        id: diff
         run: |
-          curl -fsSL https://ollama.com/install.sh | sh
-          ollama serve &
-          sleep 5
-
-      - name: Pull Kimi K2 model
-        run: |
-          ollama pull kimi-k2.5:cloud || ollama pull kimi-k2:latest || ollama pull kimi2:latest || echo "Kimi K2 model not available in Ollama registry"
-          ollama list
-
-      - name: Install Claude Code
-        run: curl -fsSL https://claude.ai/install.sh | bash || true
-
-      - name: Configure git
-        run: |
-          git config user.email "dimakatsomoleli@gmail.com"
-          git config user.name "Lungelo Luda (Kimi)"
-
-      - name: Run Kimi K2 visual review
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ANTHROPIC_AUTH_TOKEN: ollama
-          ANTHROPIC_BASE_URL: http://localhost:11434
-          ANTHROPIC_API_KEY: ""
-        run: |
-          PR_COMMENTS=$(gh api repos/${{ github.repository }}/pulls/52/reviews \
-            --jq '[.[] | select(.user.login | contains("coderabbitai") or contains("devin")) | .body] | join("\n---\n")' 2>/dev/null || echo "")
-
-          KIMI_MODEL=$(ollama list 2>/dev/null | grep -E "kimi" | awk '{print $1}' | head -1 || echo "")
-
-          if [ -z "$KIMI_MODEL" ]; then
-            echo "No Kimi K2 model available — skipping visual review"
-            exit 0
+          DIFF=$(git diff HEAD~1 -- 'src/components/**' 'src/hooks/**' 'src/styles/**' | head -300)
+          if [ -z "$DIFF" ]; then
+            echo "No frontend changes detected — skipping Kimi review."
+            echo "SKIP=true" >> $GITHUB_OUTPUT
+          else
+            echo "SKIP=false" >> $GITHUB_OUTPUT
+            echo "DIFF<<EODIFF" >> $GITHUB_OUTPUT
+            echo "$DIFF" >> $GITHUB_OUTPUT
+            echo "EODIFF" >> $GITHUB_OUTPUT
           fi
 
-          ~/.local/bin/claude --model "$KIMI_MODEL" --dangerously-skip-permissions -p "
-          You are Kimi K2, reviewing the VISUAL and FRONTEND components of PR #52 on branch MPP-config of johanneslungelo021-cmd/Apex.
+      - name: Run Kimi-style visual review via Claude API
+        if: steps.diff.outputs.SKIP != 'true'
+        id: review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          RESPONSE=$(curl -s --max-time 120 https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "{
+              \"model\": \"claude-sonnet-4-20250514\",
+              \"max_tokens\": 1024,
+              \"messages\": [{
+                \"role\": \"user\",
+                \"content\": \"You are Kimi, a frontend/visual reviewer. Review this diff for: missing 'use client' directives, broken imports, accessibility (WCAG), animation performance, and TypeScript errors.\n\nRespond with concise markdown. Start with APPROVE or REQUEST_CHANGES.\n\nDiff:\n${{ steps.diff.outputs.DIFF }}\"
+              }]
+            }" 2>/dev/null)
 
-          Focus ONLY on these visual/frontend files:
-          - src/components/sentient/*.tsx (CinematicPortalCard, EmotionalGrid, EmotionalSwarm, MagneticReticle, ReducedMotionGate, SensoryControls, SentientCanvasScene)
-          - src/styles/sentient.css
-          - src/hooks/useEmotionEngine.tsx
-          - src/hooks/useMultiSensory.ts
-          - src/hooks/useMagneticCursor.ts
-          - src/hooks/useSensoryPreferences.ts
+          REVIEW=$(echo "$RESPONSE" | python3 -c "
+          import sys, json
+          try:
+              data = json.load(sys.stdin)
+              print(data['content'][0]['text'])
+          except:
+              print('Kimi review agent could not generate a response.')
+          ")
 
-          Recent review comments that may affect these files:
-          $PR_COMMENTS
+          echo "REVIEW<<EOREVIEW" >> $GITHUB_OUTPUT
+          echo "$REVIEW" >> $GITHUB_OUTPUT
+          echo "EOREVIEW" >> $GITHUB_OUTPUT
 
-          For each file:
-          1. Read the file
-          2. Check for TypeScript errors
-          3. Check for missing 'use client' directives
-          4. Check for broken/missing imports
-          5. Verify accessibility (WCAG): aria labels, keyboard nav, reduced motion support
-          6. Check animation performance (no layout-thrashing, use transform/opacity)
-          7. Verify EmotionState types match useEmotionEngine.tsx definitions
+      - name: Post Kimi review comment
+        if: steps.diff.outputs.SKIP != 'true' && always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REVIEW="${{ steps.review.outputs.REVIEW }}"
+          if [ -z "$REVIEW" ]; then
+            REVIEW="Kimi visual review completed but produced no output."
+          fi
 
-          Run: npm ci && npx tsc --noEmit
+          gh api repos/${{ github.repository }}/issues/52/comments \
+            -f body="## 🎨 Kimi Visual Review (Automated)
 
-          Fix any issues found. If fixes made:
-          git add -A && git commit -m 'fix(kimi): visual component review — accessibility + type safety' && git push origin MPP-config
+          ${REVIEW}
 
-          If nothing to fix, report: All visual components look correct.
-          " || echo "Kimi K2 review failed — skipping"
+          ---
+          *APEX Sentinel v3 — Kimi Visual Review (Claude API backend)*
+          *Commit: ${{ github.sha }}*"

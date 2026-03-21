@@ -51,6 +51,16 @@ export const tempoTestnet = defineChain({
 
 // ─── Environment-aware defaults ───────────────────────────────────────────────
 
+/**
+ * TEMPO_NETWORK env var takes priority for network selection.
+ * Falls back to NODE_ENV only when TEMPO_NETWORK is not set.
+ *
+ * Examples:
+ *   TEMPO_NETWORK=mainnet              → mainnet (regardless of NODE_ENV)
+ *   TEMPO_NETWORK=testnet              → testnet (regardless of NODE_ENV)
+ *   TEMPO_NETWORK unset + NODE_ENV=production → mainnet (fallback)
+ *   TEMPO_NETWORK unset + NODE_ENV=development → testnet (fallback)
+ */
 const isMainnet = process.env.TEMPO_NETWORK
   ? process.env.TEMPO_NETWORK === 'mainnet'
   : process.env.NODE_ENV === 'production';

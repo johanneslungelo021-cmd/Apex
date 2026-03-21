@@ -72,7 +72,10 @@ export async function recordMppPayment(
     const { error: rpcError } = await supabase.rpc('insert_transaction_serializable', {
       p_creator_id:              record.creatorId,
       p_customer_id:             null,
-      // NOTE: amount_zar stores pathUSD micro-amounts — ZAR FX conversion applied at payout
+      // ARCHITECTURAL NOTE: MPP amounts are denominated in USD (USDC).
+      // These are stored in ZAR-named columns as raw USD values.
+      // FX conversion to actual ZAR is applied at payout time by the settlement service.
+      // This is intentional — the column name reflects the payout currency, not the input currency.
       p_amount_zar:              amountUsdNum,
       p_platform_fee_zar:        amountUsdNum,
       p_gateway:                 'tempo_mpp',

@@ -1,0 +1,100 @@
+name: Byzantine Consensus Gate
+on:
+  pull_request:
+    branches: [main]
+    paths: ['src/**', 'supabase/migrations/**', '.github/workflows/**']
+
+jobs:
+  agent-vote:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        agent: [qwen, kimi, sentinel]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get diff context
+        run: git diff origin/main...HEAD > /tmp/diff.txt
+      - name: Agent review vote
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AGENT_NAME: ${{ matrix.agent }}
+        run: |
+          DIFF=$(cat /tmp/diff.txt | head -200)
+          PERSONA=""
+          if [ "$AGENT_NAME" = "qwen" ]; then
+            PERSONA="You are a security-focused code reviewer. Focus on: auth bypasses, injection vulnerabilities, exposed secrets, unsafe deserialization."
+          elif [ "$AGENT_NAME" = "kimi" ]; then
+            PERSONA="You are a financial precision reviewer. Focus on: numeric precision loss, currency handling, transaction atomicity, XRPL compliance."
+          else
+            PERSONA="You are an architectural reviewer. Focus on: T3 autonomy tier compliance, HITL requirements, Byzantine consensus adherence, SLSA provenance."
+          fi
+
+          ESCAPED_DIFF=$(echo "$DIFF" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))")
+
+          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "{
+              \"model\": \"claude-sonnet-4-20250514\",
+              \"max_tokens\": 512,
+              \"messages\": [{
+                \"role\": \"user\",
+                \"content\": $(echo "$PERSONA\n\nReview this diff and respond ONLY with valid JSON: {\\\"vote\\\": \\\"approve\\\" or \\\"reject\\\", \\\"confidence\\\": 0.0-1.0, \\\"top_finding\\\": \\\"one sentence\\\"}\n\nDiff:\n$DIFF" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))")
+              }]
+            }")
+
+          VOTE=$(echo "$RESPONSE" | python3 -c "import sys,json; data=json.load(sys.stdin); print(data['content'][0]['text'])" 2>/dev/null || echo '{"vote":"reject","confidence":0,"top_finding":"Agent failed to respond"}')
+          echo "AGENT_VOTE=$VOTE" >> $GITHUB_OUTPUT
+          echo "$VOTE" > /tmp/${AGENT_NAME}_vote.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vote-${{ matrix.agent }}
+          path: /tmp/${{ matrix.agent }}_vote.json
+
+  consensus:
+    needs: agent-vote
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: votes/
+      - name: Tally votes (2/3 majority required)
+        id: tally
+        run: |
+          APPROVE=0; REJECT=0; FINDINGS=""
+          for f in votes/*/; do
+            VOTE_FILE=$(find "$f" -name "*.json" | head -1)
+            if [ -f "$VOTE_FILE" ]; then
+              VOTE=$(python3 -c "import json; d=json.load(open('$VOTE_FILE')); print(d.get('vote','reject'))")
+              FINDING=$(python3 -c "import json; d=json.load(open('$VOTE_FILE')); print(d.get('top_finding',''))")
+              if [ "$VOTE" = "approve" ]; then APPROVE=$((APPROVE+1)); else REJECT=$((REJECT+1)); fi
+              FINDINGS="$FINDINGS\n- $FINDING"
+            fi
+          done
+          TOTAL=$((APPROVE+REJECT))
+          echo "Approve: $APPROVE/$TOTAL"
+          echo "APPROVE_COUNT=$APPROVE" >> $GITHUB_OUTPUT
+          echo "REJECT_COUNT=$REJECT" >> $GITHUB_OUTPUT
+          if [ $APPROVE -ge 2 ]; then
+            echo "CONSENSUS=approved" >> $GITHUB_OUTPUT
+          else
+            echo "CONSENSUS=rejected" >> $GITHUB_OUTPUT
+          fi
+      - name: Post consensus result
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const consensus = '${{ steps.tally.outputs.CONSENSUS }}';
+            const approve = '${{ steps.tally.outputs.APPROVE_COUNT }}';
+            const reject = '${{ steps.tally.outputs.REJECT_COUNT }}';
+            const emoji = consensus === 'approved' ? '✅' : '❌';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `## ${emoji} Byzantine Consensus: ${consensus.toUpperCase()}\n\nVotes: **${approve}/3 approve** | **${reject}/3 reject** (⅔ majority required)\n\n*APEX Sentinel v3 — Multi-agent Byzantine Consensus Gate*`
+            });
+            if (consensus === 'rejected') {
+              core.setFailed('Byzantine consensus rejected this PR. Minimum 2/3 agent approval required.');
+            }

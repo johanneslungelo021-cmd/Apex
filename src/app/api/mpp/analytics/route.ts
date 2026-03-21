@@ -61,7 +61,7 @@ export const GET = async (request: Request) => {
       const [txResult, subResult] = await Promise.all([
         supabase
           .from('transactions')
-          .select('amount_zar, platform_fee_zar, emotion_state, created_at, gateway')
+          .select('amount_zar, platform_fee_zar, emotion_state, created_at, gateway', { count: 'exact' })
           .eq('creator_id', creatorId)
           .eq('status', 'success')
           .order('created_at', { ascending: false })
@@ -97,15 +97,16 @@ export const GET = async (request: Request) => {
       }, {});
 
       const analytics = {
-        creator_id:          creatorId,
-        total_revenue_zar:   totalRevenue,
-        total_fees_zar:      totalFees,
-        creator_payout_zar:  totalRevenue - totalFees,
-        active_subscribers:  activeSubCount,
-        transaction_count:   transactions.length,
-        emotion_breakdown:   emotionBreakdown,
-        latest_transactions: transactions.slice(0, 5),
-        generated_at:        new Date().toISOString(),
+        creator_id:               creatorId,
+        total_revenue_zar:        totalRevenue,
+        total_fees_zar:           totalFees,
+        creator_payout_zar:       totalRevenue - totalFees,
+        active_subscribers:       activeSubCount,
+        transaction_count:        transactions.length,
+        total_transaction_count:  txResult.count ?? transactions.length,
+        emotion_breakdown:        emotionBreakdown,
+        latest_transactions:      transactions.slice(0, 5),
+        generated_at:             new Date().toISOString(),
         note: transactions.length === 1000 ? 'Results capped at 1000 rows — paginate for complete history' : undefined,
       };
 
