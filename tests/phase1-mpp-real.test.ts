@@ -45,8 +45,11 @@ const mockRpc = jest.fn().mockResolvedValue({
 
 const mockSupabase = { from: jest.fn(() => mockSupabaseChain), rpc: mockRpc };
 
-jest.mock('@/lib/supabase', () => ({ getSupabaseClient: () => mockSupabase }));
-jest.mock('@/lib/api-utils', () => ({
+// jest.unstable_mockModule is the ESM-native mock API.
+// jest.mock() is not reliably hoisted or applied to dynamic import()
+// calls after resetModules() when useESM:true is set in ts-jest.
+jest.unstable_mockModule('@/lib/supabase', () => ({ getSupabaseClient: () => mockSupabase }));
+jest.unstable_mockModule('@/lib/api-utils', () => ({
   log:               jest.fn(),
   generateRequestId: () => 'req-mpp-test-001',
 }));
@@ -246,6 +249,7 @@ describe('MPP Analytics Route — real mppx charge intent', () => {
     process.env = {
       ...OLD_ENV,
       APEX_TEMPO_RECIPIENT: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
+      MPP_SECRET_KEY:        'test-secret-key-for-jest',
     };
     mockSupabaseChain.then.mockImplementation((resolve: (v: unknown) => void) =>
       resolve({ data: [], error: null }));
@@ -287,8 +291,12 @@ describe('MPP Analytics Route — real mppx charge intent', () => {
     const { GET } = await import('@/app/api/mpp/analytics/route');
     const res = await GET(new Request('https://apex.test/api/mpp/analytics?creator_id=uuid'));
     const header = res.headers.get('www-authenticate') ?? '';
-    // Recipient address must be in the challenge so the client knows where to send payment
-    expect(header.toLowerCase()).toContain('0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266');
+    // mppx encodes the challenge as a base64url JSON blob in the request= param.
+    // Decode it to assert the recipient address is present inside the challenge payload.
+    const requestMatch = header.match(/request="([^"]+)"/i);
+    expect(requestMatch).not.toBeNull();
+    const decoded = Buffer.from(requestMatch![1], 'base64url').toString('utf8');
+    expect(decoded.toLowerCase()).toContain('0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266');
   });
 });
 
@@ -301,6 +309,7 @@ describe('MPP Treasury Route — real mppx session intent', () => {
     process.env = {
       ...OLD_ENV,
       APEX_TEMPO_RECIPIENT: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
+      MPP_SECRET_KEY:        'test-secret-key-for-jest',
     };
     mockSupabaseChain.then.mockImplementation((resolve: (v: unknown) => void) =>
       resolve({ data: [], error: null }));
