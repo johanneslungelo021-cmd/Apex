@@ -98,9 +98,9 @@ export const GET = async (request: Request) => {
 
       const analytics = {
         creator_id:          creatorId,
-        total_revenue_zar:   Math.round(totalRevenue * 100)            / 100,
-        total_fees_zar:      Math.round(totalFees * 100)               / 100,
-        creator_payout_zar:  Math.round((totalRevenue - totalFees) * 100) / 100,
+        total_revenue_zar:   totalRevenue,
+        total_fees_zar:      totalFees,
+        creator_payout_zar:  totalRevenue - totalFees,
         active_subscribers:  activeSubCount,
         transaction_count:   transactions.length,
         emotion_breakdown:   emotionBreakdown,

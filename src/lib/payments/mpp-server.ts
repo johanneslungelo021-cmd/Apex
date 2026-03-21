@@ -22,9 +22,8 @@ export const SYSTEM_CREATOR_ID = '00000000-0000-0000-0000-000000000001';
 /** Apex wallet address that receives all MPP payments */
 export function getRecipient(): `0x${string}` {
   const addr = process.env.APEX_TEMPO_RECIPIENT;
-  if (!addr) throw new Error('APEX_TEMPO_RECIPIENT env var is not set');
-  if (!/^0x[0-9a-fA-F]{40}$/.test(addr)) {
-    throw new Error(`APEX_TEMPO_RECIPIENT is not a valid Ethereum address: "${addr}"`);
+  if (!addr || !/^0x[0-9a-fA-F]{40}$/.test(addr)) {
+    throw new Error(`APEX_TEMPO_RECIPIENT must be a valid Ethereum address (0x + 40 hex chars), got: ${addr ?? 'undefined'}`);
   }
   return addr as `0x${string}`;
 }
@@ -73,6 +72,7 @@ export async function recordMppPayment(
     const { error: rpcError } = await supabase.rpc('insert_transaction_serializable', {
       p_creator_id:              record.creatorId,
       p_customer_id:             null,
+      // NOTE: amount_zar stores pathUSD micro-amounts — ZAR FX conversion applied at payout
       p_amount_zar:              amountUsdNum,
       p_platform_fee_zar:        amountUsdNum,
       p_gateway:                 'tempo_mpp',

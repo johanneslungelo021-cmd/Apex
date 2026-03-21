@@ -186,7 +186,7 @@ describe('MPP Server Helpers', () => {
     delete process.env.APEX_TEMPO_RECIPIENT;
     jest.resetModules();
     const { getRecipient } = await import('@/lib/payments/mpp-server');
-    expect(() => getRecipient()).toThrow('APEX_TEMPO_RECIPIENT env var is not set');
+    expect(() => getRecipient()).toThrow('APEX_TEMPO_RECIPIENT must be a valid Ethereum address (0x + 40 hex chars), got: undefined');
   });
 
   it('getFeePayer returns undefined when APEX_FEE_PAYER_KEY is not set', async () => {
