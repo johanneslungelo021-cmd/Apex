@@ -17,7 +17,7 @@ module.exports = {
     // Path aliases
     '^@/(.*)$': '<rootDir>/src/$1',
     // server-only is a Next.js build-time guard; replace with a no-op in Jest
-    '^server-only$': '<rootDir>/src/__mocks__/server-only',
+    '^server-only$': '<rootDir>/src/__mocks__/server-only.ts',
     // ESM-to-CJS shim for viem — it ships CJS but some sub-imports use .js extensions
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },

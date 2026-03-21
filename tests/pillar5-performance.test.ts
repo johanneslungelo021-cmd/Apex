@@ -20,9 +20,10 @@
 
 import { describe, it, expect } from '@jest/globals';
 import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
-const ROOT = join(__dirname, '..');
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 function read(rel: string) {
   return readFileSync(join(ROOT, rel), 'utf8');

@@ -14,6 +14,9 @@ import { defaultToken, tempoChainId } from './tempo-chain';
 import { getSupabaseClient } from '@/lib/supabase';
 import { log } from '@/lib/api-utils';
 
+// ─── System creator UUID — used for treasury/system-level MPP payments ──────
+export const SYSTEM_CREATOR_ID = '00000000-0000-0000-0000-000000000001';
+
 // ─── Env-driven config ────────────────────────────────────────────────────────
 
 /** Apex wallet address that receives all MPP payments */
@@ -62,13 +65,13 @@ export async function recordMppPayment(
 ): Promise<void> {
   try {
     const supabase  = getSupabaseClient();
-    const amountZar = parseFloat(record.amountUsd); // pathUSD ≈ USD; ZAR FX applied at payout
+    const amountZar = Math.round(parseFloat(record.amountUsd) * 100) / 100;
 
-    await supabase.rpc('insert_transaction_serializable', {
+    const { error: rpcError } = await supabase.rpc('insert_transaction_serializable', {
       p_creator_id:              record.creatorId,
       p_customer_id:             null,
       p_amount_zar:              amountZar,
-      p_platform_fee_zar:        amountZar,
+      p_platform_fee_zar:        Math.round(parseFloat(record.amountUsd) * 100) / 100,
       p_gateway:                 'tempo_mpp',
       p_gateway_ref:             record.receiptReference,
       p_external_id:             record.receiptReference,
@@ -82,15 +85,24 @@ export async function recordMppPayment(
       p_destination_currency:    'ZAR',
       p_source_country:          null,
       p_destination_country:     'ZA',
-      p_metadata:                { mpp_intent: record.mppIntent, amount_usd: record.amountUsd },
-      p_settlement_pathway:      'tempo_mpp',
-      p_mpp_receipt_reference:   record.receiptReference,
-      p_mpp_session_channel_id:  record.sessionChannelId ?? null,
-      p_mpp_intent:              record.mppIntent,
-      p_tempo_chain_id:          tempoChainId,
-      p_tip20_token_address:     defaultToken,
-      p_tip20_amount:            parseFloat(record.amountUsd),
+      p_metadata: {
+        mpp_intent:              record.mppIntent,
+        amount_usd:              record.amountUsd,
+        amount_usd_exact:        record.amountUsd,
+        settlement_pathway:      'tempo_mpp',
+        receipt_reference:       record.receiptReference,
+        session_channel_id:      record.sessionChannelId ?? null,
+        tempo_chain_id:          tempoChainId,
+        tip20_token_address:     defaultToken,
+        tip20_amount:            parseFloat(record.amountUsd),
+      },
     });
+
+    if (rpcError) {
+      log({ level: 'warn', service: 'mpp', requestId,
+        message: `[mpp-server] recordMppPayment RPC error: ${JSON.stringify(rpcError)}` });
+      return;
+    }
 
     log({ level: 'info', service: 'mpp', requestId,
       message: `MPP ${record.mppIntent} recorded — $${record.amountUsd}`,

@@ -14,8 +14,9 @@ export const runtime = 'nodejs';
 
 import { NextResponse }             from 'next/server';
 import { Mppx, tempo }              from 'mppx/nextjs';
-import { getRecipient, getFeePayer, MPP_PRICING, recordMppPayment, defaultToken }
+import { getRecipient, getFeePayer, MPP_PRICING, recordMppPayment, defaultToken, SYSTEM_CREATOR_ID }
   from '@/lib/payments/mpp-server';
+import { streamChannelAddress }     from '@/lib/payments/tempo-chain';
 import { getSupabaseClient }        from '@/lib/supabase';
 import { log, generateRequestId }   from '@/lib/api-utils';
 
@@ -31,7 +32,7 @@ export const GET = mppx.tempo.session({ amount: MPP_PRICING.treasuryQuery, unitT
     const [poolResult, disbResult, proposalResult] = await Promise.all([
       supabase
         .from('vaal_development_pool')
-        .select('amount_zar, disbursement_status, governance_proposal_id, created_at')
+        .select('id, transaction_id, amount_zar, split_pct, created_at')
         .order('created_at', { ascending: false })
         .limit(100),
       supabase
@@ -50,17 +51,19 @@ export const GET = mppx.tempo.session({ amount: MPP_PRICING.treasuryQuery, unitT
     const disbLog   = disbResult.data ?? [];
     const proposals = proposalResult.data ?? [];
 
-    const sumByStatus = (status: string) =>
-      pool
-        .filter(r => r.disbursement_status === status)
+    const totalPoolZar = pool.reduce((s, r) => s + Number(r.amount_zar), 0);
+
+    const sumDisbByStatus = (status: string) =>
+      disbLog
+        .filter(r => r.status === status)
         .reduce((s, r) => s + Number(r.amount_zar), 0);
 
     const treasury = {
       pool_summary: {
-        held_zar:      Math.round(sumByStatus('held')       * 100) / 100,
-        approved_zar:  Math.round(sumByStatus('approved')   * 100) / 100,
-        disbursed_zar: Math.round(sumByStatus('disbursed')  * 100) / 100,
-        entries:       pool.length,
+        total_pool_zar: Math.round(totalPoolZar * 100) / 100,
+        approved_zar:   Math.round(sumDisbByStatus('approved') * 100) / 100,
+        disbursed_zar:  Math.round(sumDisbByStatus('paid')     * 100) / 100,
+        entries:        pool.length,
       },
       active_proposals: proposals.map(p => ({
         id:            p.id,
@@ -75,13 +78,13 @@ export const GET = mppx.tempo.session({ amount: MPP_PRICING.treasuryQuery, unitT
       payment: {
         method:      'mpp/session',
         amount:      `${MPP_PRICING.treasuryQuery} USDC per query`,
-        escrow:      '0x33b901018174DDabE4841042ab76ba85D4e24f25',
+        escrow:      streamChannelAddress,
         note:        'Receipt.reference is a TempoStreamChannel channelId, not a tx hash',
       },
     };
 
-    void recordMppPayment({
-      creatorId:        'system',
+    await recordMppPayment({
+      creatorId:        SYSTEM_CREATOR_ID,
       amountUsd:        MPP_PRICING.treasuryQuery,
       mppIntent:        'session',
       receiptReference: requestId,

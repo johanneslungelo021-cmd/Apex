@@ -199,10 +199,12 @@ describe('MPP Server Helpers', () => {
       'insert_transaction_serializable',
       expect.objectContaining({
         p_gateway:             'tempo_mpp',
-        p_mpp_intent:          'charge',
         p_source_currency:     'USD',
-        p_settlement_pathway:  'tempo_mpp',
-        p_tempo_chain_id:      42431,   // testnet in non-production environment
+        p_metadata: expect.objectContaining({
+          mpp_intent:          'charge',
+          settlement_pathway:  'tempo_mpp',
+          tempo_chain_id:      42431,   // testnet in non-production environment
+        }),
       }),
     );
   });
@@ -219,8 +221,10 @@ describe('MPP Server Helpers', () => {
     expect(mockRpc).toHaveBeenCalledWith(
       'insert_transaction_serializable',
       expect.objectContaining({
-        p_mpp_intent:             'session',
-        p_mpp_session_channel_id: '0xchannel-bytes32',
+        p_metadata: expect.objectContaining({
+          mpp_intent:             'session',
+          session_channel_id:     '0xchannel-bytes32',
+        }),
       }),
     );
   });

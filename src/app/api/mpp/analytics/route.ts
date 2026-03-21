@@ -3,8 +3,8 @@ export const runtime = 'nodejs';
  * MPP Analytics Endpoint — charge intent
  *
  * Creator analytics gated behind 0.001 USDC per request via MPP.
- * Uses the mppx/nextjs charge pattern: module-level mppx const so TypeScript
- * infers the concrete generic type, enabling .tempo.charge() access.
+ * Uses lazy mppx initialization so a missing APEX_TEMPO_RECIPIENT
+ * env var returns a proper 500 instead of crashing the module.
  *
  * MPP protocol flow (HTTP 402):
  *   GET /api/mpp/analytics?creator_id=<uuid>
@@ -21,74 +21,96 @@ import { getRecipient, getFeePayer, MPP_PRICING, recordMppPayment, defaultToken 
 import { getSupabaseClient }        from '@/lib/supabase';
 import { log, generateRequestId }   from '@/lib/api-utils';
 
-// Module-level const — TypeScript infers the full concrete generic type,
-// enabling mppx.tempo.charge() access without type errors.
-const mppx = Mppx.create({
-  methods: [tempo({ currency: defaultToken, recipient: getRecipient(), feePayer: getFeePayer() })],
-});
+// Lazy initializer — avoids crashing the module on cold start if env vars are missing.
+// We use `typeof mppxInstance` to preserve the concrete generic type that enables
+// .tempo.charge() access without type errors.
+function createMppx() {
+  return Mppx.create({
+    methods: [tempo({ currency: defaultToken, recipient: getRecipient(), feePayer: getFeePayer() })],
+  });
+}
 
-export const GET = mppx.tempo.charge({ amount: MPP_PRICING.analyticsQuery })(
-  async (request: Request) => {
-    const requestId                 = generateRequestId();
-    const { searchParams }          = new URL(request.url);
-    const creatorId                 = searchParams.get('creator_id');
+let _mppx: ReturnType<typeof createMppx> | null = null;
+function getMppx() {
+  if (!_mppx) {
+    _mppx = createMppx();
+  }
+  return _mppx;
+}
 
-    if (!creatorId) {
-      return NextResponse.json({ error: 'creator_id required' }, { status: 400 });
-    }
+export const GET = async (request: Request) => {
+  let mppx: ReturnType<typeof createMppx>;
+  try {
+    mppx = getMppx();
+  } catch {
+    return NextResponse.json({ error: 'MPP not configured' }, { status: 500 });
+  }
 
-    const supabase = getSupabaseClient();
+  const handler = mppx.tempo.charge({ amount: MPP_PRICING.analyticsQuery })(
+    async (_request: Request) => {
+      const requestId                 = generateRequestId();
+      const { searchParams }          = new URL(request.url);
+      const creatorId                 = searchParams.get('creator_id');
 
-    const [txResult, subResult] = await Promise.all([
-      supabase
-        .from('transactions')
-        .select('amount_zar, platform_fee_zar, emotion_state, created_at, gateway')
-        .eq('creator_id', creatorId)
-        .eq('status', 'success')
-        .order('created_at', { ascending: false })
-        .limit(30),
-      supabase
-        .from('subscriptions')
-        .select('status')
-        .eq('creator_id', creatorId),
-    ]);
+      if (!creatorId) {
+        return NextResponse.json({ error: 'creator_id required' }, { status: 400 });
+      }
 
-    const transactions  = txResult.data ?? [];
-    const subscriptions = subResult.data ?? [];
+      const supabase = getSupabaseClient();
 
-    const totalRevenue   = transactions.reduce((s, t) => s + Number(t.amount_zar), 0);
-    const totalFees      = transactions.reduce((s, t) => s + Number(t.platform_fee_zar), 0);
-    const activeSubCount = subscriptions.filter(s => s.status === 'active').length;
+      const [txResult, subResult] = await Promise.all([
+        supabase
+          .from('transactions')
+          .select('amount_zar, platform_fee_zar, emotion_state, created_at, gateway')
+          .eq('creator_id', creatorId)
+          .eq('status', 'success')
+          .order('created_at', { ascending: false })
+          .limit(30),
+        supabase
+          .from('subscriptions')
+          .select('status')
+          .eq('creator_id', creatorId),
+      ]);
 
-    const emotionBreakdown = transactions.reduce<Record<string, number>>((acc, t) => {
-      const state = t.emotion_state ?? 'neutral';
-      acc[state]  = (acc[state] ?? 0) + 1;
-      return acc;
-    }, {});
+      const transactions  = txResult.data ?? [];
+      const subscriptions = subResult.data ?? [];
 
-    const analytics = {
-      creator_id:          creatorId,
-      total_revenue_zar:   Math.round(totalRevenue * 100)            / 100,
-      total_fees_zar:      Math.round(totalFees * 100)               / 100,
-      creator_payout_zar:  Math.round((totalRevenue - totalFees) * 100) / 100,
-      active_subscribers:  activeSubCount,
-      transaction_count:   transactions.length,
-      emotion_breakdown:   emotionBreakdown,
-      latest_transactions: transactions.slice(0, 5),
-      generated_at:        new Date().toISOString(),
-    };
+      const totalRevenue   = transactions.reduce((s, t) => s + Number(t.amount_zar), 0);
+      const totalFees      = transactions.reduce((s, t) => s + Number(t.platform_fee_zar), 0);
+      const activeSubCount = subscriptions.filter(s => s.status === 'active').length;
 
-    // Non-blocking audit record
-    void recordMppPayment({
-      creatorId,
-      amountUsd:        MPP_PRICING.analyticsQuery,
-      mppIntent:        'charge',
-      receiptReference: requestId,
-    }, requestId);
+      const emotionBreakdown = transactions.reduce<Record<string, number>>((acc, t) => {
+        const state = t.emotion_state ?? 'neutral';
+        acc[state]  = (acc[state] ?? 0) + 1;
+        return acc;
+      }, {});
 
-    log({ level: 'info', service: 'mpp-analytics', requestId,
-      message: `Analytics delivered — creator ${creatorId}`, txCount: transactions.length });
+      const analytics = {
+        creator_id:          creatorId,
+        total_revenue_zar:   Math.round(totalRevenue * 100)            / 100,
+        total_fees_zar:      Math.round(totalFees * 100)               / 100,
+        creator_payout_zar:  Math.round((totalRevenue - totalFees) * 100) / 100,
+        active_subscribers:  activeSubCount,
+        transaction_count:   transactions.length,
+        emotion_breakdown:   emotionBreakdown,
+        latest_transactions: transactions.slice(0, 5),
+        generated_at:        new Date().toISOString(),
+      };
 
-    return NextResponse.json(analytics);
-  },
-);
+      // Non-blocking audit record
+      void recordMppPayment({
+        creatorId,
+        amountUsd:        MPP_PRICING.analyticsQuery,
+        mppIntent:        'charge',
+        receiptReference: requestId,
+      }, requestId);
+
+      log({ level: 'info', service: 'mpp-analytics', requestId,
+        message: `Analytics delivered — creator ${creatorId}`, txCount: transactions.length });
+
+      return NextResponse.json(analytics);
+    },
+  );
+
+  return handler(request);
+};
