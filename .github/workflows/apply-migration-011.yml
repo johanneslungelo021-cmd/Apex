@@ -15,6 +15,7 @@ jobs:
         with:
           version: latest
 
+ MPP-config
       - name: Link project
         run: supabase link --project-ref xdkojaigrjhzjkqxguxh
         env:
@@ -25,3 +26,17 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+      - name: Link and push migrations
+        run: |
+          supabase link --project-ref xdkojaigrjhzjkqxguxh
+          supabase db push --include-all
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Verify columns
+        run: |
+          supabase db execute --sql "SELECT column_name, numeric_precision, numeric_scale FROM information_schema.columns WHERE table_name='transactions' AND column_name IN ('amount_zar','platform_fee_zar')"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+ main
