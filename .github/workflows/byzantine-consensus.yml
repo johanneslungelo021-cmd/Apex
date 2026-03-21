@@ -1,100 +1,233 @@
 name: Byzantine Consensus Gate
+# APEX Sentinel v3 — Multi-agent Byzantine consensus (⅔ majority required)
+# Uses Ollama cloud API directly — no local model downloads.
+# Models: Qwen3.5 (security), Kimi-K2.5 (financial), GLM-5 (architecture)
 on:
   pull_request:
     branches: [main]
     paths: ['src/**', 'supabase/migrations/**', '.github/workflows/**']
 
+env:
+  OLLAMA_BASE: https://api.ollama.com/api/generate
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   agent-vote:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
+      fail-fast: false   # never cancel sibling agents on one failure
       matrix:
-        agent: [qwen, kimi, sentinel]
+        include:
+          - agent: qwen
+            model: "qwen3.5:397b"
+            persona: "You are Qwen3.5, a security-focused code reviewer. Focus ONLY on: auth bypasses, injection vulnerabilities, exposed secrets, unsafe deserialization, RLS policy gaps."
+          - agent: kimi
+            model: "kimi-k2.5"
+            persona: "You are Kimi K2, a financial precision reviewer. Focus ONLY on: numeric precision loss, currency handling (USD vs ZAR), transaction atomicity, XRPL NUMERIC(38,8) compliance, sub-cent rounding."
+          - agent: glm
+            model: "glm-5"
+            persona: "You are GLM-5, an architectural reviewer. Focus ONLY on: T3 autonomy tier compliance, HITL requirements, Byzantine consensus adherence, SLSA provenance, MPP protocol correctness."
+
     steps:
-      - uses: actions/checkout@v4
-      - name: Get diff context
-        run: git diff origin/main...HEAD > /tmp/diff.txt
-      - name: Agent review vote
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          AGENT_NAME: ${{ matrix.agent }}
+      - name: Checkout with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so origin/main exists
+
+      - name: Fetch base branch
         run: |
-          DIFF=$(cat /tmp/diff.txt | head -200)
-          PERSONA=""
-          if [ "$AGENT_NAME" = "qwen" ]; then
-            PERSONA="You are a security-focused code reviewer. Focus on: auth bypasses, injection vulnerabilities, exposed secrets, unsafe deserialization."
-          elif [ "$AGENT_NAME" = "kimi" ]; then
-            PERSONA="You are a financial precision reviewer. Focus on: numeric precision loss, currency handling, transaction atomicity, XRPL compliance."
-          else
-            PERSONA="You are an architectural reviewer. Focus on: T3 autonomy tier compliance, HITL requirements, Byzantine consensus adherence, SLSA provenance."
-          fi
+          git fetch origin main --depth=50
+          git fetch origin MPP-config --depth=50 || true
 
-          ESCAPED_DIFF=$(echo "$DIFF" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))")
+      - name: Get diff context
+        id: diff
+        run: |
+          # Use merge-base for reliable diff against main
+          BASE=$(git merge-base origin/main HEAD 2>/dev/null || git rev-parse origin/main)
+          echo "Diff base: $BASE"
+          git diff "$BASE"...HEAD -- '*.ts' '*.tsx' '*.sql' '*.yml' | head -400 > /tmp/diff.txt
+          echo "Diff lines: $(wc -l < /tmp/diff.txt)"
 
-          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
-            -H "x-api-key: $ANTHROPIC_API_KEY" \
-            -H "anthropic-version: 2023-06-01" \
-            -H "content-type: application/json" \
-            -d "{
-              \"model\": \"claude-sonnet-4-20250514\",
-              \"max_tokens\": 512,
-              \"messages\": [{
-                \"role\": \"user\",
-                \"content\": $(echo "$PERSONA\n\nReview this diff and respond ONLY with valid JSON: {\\\"vote\\\": \\\"approve\\\" or \\\"reject\\\", \\\"confidence\\\": 0.0-1.0, \\\"top_finding\\\": \\\"one sentence\\\"}\n\nDiff:\n$DIFF" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))")
-              }]
-            }")
+      - name: ${{ matrix.agent }} agent vote via Ollama
+        id: vote
+        env:
+          OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+          AGENT_NAME: ${{ matrix.agent }}
+          MODEL: ${{ matrix.model }}
+          PERSONA: ${{ matrix.persona }}
+        run: |
+          set -e
+          DIFF=$(cat /tmp/diff.txt)
 
-          VOTE=$(echo "$RESPONSE" | python3 -c "import sys,json; data=json.load(sys.stdin); print(data['content'][0]['text'])" 2>/dev/null || echo '{"vote":"reject","confidence":0,"top_finding":"Agent failed to respond"}')
-          echo "AGENT_VOTE=$VOTE" >> $GITHUB_OUTPUT
-          echo "$VOTE" > /tmp/${AGENT_NAME}_vote.json
-      - uses: actions/upload-artifact@v4
+          # Build JSON payload — python handles all escaping safely
+          python3 - <<'PYEOF'
+import os, json, urllib.request, sys
+
+diff    = open('/tmp/diff.txt').read()[:3000]
+persona = os.environ['PERSONA']
+model   = os.environ['MODEL']
+agent   = os.environ['AGENT_NAME']
+api_key = os.environ['OLLAMA_API_KEY']
+
+prompt = f"""{persona}
+
+Review the following code diff and respond with ONLY valid JSON (no markdown, no explanation):
+{{"vote": "approve" or "reject", "confidence": 0.0-1.0, "top_finding": "one sentence summary"}}
+
+Rules:
+- approve  = no blocking issues found
+- reject   = blocking security, financial, or architectural issue found
+- confidence = how certain you are (1.0 = certain)
+
+Diff:
+{diff}
+"""
+
+payload = json.dumps({
+    "model":   model,
+    "prompt":  prompt,
+    "stream":  False,
+    "options": {"temperature": 0.1, "num_predict": 200},
+}).encode()
+
+req = urllib.request.Request(
+    "https://api.ollama.com/api/generate",
+    data=payload,
+    headers={
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type":  "application/json",
+    }
+)
+
+try:
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        data = json.load(resp)
+    raw = data.get("response", "").strip()
+
+    # Extract JSON even if wrapped in markdown ```json ... ```
+    import re
+    m = re.search(r'\{[^{}]+\}', raw, re.DOTALL)
+    if m:
+        vote_obj = json.loads(m.group())
+    else:
+        vote_obj = json.loads(raw)
+
+    vote_obj.setdefault("vote", "reject")
+    vote_obj.setdefault("confidence", 0.5)
+    vote_obj.setdefault("top_finding", "No finding provided")
+
+except Exception as e:
+    print(f"Agent {agent} failed: {e}", file=sys.stderr)
+    vote_obj = {"vote": "reject", "confidence": 0.0, "top_finding": f"Agent {agent} failed to respond: {e}"}
+
+with open(f'/tmp/{agent}_vote.json', 'w') as f:
+    json.dump(vote_obj, f)
+
+print(f"Agent {agent} voted: {vote_obj['vote']} ({vote_obj['confidence']:.0%} confidence)")
+print(f"Finding: {vote_obj['top_finding']}")
+
+# Write to GITHUB_OUTPUT
+with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+    out.write(f"VOTE={vote_obj['vote']}\n")
+    out.write(f"CONFIDENCE={vote_obj['confidence']}\n")
+PYEOF
+
+      - name: Upload vote artifact
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: vote-${{ matrix.agent }}
           path: /tmp/${{ matrix.agent }}_vote.json
+          if-no-files-found: warn
 
   consensus:
     needs: agent-vote
     runs-on: ubuntu-latest
+    if: always()   # run even if some agent jobs failed
+    timeout-minutes: 5
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download all votes
+        uses: actions/download-artifact@v4
         with:
           path: votes/
-      - name: Tally votes (2/3 majority required)
+
+      - name: Tally Byzantine consensus (⅔ majority)
         id: tally
         run: |
-          APPROVE=0; REJECT=0; FINDINGS=""
-          for f in votes/*/; do
-            VOTE_FILE=$(find "$f" -name "*.json" | head -1)
-            if [ -f "$VOTE_FILE" ]; then
-              VOTE=$(python3 -c "import json; d=json.load(open('$VOTE_FILE')); print(d.get('vote','reject'))")
-              FINDING=$(python3 -c "import json; d=json.load(open('$VOTE_FILE')); print(d.get('top_finding',''))")
-              if [ "$VOTE" = "approve" ]; then APPROVE=$((APPROVE+1)); else REJECT=$((REJECT+1)); fi
-              FINDINGS="$FINDINGS\n- $FINDING"
-            fi
-          done
-          TOTAL=$((APPROVE+REJECT))
-          echo "Approve: $APPROVE/$TOTAL"
-          echo "APPROVE_COUNT=$APPROVE" >> $GITHUB_OUTPUT
-          echo "REJECT_COUNT=$REJECT" >> $GITHUB_OUTPUT
-          if [ $APPROVE -ge 2 ]; then
-            echo "CONSENSUS=approved" >> $GITHUB_OUTPUT
-          else
-            echo "CONSENSUS=rejected" >> $GITHUB_OUTPUT
-          fi
-      - name: Post consensus result
+          python3 - <<'PYEOF'
+import json, os, glob
+
+votes_dir = "votes"
+approve = 0
+reject  = 0
+findings = []
+
+for vote_file in glob.glob(f"{votes_dir}/**/*.json", recursive=True):
+    try:
+        with open(vote_file) as f:
+            data = json.load(f)
+        v = data.get("vote", "reject").lower()
+        c = data.get("confidence", 0.5)
+        finding = data.get("top_finding", "")
+        agent = vote_file.split("/")[-2].replace("vote-","")
+        if v == "approve":
+            approve += 1
+        else:
+            reject += 1
+        findings.append(f"**{agent}** ({c:.0%}): {finding}")
+        print(f"{agent}: {v} ({c:.0%}) — {finding}")
+    except Exception as e:
+        print(f"Error reading {vote_file}: {e}")
+        reject += 1
+        findings.append(f"**unknown**: Agent artifact missing or corrupt")
+
+total   = approve + reject
+consensus = "approved" if approve >= 2 else "rejected"
+summary = "\n".join(f"- {f}" for f in findings)
+
+print(f"\nResult: {approve}/{total} approve → {consensus.upper()}")
+
+# Write to GITHUB_OUTPUT
+with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+    out.write(f"CONSENSUS={consensus}\n")
+    out.write(f"APPROVE_COUNT={approve}\n")
+    out.write(f"REJECT_COUNT={reject}\n")
+    out.write(f"FINDINGS<<EOFINDINGS\n{summary}\nEOFINDINGS\n")
+PYEOF
+
+      - name: Post consensus comment on PR
         uses: actions/github-script@v7
+        env:
+          CONSENSUS: ${{ steps.tally.outputs.CONSENSUS }}
+          APPROVE: ${{ steps.tally.outputs.APPROVE_COUNT }}
+          REJECT: ${{ steps.tally.outputs.REJECT_COUNT }}
+          FINDINGS: ${{ steps.tally.outputs.FINDINGS }}
         with:
           script: |
-            const consensus = '${{ steps.tally.outputs.CONSENSUS }}';
-            const approve = '${{ steps.tally.outputs.APPROVE_COUNT }}';
-            const reject = '${{ steps.tally.outputs.REJECT_COUNT }}';
-            const emoji = consensus === 'approved' ? '✅' : '❌';
+            const consensus = process.env.CONSENSUS;
+            const approve   = process.env.APPROVE;
+            const reject    = process.env.REJECT;
+            const findings  = process.env.FINDINGS || 'No findings.';
+            const emoji     = consensus === 'approved' ? '✅' : '❌';
+
+            const body = `## ${emoji} Byzantine Consensus: ${consensus.toUpperCase()}
+
+**Votes: ${approve}/3 approve | ${reject}/3 reject** (⅔ majority required)
+
+### Agent Findings
+${findings}
+
+---
+*APEX Sentinel v3 — Qwen3.5 · Kimi-K2.5 · GLM-5 via Ollama Cloud API*`;
+
             await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
+              owner:        context.repo.owner,
+              repo:         context.repo.repo,
               issue_number: context.issue.number,
-              body: `## ${emoji} Byzantine Consensus: ${consensus.toUpperCase()}\n\nVotes: **${approve}/3 approve** | **${reject}/3 reject** (⅔ majority required)\n\n*APEX Sentinel v3 — Multi-agent Byzantine Consensus Gate*`
+              body,
             });
+
             if (consensus === 'rejected') {
-              core.setFailed('Byzantine consensus rejected this PR. Minimum 2/3 agent approval required.');
+              core.setFailed(`Byzantine consensus rejected: ${reject}/3 agents voted reject.`);
             }

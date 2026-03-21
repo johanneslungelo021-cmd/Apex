@@ -1,8 +1,17 @@
 name: Qwen Review Loop
+# APEX Sentinel v3 — Automated code review on every MPP-config push
+# Agent assignment:
+#   qwen-review    → Qwen3.5:397b  (security + code quality)
+#   kimi-visual    → Kimi-K2.5     (financial precision + frontend)
+#   deepseek-plan  → deepseek-v3.2 (architectural planning, triggers after commit)
 on:
   push:
     branches: [MPP-config]
   workflow_dispatch:
+
+env:
+  OLLAMA_BASE: https://api.ollama.com/api/generate
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 concurrency:
   group: qwen-review-${{ github.ref }}
@@ -10,155 +19,206 @@ concurrency:
 
 jobs:
   qwen-review:
+    name: Qwen3.5 Code Review
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           ref: MPP-config
           fetch-depth: 2
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get diff context
+      - name: Get diff (last commit only)
         id: diff
         run: |
-          DIFF=$(git diff HEAD~1 -- '*.ts' '*.tsx' '*.sql' '*.yml' | head -300)
-          echo "DIFF<<EODIFF" >> $GITHUB_OUTPUT
-          echo "$DIFF" >> $GITHUB_OUTPUT
-          echo "EODIFF" >> $GITHUB_OUTPUT
+          git diff HEAD~1 -- '*.ts' '*.tsx' '*.sql' '*.yml' | head -500 > /tmp/diff.txt
+          echo "Lines: $(wc -l < /tmp/diff.txt)"
 
-      - name: Run Qwen-style code review via Claude API
+      - name: Qwen3.5 review via Ollama
         id: review
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
         run: |
-          DIFF=$(cat <<'EODIFF'
-          ${{ steps.diff.outputs.DIFF }}
-          EODIFF
-          )
+          python3 - <<'PYEOF'
+import os, json, urllib.request, sys, re
 
-          # Escape the diff for JSON
-          ESCAPED_DIFF=$(echo "$DIFF" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))")
+diff    = open('/tmp/diff.txt').read()[:4000]
+api_key = os.environ['OLLAMA_API_KEY']
 
-          RESPONSE=$(curl -s --max-time 120 https://api.anthropic.com/v1/messages \
-            -H "x-api-key: $ANTHROPIC_API_KEY" \
-            -H "anthropic-version: 2023-06-01" \
-            -H "content-type: application/json" \
-            -d "{
-              \"model\": \"claude-sonnet-4-20250514\",
-              \"max_tokens\": 1024,
-              \"messages\": [{
-                \"role\": \"user\",
-                \"content\": \"You are Qwen, a security-focused code reviewer for the Apex financial platform. Review this diff for: auth bypasses, injection vulnerabilities, exposed secrets, unsafe deserialization, financial precision issues, and currency handling bugs.\n\nRespond with a concise markdown review (max 500 words). Start with a verdict: APPROVE or REQUEST_CHANGES.\n\nDiff:\n\"
-              }]
-            }" 2>/dev/null)
+prompt = f"""You are Qwen3.5 — security-focused code reviewer for the Apex MPP financial platform.
 
-          REVIEW=$(echo "$RESPONSE" | python3 -c "
-          import sys, json
-          try:
-              data = json.load(sys.stdin)
-              print(data['content'][0]['text'])
-          except:
-              print('Qwen review agent could not generate a response.')
-          ")
+Review this diff for:
+1. Auth bypasses or missing RLS policies
+2. Exposed secrets or API keys in code
+3. Injection vulnerabilities (SQL, command, template)
+4. Financial precision issues (rounding, truncation)
+5. Missing error handling on payment flows
+6. TypeScript type safety issues
 
-          echo "REVIEW<<EOREVIEW" >> $GITHUB_OUTPUT
-          echo "$REVIEW" >> $GITHUB_OUTPUT
-          echo "EOREVIEW" >> $GITHUB_OUTPUT
+Respond in markdown. Start with a clear verdict line:
+**VERDICT: APPROVE** or **VERDICT: REQUEST CHANGES**
 
-      - name: Post review comment on PR
-        if: always()
+Then list findings by severity: 🔴 Critical | 🟠 Major | 🟡 Minor
+
+Diff:
+{diff}
+"""
+
+payload = json.dumps({
+    "model":   "qwen3.5:397b",
+    "prompt":  prompt,
+    "stream":  False,
+    "options": {"temperature": 0.2, "num_predict": 800},
+}).encode()
+
+req = urllib.request.Request(
+    "https://api.ollama.com/api/generate",
+    data=payload,
+    headers={
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type":  "application/json",
+    }
+)
+
+try:
+    with urllib.request.urlopen(req, timeout=180) as resp:
+        data = json.load(resp)
+    review = data.get("response", "").strip()
+    # Strip <think> blocks (Qwen sometimes emits these)
+    review = re.sub(r'<think>.*?</think>', '', review, flags=re.DOTALL).strip()
+    if not review:
+        review = "Qwen review returned empty response."
+except Exception as e:
+    review = f"⚠️ Qwen agent failed: {e}"
+
+with open('/tmp/qwen_review.txt', 'w') as f:
+    f.write(review)
+print(review[:300])
+PYEOF
+
+      - name: Post Qwen review on PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ github.sha }}
         run: |
-          REVIEW="${{ steps.review.outputs.REVIEW }}"
-          if [ -z "$REVIEW" ]; then
-            REVIEW="Qwen review agent completed but produced no output."
-          fi
+          REVIEW=$(cat /tmp/qwen_review.txt 2>/dev/null || echo "No review output.")
+          BODY="## 🔍 Qwen3.5 Code Review (Automated)
 
-          # Post comment on PR #52
+${REVIEW}
+
+---
+*APEX Sentinel v3 · Qwen3.5:397b via Ollama Cloud · Commit: ${SHA::8}*"
+
           gh api repos/${{ github.repository }}/issues/52/comments \
-            -f body="## 🔍 Qwen Code Review (Automated)
-
-          ${REVIEW}
-
-          ---
-          *APEX Sentinel v3 — Qwen Review Loop (Claude API backend)*
-          *Commit: ${{ github.sha }}*"
+            -f body="$BODY" || true
 
   kimi-visual-review:
+    name: Kimi K2 Visual + Financial Review
     needs: [qwen-review]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           ref: MPP-config
           fetch-depth: 2
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get frontend diff
+      - name: Get frontend + payment diff
         id: diff
         run: |
-          DIFF=$(git diff HEAD~1 -- 'src/components/**' 'src/hooks/**' 'src/styles/**' | head -300)
-          if [ -z "$DIFF" ]; then
-            echo "No frontend changes detected — skipping Kimi review."
-            echo "SKIP=true" >> $GITHUB_OUTPUT
+          git diff HEAD~1 -- \
+            'src/components/**' 'src/hooks/**' \
+            'src/lib/payments/**' 'src/app/api/mpp/**' \
+            | head -400 > /tmp/kimi_diff.txt
+          LINES=$(wc -l < /tmp/kimi_diff.txt)
+          echo "Lines: $LINES"
+          if [ "$LINES" -lt 3 ]; then
+            echo "SKIP=true" >> $GITHUB_ENV
           else
-            echo "SKIP=false" >> $GITHUB_OUTPUT
-            echo "DIFF<<EODIFF" >> $GITHUB_OUTPUT
-            echo "$DIFF" >> $GITHUB_OUTPUT
-            echo "EODIFF" >> $GITHUB_OUTPUT
+            echo "SKIP=false" >> $GITHUB_ENV
           fi
 
-      - name: Run Kimi-style visual review via Claude API
-        if: steps.diff.outputs.SKIP != 'true'
+      - name: Kimi K2 review via Ollama
+        if: env.SKIP != 'true'
         id: review
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
         run: |
-          RESPONSE=$(curl -s --max-time 120 https://api.anthropic.com/v1/messages \
-            -H "x-api-key: $ANTHROPIC_API_KEY" \
-            -H "anthropic-version: 2023-06-01" \
-            -H "content-type: application/json" \
-            -d "{
-              \"model\": \"claude-sonnet-4-20250514\",
-              \"max_tokens\": 1024,
-              \"messages\": [{
-                \"role\": \"user\",
-                \"content\": \"You are Kimi, a frontend/visual reviewer. Review this diff for: missing 'use client' directives, broken imports, accessibility (WCAG), animation performance, and TypeScript errors.\n\nRespond with concise markdown. Start with APPROVE or REQUEST_CHANGES.\n\nDiff:\n${{ steps.diff.outputs.DIFF }}\"
-              }]
-            }" 2>/dev/null)
+          python3 - <<'PYEOF'
+import os, json, urllib.request, sys, re
 
-          REVIEW=$(echo "$RESPONSE" | python3 -c "
-          import sys, json
-          try:
-              data = json.load(sys.stdin)
-              print(data['content'][0]['text'])
-          except:
-              print('Kimi review agent could not generate a response.')
-          ")
+diff    = open('/tmp/kimi_diff.txt').read()[:4000]
+api_key = os.environ['OLLAMA_API_KEY']
 
-          echo "REVIEW<<EOREVIEW" >> $GITHUB_OUTPUT
-          echo "$REVIEW" >> $GITHUB_OUTPUT
-          echo "EOREVIEW" >> $GITHUB_OUTPUT
+prompt = f"""You are Kimi K2 Thinking — financial precision and frontend reviewer for Apex.
 
-      - name: Post Kimi review comment
-        if: steps.diff.outputs.SKIP != 'true' && always()
+Review this diff for:
+1. MPP micro-payment precision: amounts < $0.01 handled correctly?
+2. USD vs ZAR currency confusion — are columns correctly named and documented?
+3. NUMERIC(18,6) used throughout — any truncation to NUMERIC(12,2)?
+4. Frontend: missing 'use client' directives, broken imports
+5. React hooks correctness, missing keys in lists
+6. TypeScript: any unsafe casts, missing null checks on financial values
+
+Respond in markdown. Start with:
+**VERDICT: APPROVE** or **VERDICT: REQUEST CHANGES**
+
+List findings by severity: 🔴 Critical | 🟠 Major | 🟡 Minor
+
+Diff:
+{diff}
+"""
+
+payload = json.dumps({
+    "model":   "kimi-k2.5",
+    "prompt":  prompt,
+    "stream":  False,
+    "options": {"temperature": 0.15, "num_predict": 800},
+}).encode()
+
+req = urllib.request.Request(
+    "https://api.ollama.com/api/generate",
+    data=payload,
+    headers={
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type":  "application/json",
+    }
+)
+
+try:
+    with urllib.request.urlopen(req, timeout=180) as resp:
+        data = json.load(resp)
+    review = data.get("response", "").strip()
+    # Strip <think> blocks
+    review = re.sub(r'<think>.*?</think>', '', review, flags=re.DOTALL).strip()
+    if not review:
+        review = "Kimi review returned empty response."
+except Exception as e:
+    review = f"⚠️ Kimi agent failed: {e}"
+
+with open('/tmp/kimi_review.txt', 'w') as f:
+    f.write(review)
+print(review[:300])
+PYEOF
+
+      - name: Post Kimi review on PR
+        if: env.SKIP != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ github.sha }}
         run: |
-          REVIEW="${{ steps.review.outputs.REVIEW }}"
-          if [ -z "$REVIEW" ]; then
-            REVIEW="Kimi visual review completed but produced no output."
-          fi
+          REVIEW=$(cat /tmp/kimi_review.txt 2>/dev/null || echo "No review output.")
+          BODY="## 🎨 Kimi K2 Visual + Financial Review (Automated)
+
+${REVIEW}
+
+---
+*APEX Sentinel v3 · Kimi-K2.5 via Ollama Cloud · Commit: ${SHA::8}*"
 
           gh api repos/${{ github.repository }}/issues/52/comments \
-            -f body="## 🎨 Kimi Visual Review (Automated)
-
-          ${REVIEW}
-
-          ---
-          *APEX Sentinel v3 — Kimi Visual Review (Claude API backend)*
-          *Commit: ${{ github.sha }}*"
+            -f body="$BODY" || true
