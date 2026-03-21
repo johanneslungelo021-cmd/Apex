@@ -21,9 +21,6 @@
 
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 
-// Real network latency to Tempo sandbox — allow 30 seconds for the whole file
-jest.setTimeout(30000);
-
 // ─── Supabase mock — only external dep we don't hit live in unit tests ─────────
 
 const mockSupabaseChain: Record<string, jest.Mock> = {
@@ -143,7 +140,7 @@ describeRpc('Tempo Live RPC — rpc.moderato.tempo.xyz (TEMPO_RPC_ENABLED=true)'
     expect(typeof result.formatted).toBe('string');
     // Format: "0.000000" — whole.6decimals
     expect(result.formatted).toMatch(/^\d+\.\d{6}$/);
-  });
+  }, 30000);
 
   it('getTempoBlockNumber returns a positive bigint from live RPC', async () => {
     const { getTempoBlockNumber } = await import('@/lib/payments/tempo-chain');
@@ -153,7 +150,7 @@ describeRpc('Tempo Live RPC — rpc.moderato.tempo.xyz (TEMPO_RPC_ENABLED=true)'
     expect(block).not.toBeNull();
     expect(typeof block).toBe('bigint');
     expect(block! > BigInt(0)).toBe(true);
-  });
+  }, 30000);
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -361,55 +358,3 @@ describe('MPP Treasury Route — real mppx session intent', () => {
   });
 });
 
-// ══════════════════════════════════════════════════════════════════════════════
-// 5. DB schema — migration 010 column types and constraints
-// ══════════════════════════════════════════════════════════════════════════════
-
-describe('MPP DB Schema (migration 010)', () => {
-  // NOTE: These are compile-time type documentation tests.
-  // They verify TypeScript types align with expected DB schema shapes,
-  // not live DB connectivity. See integration tests for actual constraint validation.
-
-  it('transactions MPP columns are correctly typed', () => {
-    type TxMppCols = {
-      mpp_receipt_reference:  string | null;
-      mpp_session_channel_id: string | null;
-      mpp_intent:             'charge' | 'session' | null;
-      tempo_chain_id:         4217 | 42431 | null;
-      tip20_token_address:    string | null;
-      tip20_amount:           number | null;
-      settlement_pathway:     string | null;
-    };
-    const row: TxMppCols = {
-      mpp_receipt_reference:  '0xabc',
-      mpp_session_channel_id: null,
-      mpp_intent:             'charge',
-      tempo_chain_id:         4217,
-      tip20_token_address:    '0x20C000000000000000000000b9537d11c60E8b50',
-      tip20_amount:           0.001,
-      settlement_pathway:     'tempo_mpp',
-    };
-    expect(row.mpp_intent).toBe('charge');
-    expect([4217, 42431]).toContain(row.tempo_chain_id);
-  });
-
-  it('mpp_session_log escrow address matches the real mainnet TempoStreamChannel', () => {
-    const escrow = '0x33b901018174DDabE4841042ab76ba85D4e24f25';
-    expect(escrow.toLowerCase()).toBe('0x33b901018174ddabe4841042ab76ba85d4e24f25');
-  });
-
-  it('gateway CHECK: tempo_mpp is allowed, visa_direct is removed', () => {
-    const allowed = ['paystack', 'yoco', 'ozow', 'xrpl', 'manual', 'tempo_mpp'];
-    expect(allowed).toContain('tempo_mpp');
-    expect(allowed).not.toContain('visa_direct');
-  });
-
-  it('all MPP pricing values are valid positive sub-dollar USD amounts', () => {
-    const prices = ['0.001', '0.010', '0.0001', '0.005'];
-    prices.forEach(p => {
-      const n = parseFloat(p);
-      expect(n).toBeGreaterThan(0);
-      expect(n).toBeLessThan(1);
-    });
-  });
-});
