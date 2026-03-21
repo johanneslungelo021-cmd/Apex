@@ -34,5 +34,6 @@ module.exports = {
     '/node_modules/(?!(mppx|incur|@remix-run/fetch-proxy|@remix-run/node-fetch-server)/)',
   ],
   testMatch:   ['<rootDir>/tests/**/*.test.ts'],
+  testPathIgnorePatterns: ['<rootDir>/node_modules/', '<rootDir>/.next/'],
   testTimeout: 30000,
 };

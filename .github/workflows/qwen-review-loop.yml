@@ -48,7 +48,7 @@ jobs:
           PR_COMMENTS=$(gh api repos/${{ github.repository }}/pulls/52/reviews \
             --jq '[.[] | select(.user.login | contains("coderabbitai") or contains("devin")) | .body] | join("\n---\n")' 2>/dev/null || echo "")
 
-          claude --model qwen3.5 --yes -p "
+          claude --model qwen3.5 --dangerously-skip-permissions -p "
           You are reviewing PR #52 on branch MPP-config of the johanneslungelo021-cmd/Apex repo.
 
           Recent CodeRabbit/Devin review comments:
