@@ -59,6 +59,15 @@ jest.unstable_mockModule('@/lib/api-utils', () => ({
 // ══════════════════════════════════════════════════════════════════════════════
 
 describe('Tempo Chain Config', () => {
+  const OLD_ENV = process.env;
+  beforeEach(() => {
+    jest.resetModules();
+    process.env = { ...OLD_ENV, TEMPO_NETWORK: 'testnet' };
+  });
+  afterEach(() => {
+    process.env = OLD_ENV;
+  });
+
   it('mainnet chain ID is 4217', async () => {
     const { tempoMainnet } = await import('@/lib/payments/tempo-chain');
     expect(tempoMainnet.id).toBe(4217);

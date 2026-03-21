@@ -23,6 +23,9 @@ export const SYSTEM_CREATOR_ID = '00000000-0000-0000-0000-000000000001';
 export function getRecipient(): `0x${string}` {
   const addr = process.env.APEX_TEMPO_RECIPIENT;
   if (!addr) throw new Error('APEX_TEMPO_RECIPIENT env var is not set');
+  if (!/^0x[0-9a-fA-F]{40}$/.test(addr)) {
+    throw new Error(`APEX_TEMPO_RECIPIENT is not a valid Ethereum address: "${addr}"`);
+  }
   return addr as `0x${string}`;
 }
 
@@ -65,13 +68,13 @@ export async function recordMppPayment(
 ): Promise<void> {
   try {
     const supabase  = getSupabaseClient();
-    const amountZar = Math.round(parseFloat(record.amountUsd) * 100) / 100;
+    const amountUsdNum = parseFloat(record.amountUsd);
 
     const { error: rpcError } = await supabase.rpc('insert_transaction_serializable', {
       p_creator_id:              record.creatorId,
       p_customer_id:             null,
-      p_amount_zar:              amountZar,
-      p_platform_fee_zar:        Math.round(parseFloat(record.amountUsd) * 100) / 100,
+      p_amount_zar:              amountUsdNum,
+      p_platform_fee_zar:        amountUsdNum,
       p_gateway:                 'tempo_mpp',
       p_gateway_ref:             record.receiptReference,
       p_external_id:             record.receiptReference,

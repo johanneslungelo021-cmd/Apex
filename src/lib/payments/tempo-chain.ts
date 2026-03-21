@@ -51,8 +51,9 @@ export const tempoTestnet = defineChain({
 
 // ─── Environment-aware defaults ───────────────────────────────────────────────
 
-const isMainnet = process.env.TEMPO_NETWORK === 'mainnet'
-  || process.env.NODE_ENV === 'production';
+const isMainnet = process.env.TEMPO_NETWORK
+  ? process.env.TEMPO_NETWORK === 'mainnet'
+  : process.env.NODE_ENV === 'production';
 
 export const tempoChain   = isMainnet ? tempoMainnet : tempoTestnet;
 export const tempoChainId = isMainnet ? 4217 : 42431;

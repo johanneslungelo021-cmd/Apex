@@ -47,9 +47,9 @@ export const GET = async (request: Request) => {
   }
 
   const handler = mppx.tempo.charge({ amount: MPP_PRICING.analyticsQuery })(
-    async (_request: Request) => {
+    async (innerRequest: Request) => {
       const requestId                 = generateRequestId();
-      const { searchParams }          = new URL(request.url);
+      const { searchParams }          = new URL(innerRequest.url);
       const creatorId                 = searchParams.get('creator_id');
 
       if (!creatorId) {
