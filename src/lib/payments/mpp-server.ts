@@ -73,7 +73,7 @@ export async function recordMppPayment(
     // USD→ZAR via live FX before DB insertion
     const fx = await convertToZar(amountUsdNum, 'USD');
     const amountZar = fx.amount_zar;
-    const platformFeeZar = Math.round(amountZar * 0.05 * 100) / 100; // 5% platform fee
+    const platformFeeZar = parseFloat((amountZar * 0.05).toFixed(6)); // 5% fee — full precision for micro-payments
 
     const { error: rpcError } = await supabase.rpc('insert_transaction_serializable', {
       p_creator_id:              record.creatorId,
