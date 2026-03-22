@@ -4,6 +4,7 @@ import json, os, glob
 
 approve = 0
 reject  = 0
+abstain = 0
 findings = []
 
 for vf in glob.glob("votes/**/*.json", recursive=True):
@@ -15,6 +16,8 @@ for vf in glob.glob("votes/**/*.json", recursive=True):
         agent = vf.split("/")[-2].replace("vote-", "")
         if v == "approve":
             approve += 1
+        elif v == "abstain":
+            abstain += 1
         else:
             reject += 1
         findings.append(f"**{agent}** ({c:.0%}): {finding}")
@@ -23,9 +26,10 @@ for vf in glob.glob("votes/**/*.json", recursive=True):
         reject += 1
         findings.append(f"**unknown**: artifact error: {e}")
 
+# ABSTAIN is neutral — only APPROVE and REJECT count. Need >= 2 APPROVE to pass.
 consensus = "approved" if approve >= 2 else "rejected"
 summary   = "\n".join(f"- {f}" for f in findings)
-print(f"\nResult: {approve}/3 approve → {consensus.upper()}")
+print(f"\nResult: {approve} approve, {reject} reject, {abstain} abstain → {consensus.upper()}")
 
 gho = os.environ.get("GITHUB_OUTPUT", "")
 if gho:
@@ -33,4 +37,5 @@ if gho:
         fh.write(f"CONSENSUS={consensus}\n")
         fh.write(f"APPROVE_COUNT={approve}\n")
         fh.write(f"REJECT_COUNT={reject}\n")
+        fh.write(f"ABSTAIN_COUNT={abstain}\n")
         fh.write(f"FINDINGS<<EOFINDINGS\n{summary}\nEOFINDINGS\n")

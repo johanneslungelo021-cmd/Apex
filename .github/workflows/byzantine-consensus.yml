@@ -7,6 +7,10 @@ name: Byzantine Consensus Gate
     - src/**
     - supabase/migrations/**
     - .github/workflows/**
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 jobs:
@@ -72,17 +76,22 @@ jobs:
       run: python3 .github/scripts/ollama_tally_votes.py
     - name: Post consensus comment on PR
       uses: actions/github-script@v7
+      continue-on-error: true
       env:
         CONSENSUS: ${{ steps.tally.outputs.CONSENSUS }}
         APPROVE: ${{ steps.tally.outputs.APPROVE_COUNT }}
         REJECT: ${{ steps.tally.outputs.REJECT_COUNT }}
+        ABSTAIN: ${{ steps.tally.outputs.ABSTAIN_COUNT }}
         FINDINGS: ${{ steps.tally.outputs.FINDINGS }}
       with:
-        script: 'const c=process.env.CONSENSUS, a=process.env.APPROVE, r=process.env.REJECT, f=process.env.FINDINGS||''No findings.'', e=c===''approved''?''✅'':''❌'';
+        script: 'const c=process.env.CONSENSUS, a=process.env.APPROVE, r=process.env.REJECT, ab=process.env.ABSTAIN, f=process.env.FINDINGS||''No findings.'', e=c===''approved''?''✅'':''❌'';
 
           await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,
 
-          body:`## ${e} Byzantine Consensus: ${c.toUpperCase()}\n\n**Votes: ${a}/3 approve | ${r}/3 reject** (⅔ majority required)\n\n### Agent Findings\n${f}\n\n---\n*APEX Sentinel v3 · Qwen3.5 · Kimi-K2.5
-          · GLM-5 via Ollama Cloud*`});
-
-          if(c===''rejected''){core.setFailed(`Byzantine consensus rejected: ${r}/3 agents voted reject.`);}'
+          body:`## ${e} Byzantine Consensus: ${c.toUpperCase()}\n\n**Votes: ${a} approve | ${r} reject | ${ab} abstain** (⅔ majority required)\n\n### Agent Findings\n${f}\n\n---\n*APEX Sentinel v3 · Qwen3.5 · Kimi-K2.5
+          · GLM-5 via Ollama Cloud*`});'
+    - name: Enforce consensus result
+      if: steps.tally.outputs.CONSENSUS == 'rejected'
+      run: |
+        echo "Byzantine consensus rejected: ${{ steps.tally.outputs.REJECT_COUNT }} agent(s) voted reject."
+        exit 1
