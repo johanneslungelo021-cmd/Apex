@@ -16,7 +16,7 @@ export const runtime = 'nodejs';
 
 import { NextResponse }             from 'next/server';
 import { Mppx, tempo }              from 'mppx/nextjs';
-import { getRecipient, getFeePayer, MPP_PRICING, recordMppPayment, defaultToken }
+import { getRecipient, getFeePayer, MPP_PRICING, recordMppPayment, defaultToken, SYSTEM_CREATOR_ID }
   from '@/lib/payments/mpp-server';
 import { getSupabaseClient }        from '@/lib/supabase';
 import { log, generateRequestId }   from '@/lib/api-utils';
@@ -117,7 +117,7 @@ export const GET = async (request: Request) => {
 
       // Non-blocking audit record
       void recordMppPayment({
-        creatorId,
+        creatorId: SYSTEM_CREATOR_ID, // platform query fee — must NOT pollute creator analytics
         amountUsd:        MPP_PRICING.analyticsQuery,
         mppIntent:        'charge',
         receiptReference: requestId,
