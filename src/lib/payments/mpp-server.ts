@@ -13,6 +13,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { defaultToken, tempoChainId } from './tempo-chain';
 import { getSupabaseClient } from '@/lib/supabase';
 import { log } from '@/lib/api-utils';
+import { convertToZar } from '@/lib/treasury/fx';
 
 // ─── System creator UUID — used for treasury/system-level MPP payments ──────
 export const SYSTEM_CREATOR_ID = '00000000-0000-0000-0000-000000000001';
@@ -69,15 +70,16 @@ export async function recordMppPayment(
     const supabase  = getSupabaseClient();
     const amountUsdNum = parseFloat(record.amountUsd);
 
+    // USD→ZAR via live FX before DB insertion
+    const fx = await convertToZar(amountUsdNum, 'USD');
+    const amountZar = fx.amount_zar;
+    const platformFeeZar = Math.round(amountZar * 0.05 * 100) / 100; // 5% platform fee
+
     const { error: rpcError } = await supabase.rpc('insert_transaction_serializable', {
       p_creator_id:              record.creatorId,
       p_customer_id:             null,
-      // ARCHITECTURAL NOTE: MPP amounts are denominated in USD (USDC).
-      // These are stored in ZAR-named columns as raw USD values.
-      // FX conversion to actual ZAR is applied at payout time by the settlement service.
-      // This is intentional — the column name reflects the payout currency, not the input currency.
-      p_amount_zar:              amountUsdNum,
-      p_platform_fee_zar:        amountUsdNum,
+      p_amount_zar:              amountZar,
+      p_platform_fee_zar:        platformFeeZar,
       p_gateway:                 'tempo_mpp',
       p_gateway_ref:             record.receiptReference,
       p_external_id:             record.receiptReference,
@@ -95,6 +97,9 @@ export async function recordMppPayment(
         mpp_intent:              record.mppIntent,
         amount_usd:              record.amountUsd,
         amount_usd_exact:        record.amountUsd,
+        amount_zar:              amountZar,
+        fx_rate:                 fx.rate_used,
+        fx_source:               fx.rate_source,
         settlement_pathway:      'tempo_mpp',
         receipt_reference:       record.receiptReference,
         session_channel_id:      record.sessionChannelId ?? null,

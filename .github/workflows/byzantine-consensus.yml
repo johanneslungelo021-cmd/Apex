@@ -62,6 +62,7 @@ jobs:
     if: always()
     timeout-minutes: 5
     steps:
+    - uses: actions/checkout@v4
     - name: Download all votes
       uses: actions/download-artifact@v4
       with:

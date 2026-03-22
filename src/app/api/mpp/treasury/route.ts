@@ -66,6 +66,19 @@ export const GET = async (_request: Request) => {
           .limit(10),
       ]);
 
+      if (poolResult.error) {
+        console.error('Treasury pool query failed:', poolResult.error);
+        return NextResponse.json({ error: 'Treasury data unavailable' }, { status: 500 });
+      }
+      if (disbResult.error) {
+        console.error('Treasury disbursement query failed:', disbResult.error);
+        return NextResponse.json({ error: 'Treasury data unavailable' }, { status: 500 });
+      }
+      if (proposalResult.error) {
+        console.error('Treasury proposal query failed:', proposalResult.error);
+        return NextResponse.json({ error: 'Treasury data unavailable' }, { status: 500 });
+      }
+
       const pool      = poolResult.data ?? [];
       const disbLog   = disbResult.data ?? [];
       const proposals = proposalResult.data ?? [];

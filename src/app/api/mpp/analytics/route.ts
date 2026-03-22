@@ -39,6 +39,17 @@ function getMppx() {
 }
 
 export const GET = async (request: Request) => {
+  const { searchParams } = new URL(request.url);
+  const creatorId = searchParams.get('creator_id');
+
+  // Validate FIRST — before any payment check
+  if (!creatorId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(creatorId)) {
+    return NextResponse.json(
+      { error: 'creator_id is required and must be a valid UUID' },
+      { status: 400 },
+    );
+  }
+
   let mppx: ReturnType<typeof createMppx>;
   try {
     mppx = getMppx();
@@ -48,13 +59,7 @@ export const GET = async (request: Request) => {
 
   const handler = mppx.tempo.charge({ amount: MPP_PRICING.analyticsQuery })(
     async (innerRequest: Request) => {
-      const requestId                 = generateRequestId();
-      const { searchParams }          = new URL(innerRequest.url);
-      const creatorId                 = searchParams.get('creator_id');
-
-      if (!creatorId) {
-        return NextResponse.json({ error: 'creator_id required' }, { status: 400 });
-      }
+      const requestId = generateRequestId();
 
       const supabase = getSupabaseClient();
 

@@ -42,6 +42,7 @@ next-env.d.ts
 local-*
 .claude
 .z-ai-config
+.mcp.json
 
 # Logs
 *.log

@@ -61,9 +61,16 @@ export const tempoTestnet = defineChain({
  *   TEMPO_NETWORK unset + NODE_ENV=production → mainnet (fallback)
  *   TEMPO_NETWORK unset + NODE_ENV=development → testnet (fallback)
  */
-const isMainnet = process.env.TEMPO_NETWORK
-  ? process.env.TEMPO_NETWORK === 'mainnet'
-  : process.env.NODE_ENV === 'production';
+const tempoNetwork = process.env.TEMPO_NETWORK;
+
+if (tempoNetwork && tempoNetwork !== 'mainnet' && tempoNetwork !== 'testnet') {
+  throw new Error(
+    `Invalid TEMPO_NETWORK value: "${tempoNetwork}". Must be "mainnet" or "testnet".`
+  );
+}
+
+const isMainnet = tempoNetwork === 'mainnet'
+  || (tempoNetwork === undefined && process.env.NODE_ENV === 'production');
 
 export const tempoChain   = isMainnet ? tempoMainnet : tempoTestnet;
 export const tempoChainId = isMainnet ? 4217 : 42431;
