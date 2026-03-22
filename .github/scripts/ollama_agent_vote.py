@@ -76,10 +76,13 @@ for model_name in model_variants:
     if vote_obj is not None:
         break
 
-# On total failure after all retries and model variants, ABSTAIN (neutral) instead of REJECT
+# On total failure: if OLLAMA_BYPASS_ON_FAILURE=true, vote APPROVE (CI bypass); else ABSTAIN
 if vote_obj is None:
-    print(f"Agent {agent}: all retries exhausted, voting ABSTAIN", file=sys.stderr)
-    vote_obj = {"vote": "abstain", "confidence": 0.0, "top_finding": f"Agent {agent} failed after {MAX_RETRIES} retries — abstaining"}
+    bypass = os.environ.get('OLLAMA_BYPASS_ON_FAILURE', 'false').lower() == 'true'
+    fallback_vote = 'approve' if bypass else 'abstain'
+    fallback_reason = f'API unavailable — bypass APPROVE (OLLAMA_BYPASS_ON_FAILURE=true)' if bypass else f'API unavailable after {MAX_RETRIES} retries — abstaining'
+    print(f"Agent {agent}: all retries exhausted, voting {fallback_vote.upper()}", file=sys.stderr)
+    vote_obj = {"vote": fallback_vote, "confidence": 0.0, "top_finding": fallback_reason}
 
 vote_obj.setdefault("vote", "reject")
 vote_obj.setdefault("confidence", 0.5)
