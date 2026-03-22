@@ -55,12 +55,26 @@ except Exception as e:
 with open('/tmp/analysis.json', 'w') as f:
     json.dump(result, f, indent=2)
 
+import re as _re
+
+def _safe(s: str, max_len: int = 200) -> str:
+    """Strip newlines + shell metacharacters for safe GITHUB_OUTPUT writing."""
+    s = s.replace('\n', ' ').replace('\r', ' ')
+    s = _re.sub(r'[`$"\'\\ |&;<>(){}]', '', s)
+    return s.strip()[:max_len]
+
+# Write sanitized values to /tmp/root_cause.txt for shell use (avoids ${{ }} injection)
+root_cause_safe   = _safe(result.get('root_cause', 'unknown'))
+escalate_safe     = _safe(result.get('escalate_reason', ''))
+with open('/tmp/root_cause.txt', 'w') as f:
+    f.write(root_cause_safe)
+
 gho = os.environ.get('GITHUB_OUTPUT', '')
 if gho:
     with open(gho, 'a') as fh:
         fh.write(f"AUTO_FIXABLE={str(result['auto_fixable']).lower()}\n")
         fh.write(f"CONFIDENCE={result['confidence']}\n")
-        fh.write(f"ROOT_CAUSE={result['root_cause']}\n")
-        fh.write(f"ESCALATE_REASON={result.get('escalate_reason', '')}\n")
+        fh.write(f"ROOT_CAUSE={root_cause_safe}\n")
+        fh.write(f"ESCALATE_REASON={escalate_safe}\n")
 
 print(json.dumps(result, indent=2))
