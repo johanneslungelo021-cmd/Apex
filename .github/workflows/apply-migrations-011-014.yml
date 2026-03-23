@@ -1,6 +1,9 @@
-name: Apply Migrations 011-014 (one-time DDL)
+name: Apply Migrations 011-014
 on:
-  workflow_dispatch:
+  push:
+    branches: [MPP-config]
+    paths:
+      - '.github/workflows/apply-migrations-011-014.yml'
 
 jobs:
   migrate:
@@ -15,17 +18,18 @@ jobs:
         with:
           version: latest
 
-      - name: Link and push all migrations
-        run: |
-          supabase link --project-ref xdkojaigrjhzjkqxguxh
-          supabase db push --include-all
+      - name: Link project
+        run: supabase link --project-ref xdkojaigrjhzjkqxguxh
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
-      - name: Verify migration 012 - audit_graph_nodes
+      - name: Push all migrations
+        run: supabase db push --include-all
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Verify new tables exist
         run: |
           supabase db execute --sql "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('audit_graph_nodes','audit_graph_edges','ai_traces','agent_memory','warden_consensus','payment_routes') ORDER BY table_name"
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
