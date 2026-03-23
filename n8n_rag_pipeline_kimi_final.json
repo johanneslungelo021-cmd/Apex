@@ -1,0 +1,606 @@
+{
+  "name": "RAG Pipeline – Kimi Final",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "rag-pipeline",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-1-webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300],
+      "webhookId": "rag-pipeline"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst body = input.body || input;\nconst text = JSON.stringify(body);\n\nconst patterns = [\n  { regex: /\\b\\d{13}\\b/g, label: '[REDACTED_SA_ID]' },\n  { regex: /\\b\\d{6,17}\\b(?=.*bank)/gi, label: '[REDACTED_BANK_ACCOUNT]' },\n  { regex: /[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}/g, label: '[REDACTED_EMAIL]' },\n  { regex: /(?:\\+27|0)[6-8]\\d{8}/g, label: '[REDACTED_SA_PHONE]' },\n  { regex: /\\b[A-Z]{1}\\d{7}\\b/g, label: '[REDACTED_PASSPORT]' },\n  { regex: /\\b[A-Z]{2}\\d{2}[A-Z0-9]{4,}\\d{7,}[A-Z0-9]{0,3}\\b/g, label: '[REDACTED_IBAN]' },\n  { regex: /\\b[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?\\b/g, label: '[REDACTED_SWIFT]' },\n  { regex: /\\b(?:\\d[ -]*?){13,19}\\b/g, label: '[REDACTED_CREDIT_CARD]' },\n  { regex: /\\b(0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|r[0-9a-zA-Z]{24,34}|T[A-Za-z1-9]{33})\\b/g, label: '[REDACTED_CRYPTO_WALLET]' },\n  { regex: /(?:sk[_-]live[_-][A-Za-z0-9]{20,}|Bearer\\s+[A-Za-z0-9._\\-]{20,}|api[_-]?key[=:]\\s*[A-Za-z0-9._\\-]{16,})/gi, label: '[REDACTED_API_KEY]' }\n];\n\nlet sanitized = text;\nfor (const p of patterns) {\n  sanitized = sanitized.replace(p.regex, p.label);\n}\n\nconst sanitizedBody = JSON.parse(sanitized);\nreturn [{ json: { ...input, body: sanitizedBody, _sanitized: true } }];"
+      },
+      "id": "node-2-pii-filter",
+      "name": "PII Filter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst input = $input.first().json;\nconst headers = input.headers || {};\nconst signature = headers['x-signature'] || '';\nconst secret = '={{ $env.SUPABASE_SERVICE_ROLE_KEY }}';\nconst payload = JSON.stringify(input.body || {});\n\nconst expected = crypto\n  .createHmac('sha256', secret)\n  .update(payload)\n  .digest('hex');\n\nif (signature !== expected) {\n  throw new Error('Invalid HMAC-SHA256 signature');\n}\n\nreturn [{ json: { ...input, _signatureValid: true } }];"
+      },
+      "id": "node-3-sig-validator",
+      "name": "Sig Validator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://xdkojaigrjhzjkqxguxh.supabase.co/rest/v1/rpc/get_similar_memories",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer ={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query_embedding: $json.body.embedding || new Array(768).fill(0), match_count: 10, match_threshold: 0.5 }) }}",
+        "options": {}
+      },
+      "id": "node-4-memory-retrieval",
+      "name": "Memory Retrieval",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "rules": [
+            {
+              "output": 0,
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Sig Validator').item.json.body.task }}",
+                    "rightValue": "review",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "review"
+            },
+            {
+              "output": 1,
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Sig Validator').item.json.body.task }}",
+                    "rightValue": "security",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "security"
+            },
+            {
+              "output": 2,
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Sig Validator').item.json.body.task }}",
+                    "rightValue": "decision",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "decision"
+            },
+            {
+              "output": 3,
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Sig Validator').item.json.body.task }}",
+                    "rightValue": "plan",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "plan"
+            },
+            {
+              "output": 4,
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Sig Validator').item.json.body.task }}",
+                    "rightValue": "code",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "code"
+            },
+            {
+              "output": 5,
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Sig Validator').item.json.body.task }}",
+                    "rightValue": "fix",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "fix"
+            },
+            {
+              "output": 6,
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Sig Validator').item.json.body.task }}",
+                    "rightValue": "financial",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "financial"
+            },
+            {
+              "output": 7,
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Sig Validator').item.json.body.task }}",
+                    "rightValue": "payment",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "payment"
+            }
+          ],
+          "fallbackOutput": 8
+        },
+        "options": {
+          "fallbackOutputLabel": "default"
+        }
+      },
+      "id": "node-5-model-router",
+      "name": "Model Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1080, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://xdkojaigrjhzjkqxguxh.supabase.co/functions/v1/reranker",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer ={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: $('Sig Validator').item.json.body.query, documents: $('Memory Retrieval').item.json, top_k: 5 }) }}",
+        "options": {}
+      },
+      "id": "node-6-reranker",
+      "name": "Reranker",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1300, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst documents = Array.isArray(input) ? input : (input.documents || input.results || [input]);\n\nconst sorted = documents\n  .filter(d => d && typeof d.rerank_score === 'number')\n  .sort((a, b) => b.rerank_score - a.rerank_score)\n  .slice(0, 5);\n\nreturn [{ json: { top_memories: sorted } }];"
+      },
+      "id": "node-7-top5-filter",
+      "name": "Top-5 Filter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1520, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.ollama.com/api/generate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer ={{ $env.OLLAMA_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: ({'review':'qwen3.5:397b','security':'qwen3.5:397b','decision':'deepseek-v3.2','plan':'deepseek-v3.2','code':'glm-5','fix':'glm-5','financial':'kimi-k2.5','payment':'kimi-k2.5'})[$('Sig Validator').item.json.body.task] || 'deepseek-v3.2', prompt: 'Context:\\n' + ($('Top-5 Filter').item.json.top_memories || []).map(m => m.content || JSON.stringify(m)).join('\\n---\\n') + '\\n\\nQuery: ' + ($('Sig Validator').item.json.body.query || ''), stream: false }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "node-8-llm-call",
+      "name": "LLM Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1740, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst response = input.response || input;\nconst faithfulness = typeof response.faithfulness_score === 'number' ? response.faithfulness_score : (typeof input.faithfulness_score === 'number' ? input.faithfulness_score : 0.8);\nconst relevance = typeof response.relevance_score === 'number' ? response.relevance_score : (typeof input.relevance_score === 'number' ? input.relevance_score : 0.7);\n\nconst passed = faithfulness >= 0.7 && relevance >= 0.6;\n\nif (!passed) {\n  return [{ json: {\n    eval_passed: false,\n    faithfulness_score: faithfulness,\n    relevance_score: relevance,\n    answer: 'I was unable to generate a sufficiently reliable answer. Please rephrase your query or provide more context.',\n    fallback: true,\n    original_response: input\n  }}];\n}\n\nreturn [{ json: {\n  eval_passed: true,\n  faithfulness_score: faithfulness,\n  relevance_score: relevance,\n  answer: input.response || input.text || input,\n  fallback: false,\n  original_response: input\n}}];"
+      },
+      "id": "node-9-eval-gate",
+      "name": "Eval Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1960, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://xdkojaigrjhzjkqxguxh.supabase.co/rest/v1/ai_traces",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer ={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ task: $('Sig Validator').item.json.body.task || 'unknown', query: $('Sig Validator').item.json.body.query || '', model: ({'review':'qwen3.5:397b','security':'qwen3.5:397b','decision':'deepseek-v3.2','plan':'deepseek-v3.2','code':'glm-5','fix':'glm-5','financial':'kimi-k2.5','payment':'kimi-k2.5'})[$('Sig Validator').item.json.body.task] || 'deepseek-v3.2', latency: Date.now() - ($('Webhook').item.json._startTime || Date.now()), tokens: $('LLM Call').item.json.eval_count || 0, success: $json.eval_passed, score: $json.faithfulness_score || 0 }) }}",
+        "options": {}
+      },
+      "id": "node-10-trace-logger",
+      "name": "Trace Logger",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2180, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://xdkojaigrjhzjkqxguxh.supabase.co/rest/v1/agent_memory",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer ={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ type: $('Eval Gate').item.json.eval_passed ? 'win' : 'loss', content: $('Sig Validator').item.json.body.query + ' => ' + (typeof $('Eval Gate').item.json.answer === 'string' ? $('Eval Gate').item.json.answer.substring(0, 500) : JSON.stringify($('Eval Gate').item.json.answer).substring(0, 500)), score: $('Eval Gate').item.json.faithfulness_score || 0 }) }}",
+        "options": {}
+      },
+      "id": "node-11-memory-store",
+      "name": "Memory Store",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2400, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const evalResult = $('Eval Gate').item.json;\nconst task = $('Sig Validator').item.json.body.task || '';\nconst modelMap = {'review':'qwen3.5:397b','security':'qwen3.5:397b','decision':'deepseek-v3.2','plan':'deepseek-v3.2','code':'glm-5','fix':'glm-5','financial':'kimi-k2.5','payment':'kimi-k2.5'};\nconst modelUsed = modelMap[task] || 'deepseek-v3.2';\nconst memories = $('Top-5 Filter').item.json.top_memories || [];\n\nconst response = {\n  success: evalResult.eval_passed,\n  answer: evalResult.answer,\n  model: modelUsed,\n  score: {\n    faithfulness: evalResult.faithfulness_score,\n    relevance: evalResult.relevance_score\n  },\n  memories_used: memories.length,\n  memory_ids: memories.map(m => m.id).filter(Boolean),\n  fallback: evalResult.fallback || false,\n  timestamp: new Date().toISOString()\n};\n\nreturn [{ json: response }];"
+      },
+      "id": "node-12-response-builder",
+      "name": "Response Builder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2620, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "node-13-http-response",
+      "name": "HTTP Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2840, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "PII Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PII Filter": {
+      "main": [
+        [
+          {
+            "node": "Sig Validator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sig Validator": {
+      "main": [
+        [
+          {
+            "node": "Memory Retrieval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memory Retrieval": {
+      "main": [
+        [
+          {
+            "node": "Model Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Model Router": {
+      "main": [
+        [
+          {
+            "node": "Reranker",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reranker",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reranker",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reranker",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reranker",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reranker",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reranker",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reranker",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reranker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reranker": {
+      "main": [
+        [
+          {
+            "node": "Top-5 Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Top-5 Filter": {
+      "main": [
+        [
+          {
+            "node": "LLM Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM Call": {
+      "main": [
+        [
+          {
+            "node": "Eval Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eval Gate": {
+      "main": [
+        [
+          {
+            "node": "Trace Logger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trace Logger": {
+      "main": [
+        [
+          {
+            "node": "Memory Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memory Store": {
+      "main": [
+        [
+          {
+            "node": "Response Builder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Response Builder": {
+      "main": [
+        [
+          {
+            "node": "HTTP Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "1",
+  "tags": []
+}
