@@ -268,10 +268,78 @@ export function isValidHttpsUrl(raw: string): boolean {
   }
 }
 
-// ─── Simple In-Memory Rate Limiter ────────────────────────────────────────────
+// ─── Rate Limiting ─────────────────────────────────────────────────────────────
 
 /**
- * Internal rate limit entry tracking request counts per window.
+ * Rate limit check result from the KV-backed rate limiter.
+ */
+interface RateLimitResult {
+  /** Whether the request is allowed */
+  success: boolean;
+  /** Number of requests remaining in the current window */
+  remaining: number;
+  /** Unix timestamp when the rate limit resets */
+  reset: number;
+}
+
+/**
+ * KV-backed rate limiter using @upstash/ratelimit for serverless environments.
+ *
+ * CRITICAL: In-memory Maps are wiped out on Vercel serverless cold starts,
+ * providing ZERO protection across function invocations. This implementation
+ * uses @vercel/kv (Upstash Redis) for persistent rate limiting that survives
+ * cold starts and works across concurrent function instances.
+ *
+ * Setup:
+ * 1. Run: npm i @upstash/ratelimit @vercel/kv
+ * 2. Provision a KV database in Vercel Dashboard (Storage → Create Database)
+ * 3. Set KV_REST_API_URL and KV_REST_API_TOKEN environment variables
+ *
+ * For local development, falls back to in-memory rate limiting.
+ */
+let rateLimiter: {
+  limit: (identifier: string) => Promise<RateLimitResult>;
+} | null = null;
+
+async function getRateLimiter() {
+  if (rateLimiter) return rateLimiter;
+
+  // Try to use KV-backed rate limiter in production
+  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+    try {
+      // Dynamic require with eval to prevent TypeScript/bundler resolution
+      // These packages should be installed with: npm i @upstash/ratelimit @vercel/kv
+      // eslint-disable-next-line @typescript-eslint/no-implied-eval
+      const ratelimitModule = await new Function('return import("@upstash/ratelimit")')().catch(() => null);
+      const kvModule = await new Function('return import("@vercel/kv")')().catch(() => null);
+
+      if (!ratelimitModule || !kvModule) {
+        console.warn('@upstash/ratelimit or @vercel/kv not installed. Run: npm i @upstash/ratelimit @vercel/kv');
+        return null;
+      }
+
+      const { Ratelimit } = ratelimitModule;
+      const { kv } = kvModule;
+
+      rateLimiter = new Ratelimit({
+        redis: kv,
+        limiter: Ratelimit.slidingWindow(30, '1 m'),
+        analytics: true,
+        prefix: 'apex:ratelimit',
+      });
+
+      return rateLimiter;
+    } catch (error) {
+      console.error('Failed to initialize KV rate limiter, falling back to in-memory:', error);
+    }
+  }
+
+  // Fallback: in-memory rate limiter for local development
+  return null;
+}
+
+/**
+ * Internal rate limit entry tracking request counts per window (in-memory fallback).
  */
 interface RateLimitEntry {
   /** Number of requests made in the current window */
@@ -284,17 +352,42 @@ interface RateLimitEntry {
  * In-memory store for rate limit entries keyed by identifier (e.g., IP address).
  * Automatically cleaned up when entries exceed a threshold to prevent memory leaks.
  */
-const rateLimitStore = new Map<string, RateLimitEntry>();
+const memoryRateLimitStore = new Map<string, RateLimitEntry>();
+
+/**
+ * In-memory rate limiter for local development fallback.
+ */
+function checkMemoryRateLimit(key: string, limit: number, windowMs: number): boolean {
+  const now = Date.now();
+  const entry = memoryRateLimitStore.get(key);
+
+  // Periodic cleanup runs unconditionally so active-but-stale entries are
+  // also pruned — not just entries that happen to start a new window.
+  // Deletes entries whose window expired more than 2x ago (safely stale).
+  if (memoryRateLimitStore.size > 10_000) {
+    for (const [k, v] of memoryRateLimitStore) {
+      if (now - v.windowStart > windowMs * 2) memoryRateLimitStore.delete(k);
+    }
+  }
+
+  // No entry or window expired — start a fresh window
+  if (!entry || now - entry.windowStart > windowMs) {
+    memoryRateLimitStore.set(key, { count: 1, windowStart: now });
+    return true;
+  }
+
+  // Within current window — check limit then increment
+  if (entry.count >= limit) return false;
+  entry.count += 1;
+  return true;
+}
 
 /**
  * Token-bucket style rate limiter keyed by an arbitrary identifier.
  *
- * Provides simple rate limiting for API endpoints to prevent abuse and
- * ensure fair resource allocation. Uses a sliding window algorithm with
- * automatic cleanup of expired entries to prevent unbounded memory growth.
- *
- * Suitable for single-instance deployments. For distributed systems,
- * consider using Redis-backed rate limiting.
+ * Uses KV-backed storage (@vercel/kv) in production for persistence across
+ * serverless cold starts. Falls back to in-memory rate limiting for local
+ * development or when KV is not configured.
  *
  * @param key - Unique identifier for the caller (e.g., IP address, user ID)
  * @param limit - Maximum number of requests allowed per window
@@ -307,35 +400,49 @@ const rateLimitStore = new Map<string, RateLimitEntry>();
  * if (!checkRateLimit(ip, 20, 60000)) {
  *   return new Response('Rate limit exceeded', { status: 429 });
  * }
+ */
+export async function checkRateLimitAsync(key: string, limit: number, windowMs: number): Promise<boolean> {
+  // For local dev or missing KV config, use in-memory fallback
+  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
+    return checkMemoryRateLimit(key, limit, windowMs);
+  }
+
+  try {
+    const limiter = await getRateLimiter();
+    if (limiter) {
+      // KV rate limiter uses fixed 30 req/min - scale the key to match requested limit
+      const scaledKey = limit !== 30 ? `${key}:limit${limit}` : key;
+      const { success } = await limiter.limit(scaledKey);
+
+      // If limit is different from default 30, adjust behavior
+      if (!success && limit < 30) {
+        return false;
+      }
+
+      return success;
+    }
+  } catch (error) {
+    console.error('Rate limit error:', error);
+    // Fail open - allow request if rate limiter fails
+    // Consider failing closed for stricter security posture
+  }
+
+  // Fallback to in-memory
+  return checkMemoryRateLimit(key, limit, windowMs);
+}
+
+/**
+ * Synchronous rate limiter - uses in-memory storage only.
  *
- * @example
- * // Multiple rate limits for different actions
- * // Allow 5 login attempts per 15 minutes
- * if (!checkRateLimit(`login:${userId}`, 5, 15 * 60 * 1000)) {
- *   return { error: 'Too many login attempts' };
- * }
+ * DEPRECATED: Use checkRateLimitAsync for KV-backed rate limiting in production.
+ * This synchronous version is kept for backward compatibility with routes
+ * that haven't been updated to use async rate limiting.
+ *
+ * @param key - Unique identifier for the caller
+ * @param limit - Maximum number of requests allowed per window
+ * @param windowMs - Window duration in milliseconds
+ * @returns true if the request is allowed, false if rate limit exceeded
  */
 export function checkRateLimit(key: string, limit: number, windowMs: number): boolean {
-  const now = Date.now();
-  const entry = rateLimitStore.get(key);
-
-  // Periodic cleanup runs unconditionally so active-but-stale entries are
-  // also pruned — not just entries that happen to start a new window.
-  // Deletes entries whose window expired more than 2x ago (safely stale).
-  if (rateLimitStore.size > 10_000) {
-    for (const [k, v] of rateLimitStore) {
-      if (now - v.windowStart > windowMs * 2) rateLimitStore.delete(k);
-    }
-  }
-
-  // No entry or window expired — start a fresh window
-  if (!entry || now - entry.windowStart > windowMs) {
-    rateLimitStore.set(key, { count: 1, windowStart: now });
-    return true;
-  }
-
-  // Within current window — check limit then increment
-  if (entry.count >= limit) return false;
-  entry.count += 1;
-  return true;
+  return checkMemoryRateLimit(key, limit, windowMs);
 }

@@ -26,9 +26,48 @@ export interface TradingData {
   topMovers: { name: string; ticker: string; price: number; change: number }[];
   updatedAt: string;
   source: string;
+  /** Indicates if this data is from a fallback rather than live source */
+  isFallback?: boolean;
 }
 
+// Realistic 2026 ZAR/USD rate fallback
+const FALLBACK_ZAR_USD = 18.85;
+
 let cache: { data: TradingData; cachedAt: number } | null = null;
+
+/**
+ * Robust JSON extraction from LLM response content.
+ *
+ * LLMs often ignore formatting prompts, returning JSON wrapped in markdown
+ * code fences, with explanatory text before/after, or with malformed syntax.
+ * This function uses a safer substring extraction approach rather than
+ * greedy regex that can over-match across multiple brace pairs.
+ *
+ * @param content - Raw string content from LLM response
+ * @returns Parsed JSON object or null if extraction fails
+ */
+function extractJSON(content: string): Record<string, unknown> | null {
+  try {
+    // Clean markdown code fences
+    const cleaned = content.replace(/```json|```/g, '').trim();
+
+    // Find the first opening brace and last closing brace
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+
+    if (start === -1 || end === -1 || end < start) {
+      return null;
+    }
+
+    // Extract the JSON substring
+    const jsonString = cleaned.substring(start, end + 1);
+
+    return JSON.parse(jsonString) as Record<string, unknown>;
+  } catch (error) {
+    console.error('Failed to parse trading JSON:', error);
+    return null;
+  }
+}
 
 async function fetchTradingData(requestId: string): Promise<TradingData> {
   const apiKey = process.env.PERPLEXITY_API_KEY;
@@ -80,15 +119,16 @@ async function fetchTradingData(requestId: string): Promise<TradingData> {
 
   const raw = await response.json();
   const content: string = raw?.choices?.[0]?.message?.content ?? '{}';
-  const cleaned = content.replace(/```json|```/g, '').trim();
-  const objMatch = cleaned.match(/\{[\s\S]*\}/);
-  if (!objMatch) throw new Error('No JSON object in Perplexity response');
 
-  const parsed = JSON.parse(objMatch[0]) as Partial<TradingData>;
+  // Use robust JSON extraction instead of fragile regex
+  const parsed = extractJSON(content);
+  if (!parsed) {
+    throw new Error('No valid JSON object found in Perplexity response');
+  }
 
   // Validate and normalise
   const data: TradingData = {
-    zarUsd: typeof parsed.zarUsd === 'number' ? parsed.zarUsd : 18.5,
+    zarUsd: typeof parsed.zarUsd === 'number' ? parsed.zarUsd : FALLBACK_ZAR_USD,
     zarUsdChange24h: typeof parsed.zarUsdChange24h === 'number' ? parsed.zarUsdChange24h : 0,
     btcZar: typeof parsed.btcZar === 'number' ? parsed.btcZar : 0,
     ethZar: typeof parsed.ethZar === 'number' ? parsed.ethZar : 0,

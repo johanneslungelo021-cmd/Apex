@@ -159,11 +159,35 @@ export async function POST(request: NextRequest): Promise<Response> {
             : `I've detected a transaction intent (${intent.type.replace(/_/g, ' ').toLowerCase()}), but the XRPL service is not configured. Contact support to enable blockchain transactions.`
           : 'Processing your request...';
 
-        for (const char of responseMessage) {
+        // ════════════════════════════════════════════════════════════════════════════
+        // PERFORMANCE FIX: Word-level streaming instead of character-level
+        // ════════════════════════════════════════════════════════════════════════════
+        //
+        // Edge functions have a 30-second CPU time limit on Vercel. Character-by-
+        // character streaming with 20-30ms delays per character causes:
+        // - A 200-character response: 4-6 seconds of just sleep time
+        // - Each loop iteration adds overhead
+        // - Risk of CPU timeout for longer responses
+        //
+        // Word-level chunking dramatically reduces iterations:
+        // - 200-character response ≈ 35 words
+        // - 35 iterations × 20ms = 0.7 seconds total
+        // - Same user experience, much lower CPU usage
+        // ════════════════════════════════════════════════════════════════════════════
+        const words = responseMessage.split(' ');
+
+        for (let i = 0; i < words.length; i++) {
+          const word = words[i];
+          // Add trailing space except for last word
+          const chunk = i < words.length - 1 ? word + ' ' : word;
+
           controller.enqueue(enc.encode(
-            `data: ${JSON.stringify({ type: 'text', content: char })}\n\n`
+            `data: ${JSON.stringify({ type: 'text', content: chunk })}\n\n`
           ));
-          await new Promise((resolve) => setTimeout(resolve, intent ? 20 : 30));
+
+          // 20ms per word instead of per character
+          // A 200-word response now takes ~4 seconds instead of 10+ seconds
+          await new Promise((resolve) => setTimeout(resolve, 20));
         }
 
         controller.enqueue(enc.encode(`data: ${JSON.stringify({ type: 'done' })}\n\n`));

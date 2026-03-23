@@ -499,6 +499,10 @@ export async function POST(req: Request): Promise<Response> {
     //
     // MAX total added latency: ~2 s (Retry-After cap) + 1 retry fetch — acceptable
     // inside a serverless timeout budget of 15 s.
+    //
+    // CRITICAL: apiKey and timeoutMs must be resolved INSIDE callUpstream to avoid
+    // stale closure captures when tierConfig is mutated during retries (e.g., fallback
+    // from Kimi/Perplexity to Groq would use wrong key/timeout).
 
     const GROQ_FALLBACK_MODEL = 'llama-3.3-70b-versatile';
     const MAX_RETRY_DELAY_MS = 2_000; // never block the serverless fn >2 s
@@ -507,32 +511,52 @@ export async function POST(req: Request): Promise<Response> {
     /**
      * Fire one upstream request with its own AbortController + timeout.
      * Returns the raw Response (may be non-ok — caller checks status).
+     *
+     * CRITICAL: All provider-specific values (apiKey, timeoutMs) are resolved
+     * INSIDE this function to avoid closure bugs when tierConfig changes during retries.
      */
     async function callUpstream(cfg: typeof tierConfig, ac: AbortController): Promise<Response> {
+      // 1. Dynamically resolve API key inside the execution block (avoids stale closure)
+      const resolvedApiKey = cfg.provider === 'perplexity'
+        ? process.env.PERPLEXITY_API_KEY
+        : cfg.provider === 'kimi'
+          ? (process.env.KIMI_API_KEY ?? process.env.MPC_APEX)
+          : process.env.GROQ_API_KEY;
+
+      // 2. Dynamically resolve timeout based on current provider
+      const resolvedTimeoutMs = cfg.provider === 'perplexity'
+        ? PERPLEXITY_TIMEOUT_MS
+        : cfg.provider === 'kimi'
+          ? KIMI_TIMEOUT_MS
+          : GROQ_TIMEOUT_MS;
+
+      // 3. Apply the timeout to the abort controller
+      const timeoutId = setTimeout(() => ac.abort('timeout'), resolvedTimeoutMs);
+
       const endpoint = cfg.provider === 'perplexity'
         ? 'https://api.perplexity.ai/chat/completions'
         : cfg.provider === 'kimi'
           ? 'https://api.moonshot.cn/v1/chat/completions'
           : 'https://api.groq.com/openai/v1/chat/completions';
-      return fetch(endpoint, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: cfg.model,
-          messages: upstreamMessages,
-          max_tokens: cfg.maxTokens,
-          temperature: cfg.temperature,
-          stream: true,
-        }),
-        signal: ac.signal,
-      });
-    }
 
-    const timeoutMs = tierConfig.provider === 'perplexity'
-      ? PERPLEXITY_TIMEOUT_MS
-      : tierConfig.provider === 'kimi'
-        ? KIMI_TIMEOUT_MS
-        : GROQ_TIMEOUT_MS;
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${resolvedApiKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: cfg.model,
+            messages: upstreamMessages,
+            max_tokens: cfg.maxTokens,
+            temperature: cfg.temperature,
+            stream: true,
+          }),
+          signal: ac.signal,
+        });
+        return response;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    }
 
     let response: Response;
     let groqRetries = 0;
@@ -541,12 +565,11 @@ export async function POST(req: Request): Promise<Response> {
 
     while (true) {
       abortController = new AbortController();
-      const timeoutId = setTimeout(() => abortController.abort('timeout'), timeoutMs);
+      // Timeout is now handled inside callUpstream - no duplicate setTimeout needed
 
       try {
         response = await callUpstream(tierConfig, abortController);
       } catch (err) {
-        clearTimeout(timeoutId);
         const isTimeout = err instanceof Error && (err.name === 'AbortError' || err.message.includes('timeout'));
         log({
           level: 'warn', service: SERVICE, requestId,
@@ -560,8 +583,6 @@ export async function POST(req: Request): Promise<Response> {
           { status: 504, headers: { 'X-Request-Id': requestId } },
         );
       }
-
-      clearTimeout(timeoutId);
 
       // ── Happy path ──────────────────────────────────────────────────────────
       if (response.ok) break;
