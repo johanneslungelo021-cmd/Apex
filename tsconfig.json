@@ -41,6 +41,7 @@
     "scripts",
     "db",
     "config",
-    "tests"
+    "tests",
+    "supabase/functions"
   ]
 }

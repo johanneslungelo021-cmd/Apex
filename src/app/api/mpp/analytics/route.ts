@@ -63,23 +63,19 @@ export const GET = async (request: Request) => {
 
       const supabase = getSupabaseClient();
 
-      const [txResult, subResult] = await Promise.all([
-        supabase
-          .from('transactions')
-          .select('amount_zar, platform_fee_zar, emotion_state, created_at, gateway', { count: 'exact' })
-          .eq('creator_id', creatorId)
-          .eq('status', 'success')
-          .order('created_at', { ascending: false })
-          .limit(1000),
+      // Use RPC aggregation for accurate totals without truncation
+      const [analyticsResult, recentTxResult, subResult] = await Promise.all([
+        supabase.rpc('get_creator_analytics', { p_creator_id: creatorId }),
+        supabase.rpc('get_recent_transactions', { p_creator_id: creatorId, p_limit: 5 }),
         supabase
           .from('subscriptions')
           .select('status')
           .eq('creator_id', creatorId),
       ]);
 
-      if (txResult.error) {
+      if (analyticsResult.error) {
         log({ level: 'error', service: 'mpp-analytics', requestId,
-          message: `transactions query failed: ${txResult.error.message}` });
+          message: `analytics RPC failed: ${analyticsResult.error.message}` });
         return NextResponse.json({ error: 'Analytics query failed' }, { status: 500 });
       }
       if (subResult.error) {
@@ -88,31 +84,24 @@ export const GET = async (request: Request) => {
         return NextResponse.json({ error: 'Analytics query failed' }, { status: 500 });
       }
 
-      const transactions  = txResult.data;   // guaranteed non-null after error check above
-      const subscriptions = subResult.data;
+      const analyticsData = analyticsResult.data;
+      const transactions   = recentTxResult.data ?? [];
+      const subscriptions  = subResult.data;
 
-      const totalRevenue   = transactions.reduce((s, t) => s + Number(t.amount_zar), 0);
-      const totalFees      = transactions.reduce((s, t) => s + Number(t.platform_fee_zar), 0);
       const activeSubCount = subscriptions.filter(s => s.status === 'active').length;
-
-      const emotionBreakdown = transactions.reduce<Record<string, number>>((acc, t) => {
-        const state = t.emotion_state ?? 'neutral';
-        acc[state]  = (acc[state] ?? 0) + 1;
-        return acc;
-      }, {});
 
       const analytics = {
         creator_id:               creatorId,
-        total_revenue_zar:        totalRevenue,
-        total_fees_zar:           totalFees,
-        creator_payout_zar:       totalRevenue - totalFees,
+        total_revenue_zar:        Number(analyticsData.total_revenue_zar) || 0,
+        total_fees_zar:           Number(analyticsData.total_fees_zar) || 0,
+        creator_payout_zar:       Number(analyticsData.creator_payout_zar) || 0,
         active_subscribers:       activeSubCount,
-        transaction_count:        transactions.length,
-        total_transaction_count:  txResult.count ?? transactions.length,
-        emotion_breakdown:        emotionBreakdown,
-        latest_transactions:      transactions.slice(0, 5),
+        transaction_count:        Number(analyticsData.transaction_count) || 0,
+        total_transaction_count:  Number(analyticsData.transaction_count) || 0,
+        emotion_breakdown:        analyticsData.emotion_breakdown || {},
+        latest_transactions:      transactions,
         generated_at:             new Date().toISOString(),
-        note: transactions.length === 1000 ? 'Results capped at 1000 rows — paginate for complete history' : undefined,
+        note:                     'Data computed via server-side aggregation for accuracy',
       };
 
       // Non-blocking audit record

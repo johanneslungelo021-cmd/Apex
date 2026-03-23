@@ -37,8 +37,8 @@ const mockSupabaseChain: Record<string, jest.Mock> = {
   upsert:      jest.fn().mockResolvedValue({ error: null }),
   filter:      jest.fn().mockReturnThis(),
   maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
-  then: jest.fn().mockImplementation((resolve: (v: unknown) => void) =>
-    resolve({ data: [], error: null })),
+  // Use mockResolvedValue for proper Promise behavior with async/await
+  then:        jest.fn().mockResolvedValue({ data: [], error: null }),
 };
 
 const mockRpc = jest.fn().mockResolvedValue({
@@ -265,8 +265,7 @@ describe('MPP Analytics Route — real mppx charge intent', () => {
       APEX_TEMPO_RECIPIENT: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
       MPP_SECRET_KEY:        'test-secret-key-for-jest',
     };
-    mockSupabaseChain.then.mockImplementation((resolve: (v: unknown) => void) =>
-      resolve({ data: [], error: null }));
+    mockSupabaseChain.then.mockResolvedValue({ data: [], error: null });
   });
   afterEach(() => { process.env = OLD_ENV; });
 
@@ -325,8 +324,7 @@ describe('MPP Treasury Route — real mppx session intent', () => {
       APEX_TEMPO_RECIPIENT: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
       MPP_SECRET_KEY:        'test-secret-key-for-jest',
     };
-    mockSupabaseChain.then.mockImplementation((resolve: (v: unknown) => void) =>
-      resolve({ data: [], error: null }));
+    mockSupabaseChain.then.mockResolvedValue({ data: [], error: null });
   });
   afterEach(() => { process.env = OLD_ENV; });
 

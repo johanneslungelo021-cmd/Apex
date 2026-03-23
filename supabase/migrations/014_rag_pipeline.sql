@@ -64,8 +64,9 @@ CREATE INDEX IF NOT EXISTS idx_payment_routes_created ON public.payment_routes(c
 
 -- RPC: get similar win memories for a given task embedding
 CREATE OR REPLACE FUNCTION public.get_similar_memories(
-  query_embedding vector(768),
-  match_count     INT DEFAULT 5
+  query_embedding  vector(768),
+  match_count      INT DEFAULT 5,
+  match_threshold  FLOAT DEFAULT 0.0
 )
 RETURNS TABLE(id UUID, content TEXT, score FLOAT, similarity FLOAT)
 LANGUAGE sql STABLE SECURITY DEFINER
@@ -75,6 +76,7 @@ AS $$
   FROM public.agent_memory
   WHERE type = 'win'
     AND embedding IS NOT NULL
+    AND (1 - (embedding <=> query_embedding)) >= match_threshold
   ORDER BY embedding <=> query_embedding
   LIMIT match_count;
 $$;

@@ -79,8 +79,16 @@ for model_name in model_variants:
 # On total failure: if OLLAMA_BYPASS_ON_FAILURE=true, vote APPROVE (CI bypass); else ABSTAIN
 if vote_obj is None:
     bypass = os.environ.get('OLLAMA_BYPASS_ON_FAILURE', 'false').lower() == 'true'
-    fallback_vote = 'approve' if bypass else 'abstain'
-    fallback_reason = f'API unavailable — bypass APPROVE (OLLAMA_BYPASS_ON_FAILURE=true)' if bypass else f'API unavailable after {MAX_RETRIES} retries — abstaining'
+    if bypass:
+        # SECURITY WARNING: This bypasses security review - should only be used for debugging
+        fallback_vote = 'approve'
+        fallback_reason = f'API unavailable — bypass APPROVE (OLLAMA_BYPASS_ON_FAILURE=true)'
+        print(f"::warning::Agent {agent} API unavailable — SECURITY BYPASS ENABLED (OLLAMA_BYPASS_ON_FAILURE=true)", file=sys.stderr)
+    else:
+        # Safe default: abstain requires manual review instead of auto-approving
+        fallback_vote = 'abstain'
+        fallback_reason = f'API unavailable after {MAX_RETRIES} retries — manual review required'
+        print(f"::warning::Agent {agent} failed - requires manual review", file=sys.stderr)
     print(f"Agent {agent}: all retries exhausted, voting {fallback_vote.upper()}", file=sys.stderr)
     vote_obj = {"vote": fallback_vote, "confidence": 0.0, "top_finding": fallback_reason}
 

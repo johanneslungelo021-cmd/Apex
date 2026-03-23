@@ -52,7 +52,7 @@ jobs:
         AGENT_NAME: ${{ matrix.agent }}
         MODEL: ${{ matrix.model }}
         PERSONA: ${{ matrix.persona }}
-        OLLAMA_BYPASS_ON_FAILURE: 'true'
+        OLLAMA_BYPASS_ON_FAILURE: 'false'
       run: python3 .github/scripts/ollama_agent_vote.py
     - name: Upload vote artifact
       if: always()

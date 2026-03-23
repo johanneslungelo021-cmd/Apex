@@ -7,6 +7,29 @@
  *
  * MPP: https://mpp.dev/overview
  * mppx: https://mpp.dev/sdk/typescript
+ *
+ * ══════════════════════════════════════════════════════════════════════════════
+ * NUMERIC PRECISION WARNING (Financial Data)
+ * ══════════════════════════════════════════════════════════════════════════════
+ *
+ * JavaScript numbers are IEEE 754 floating-point, which can lose precision for
+ * financial calculations. For micro-payments ($0.001, $0.0001), this is especially
+ * critical.
+ *
+ * RULES:
+ * 1. All amounts passed to Supabase MUST use toFixed(6) or string representation
+ * 2. Never perform intermediate floating-point arithmetic on monetary values
+ * 3. For sub-cent precision, consider using integer micros (amount * 1_000_000)
+ * 4. The database uses NUMERIC(18,6) to preserve exact decimal precision
+ *
+ * Example of SAFE conversion:
+ *   const amountMicros = Math.round(parseFloat(amountUsd) * 1_000_000);
+ *   const platformFeeMicros = Math.round(amountMicros * 0.05);
+ *   const feeZar = (platformFeeMicros / 1_000_000) * fxRate;
+ *
+ * Example of UNSAFE conversion (DO NOT USE):
+ *   const fee = amount * 0.05;  // Loses precision for small amounts
+ *   const rounded = Math.round(fee * 100) / 100;  // Further precision loss
  */
 
 import { privateKeyToAccount } from 'viem/accounts';

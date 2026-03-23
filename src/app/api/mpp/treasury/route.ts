@@ -48,24 +48,18 @@ export const GET = async (_request: Request) => {
       const requestId = generateRequestId();
       const supabase  = getSupabaseClient();
 
-      const [poolResult, disbResult, proposalResult] = await Promise.all([
-        supabase
-          .from('vaal_development_pool')
-          .select('id, transaction_id, amount_zar, split_pct, created_at')
-          .order('created_at', { ascending: false })
-          .limit(100),
-        supabase
-          .from('disbursement_log')
-          .select('amount_zar, status, paid_at, proposal_id')
-          .order('created_at', { ascending: false })
-          .limit(20),
-        supabase
-          .from('governance_proposals')
-          .select('id, title, status, vote_count_for, vote_count_against, approved_at')
-          .in('status', ['approved', 'active'])
-          .limit(10),
+      // Use RPC aggregation for accurate totals without truncation
+      const [summaryResult, poolResult, disbResult, proposalResult] = await Promise.all([
+        supabase.rpc('get_treasury_summary'),
+        supabase.rpc('get_treasury_pool_entries', { p_limit: 100 }),
+        supabase.rpc('get_recent_disbursements', { p_limit: 20 }),
+        supabase.rpc('get_active_proposals', { p_limit: 10 }),
       ]);
 
+      if (summaryResult.error) {
+        console.error('Treasury summary RPC failed:', summaryResult.error);
+        return NextResponse.json({ error: 'Treasury data unavailable' }, { status: 500 });
+      }
       if (poolResult.error) {
         console.error('Treasury pool query failed:', poolResult.error);
         return NextResponse.json({ error: 'Treasury data unavailable' }, { status: 500 });
@@ -79,25 +73,19 @@ export const GET = async (_request: Request) => {
         return NextResponse.json({ error: 'Treasury data unavailable' }, { status: 500 });
       }
 
+      const summary   = summaryResult.data;
       const pool      = poolResult.data ?? [];
       const disbLog   = disbResult.data ?? [];
       const proposals = proposalResult.data ?? [];
 
-      const totalPoolZar = pool.reduce((s, r) => s + Number(r.amount_zar), 0);
-
-      const sumDisbByStatus = (status: string) =>
-        disbLog
-          .filter(r => r.status === status)
-          .reduce((s, r) => s + Number(r.amount_zar), 0);
-
       const treasury = {
         pool_summary: {
-          total_pool_zar: Math.round(totalPoolZar * 100) / 100,
-          approved_zar:   Math.round(sumDisbByStatus('approved') * 100) / 100,
-          disbursed_zar:  Math.round(sumDisbByStatus('paid')     * 100) / 100,
-          entries:        pool.length,
+          total_pool_zar:   Number(summary.total_pool_zar) || 0,
+          approved_zar:     Number(summary.approved_zar) || 0,
+          disbursed_zar:    Number(summary.disbursed_zar) || 0,
+          entries:          Number(summary.pool_entry_count) || 0,
         },
-        active_proposals: proposals.map(p => ({
+        active_proposals: proposals.map((p: { id: string; title: string; status: string; vote_count_for: number; vote_count_against: number; approved_at: string | null }) => ({
           id:            p.id,
           title:         p.title,
           status:        p.status,

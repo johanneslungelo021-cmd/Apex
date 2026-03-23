@@ -41,7 +41,8 @@ try:
     with urllib.request.urlopen(req, timeout=180) as resp:
         data = json.load(resp)
     raw = re.sub(r'<think>.*?</think>', '', data.get("response", ""), flags=re.DOTALL).strip()
-    m = re.search(r'\{.*\}', raw, re.DOTALL)
+    # Use non-greedy regex to avoid over-matching across multiple brace pairs
+    m = re.search(r'\{(?:[^{}]|\{[^{}]*\})*\}', raw, re.DOTALL)
     result = json.loads(m.group() if m else raw)
 except Exception as e:
     result = {
