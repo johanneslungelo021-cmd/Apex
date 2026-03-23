@@ -85,14 +85,37 @@ jobs:
         ABSTAIN: ${{ steps.tally.outputs.ABSTAIN_COUNT }}
         FINDINGS: ${{ steps.tally.outputs.FINDINGS }}
       with:
-        script: 'const c=process.env.CONSENSUS, a=process.env.APPROVE, r=process.env.REJECT, ab=process.env.ABSTAIN, f=process.env.FINDINGS||''No findings.'', e=c===''approved''?''✅'':''❌'';
+        script: |
+          const c = process.env.CONSENSUS;
+          const a = process.env.APPROVE;
+          const r = process.env.REJECT;
+          const ab = process.env.ABSTAIN;
+          const f = process.env.FINDINGS || 'No findings.';
 
-          await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,
+          let emoji, statusText;
+          if (c === 'approved') {
+            emoji = '✅';
+            statusText = 'APPROVED';
+          } else if (c === 'manual_review_required') {
+            emoji = '⚠️';
+            statusText = 'MANUAL REVIEW REQUIRED';
+          } else {
+            emoji = '❌';
+            statusText = 'REJECTED';
+          }
 
-          body:`## ${e} Byzantine Consensus: ${c.toUpperCase()}\n\n**Votes: ${a} approve | ${r} reject | ${ab} abstain** (⅔ majority required)\n\n### Agent Findings\n${f}\n\n---\n*APEX Sentinel v3 · Qwen3.5 · Kimi-K2.5
-          · GLM-5 via Ollama Cloud*`});'
+          await github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            body: `## ${emoji} Byzantine Consensus: ${statusText}\n\n**Votes: ${a} approve | ${r} reject | ${ab} abstain** (⅔ majority required)\n\n### Agent Findings\n${f}\n\n---\n*APEX Sentinel v3 · Qwen3.5 · Kimi-K2.5 · GLM-5 via Ollama Cloud*`
+          });
     - name: Enforce consensus result
       if: steps.tally.outputs.CONSENSUS == 'rejected'
       run: |
         echo "Byzantine consensus rejected: ${{ steps.tally.outputs.REJECT_COUNT }} agent(s) voted reject."
         exit 1
+    - name: Warn on manual review required
+      if: steps.tally.outputs.CONSENSUS == 'manual_review_required'
+      run: |
+        echo "::warning::All agents failed to reach the Ollama API. Manual review required - consensus gate bypassed."
