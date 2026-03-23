@@ -2,7 +2,7 @@ name: Qwen Review Loop
 'on':
   push:
     branches:
-    - MPP-config
+    - main
   workflow_dispatch: null
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
@@ -18,7 +18,7 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
       with:
-        ref: MPP-config
+        ref: main
         fetch-depth: 2
         token: ${{ secrets.GITHUB_TOKEN }}
     - name: Get diff
@@ -44,7 +44,7 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
       with:
-        ref: MPP-config
+        ref: main
         fetch-depth: 2
         token: ${{ secrets.GITHUB_TOKEN }}
     - name: Get payment diff

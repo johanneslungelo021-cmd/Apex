@@ -9,8 +9,6 @@ jobs:
       SUPABASE_URL: https://xdkojaigrjhzjkqxguxh.supabase.co
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: MPP-config
 
       - name: Apply migration 011 via pg_dump SQL
         run: |

@@ -8,7 +8,7 @@ name: Self-Annealing Meta-Agent
     types:
     - completed
     branches:
-    - MPP-config
+    - main
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 jobs:
@@ -20,10 +20,10 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-    - name: Checkout MPP-config
+    - name: Checkout main
       uses: actions/checkout@v4
       with:
-        ref: MPP-config
+        ref: main
         fetch-depth: 5
         token: ${{ secrets.GITHUB_TOKEN }}
     - name: Collect failure context
@@ -63,7 +63,7 @@ jobs:
         else
           MSG=$(head -c 80 /tmp/root_cause.txt 2>/dev/null || echo 'sentinel auto-fix')
           git commit -m "fix(sentinel): auto-fix by GLM-5 - $MSG"
-          git push origin MPP-config
+          git push origin main
         fi
     - name: T3 escalation comment
       if: steps.analyze.outputs.AUTO_FIXABLE == 'false'

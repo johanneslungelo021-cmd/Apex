@@ -1,17 +1,17 @@
 name: Deploy Reranker Edge Function
 on:
   push:
-    branches: [MPP-config]
+    branches: [main]
     paths:
       - '.github/workflows/deploy-reranker.yml'
+      - 'supabase/functions/reranker/**'
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: MPP-config
 
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
