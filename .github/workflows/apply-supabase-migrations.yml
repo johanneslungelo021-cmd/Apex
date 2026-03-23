@@ -1,0 +1,91 @@
+name: Apply Supabase Migrations
+on:
+  push:
+    branches: [main, supa-migrations]
+    paths:
+      - 'supabase/migrations/*.sql'
+      - '.github/workflows/apply-supabase-migrations.yml'
+  workflow_dispatch:
+
+# ─── REQUIRED SECRETS ──────────────────────────────────────────────────────────
+# SUPABASE_ACCESS_TOKEN  → Supabase Management API PAT
+#                          Generate at: https://supabase.com/dashboard/account/tokens
+#                          ⚠️  This is NOT the service role key (sb_secret_...)
+#                          It looks like: sbp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+#
+# SUPABASE_SERVICE_ROLE_KEY → Project service role key (used only for verification)
+# ────────────────────────────────────────────────────────────────────────────────
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_PROJECT_REF: xdkojaigrjhzjkqxguxh
+      SUPABASE_URL: https://xdkojaigrjhzjkqxguxh.supabase.co
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate SUPABASE_ACCESS_TOKEN is a management PAT (not service role key)
+        run: |
+          TOKEN="${{ secrets.SUPABASE_ACCESS_TOKEN }}"
+          if [[ "$TOKEN" == sb_secret_* ]] || [[ "$TOKEN" == eyJ* ]]; then
+            echo "::error::SUPABASE_ACCESS_TOKEN is set to a service role key or JWT."
+            echo "::error::This must be a Management API Personal Access Token."
+            echo "::error::Generate one at: https://supabase.com/dashboard/account/tokens"
+            echo "::error::It should start with 'sbp_'"
+            exit 1
+          fi
+          echo "✅ Token format looks correct"
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link project
+        run: supabase link --project-ref $SUPABASE_PROJECT_REF
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Push all pending migrations
+        run: supabase db push --include-all
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Verify core tables exist via REST
+        run: |
+          echo "Verifying tables created by migrations 010-015..."
+          FAILED=0
+          for table in ai_traces agent_memory warden_consensus payment_routes audit_graph_nodes payment_routes; do
+            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" \
+              "$SUPABASE_URL/rest/v1/${table}?select=*&limit=0" \
+              -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+              -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}")
+            if [ "$STATUS" = "200" ]; then
+              echo "  ✅ ${table}: HTTP ${STATUS}"
+            else
+              echo "  ❌ ${table}: HTTP ${STATUS}"
+              FAILED=$((FAILED + 1))
+            fi
+          done
+          if [ $FAILED -gt 0 ]; then
+            echo "::error::${FAILED} table(s) failed verification"
+            exit 1
+          fi
+          echo "✅ All tables verified"
+
+      - name: Verify get_similar_memories RPC exists
+        run: |
+          STATUS=$(curl -sf -o /dev/null -w "%{http_code}" \
+            -X POST "$SUPABASE_URL/rest/v1/rpc/get_similar_memories" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"query_embedding": [], "match_count": 1}')
+          # 400 = function exists but bad input (expected), 404 = missing
+          if [ "$STATUS" = "404" ]; then
+            echo "::error::get_similar_memories RPC not found — migration 014 may not have applied"
+            exit 1
+          fi
+          echo "✅ get_similar_memories RPC exists (HTTP ${STATUS})"

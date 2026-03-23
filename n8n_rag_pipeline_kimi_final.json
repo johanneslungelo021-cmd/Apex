@@ -1,5 +1,5 @@
 {
-  "name": "RAG Pipeline – Kimi Final",
+  "name": "RAG Pipeline \u2013 Kimi Final",
   "nodes": [
     {
       "parameters": {
@@ -12,7 +12,10 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [200, 300],
+      "position": [
+        200,
+        300
+      ],
       "webhookId": "rag-pipeline"
     },
     {
@@ -23,22 +26,28 @@
       "name": "PII Filter",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [420, 300]
+      "position": [
+        420,
+        300
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const crypto = require('crypto');\nconst input = $input.first().json;\nconst headers = input.headers || {};\nconst signature = headers['x-signature'] || '';\nconst secret = '={{ $env.SUPABASE_SERVICE_ROLE_KEY }}';\nconst payload = JSON.stringify(input.body || {});\n\nconst expected = crypto\n  .createHmac('sha256', secret)\n  .update(payload)\n  .digest('hex');\n\nif (signature !== expected) {\n  throw new Error('Invalid HMAC-SHA256 signature');\n}\n\nreturn [{ json: { ...input, _signatureValid: true } }];"
+        "jsCode": "const crypto = require('crypto');\nconst input = $input.first().json;\nconst headers = input.headers || {};\nconst signature = headers['x-signature'] || '';\nconst secret = '={{ $env.WEBHOOK_HMAC_SECRET || $env.SUPABASE_SERVICE_ROLE_KEY }}';\nconst payload = JSON.stringify(input.body || {});\n\nconst expected = crypto\n  .createHmac('sha256', secret)\n  .update(payload)\n  .digest('hex');\n\nif (signature !== expected) {\n  throw new Error('Invalid HMAC-SHA256 signature');\n}\n\nreturn [{ json: { ...input, _signatureValid: true } }];"
       },
       "id": "node-3-sig-validator",
       "name": "Sig Validator",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [640, 300]
+      "position": [
+        640,
+        300
+      ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://xdkojaigrjhzjkqxguxh.supabase.co/rest/v1/rpc/get_similar_memories",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/get_similar_memories",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -65,7 +74,10 @@
       "name": "Memory Retrieval",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [860, 300]
+      "position": [
+        860,
+        300
+      ]
     },
     {
       "parameters": {
@@ -218,12 +230,15 @@
       "name": "Model Router",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
-      "position": [1080, 300]
+      "position": [
+        1080,
+        300
+      ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://xdkojaigrjhzjkqxguxh.supabase.co/functions/v1/reranker",
+        "url": "={{ $env.SUPABASE_URL }}/functions/v1/reranker",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -246,7 +261,10 @@
       "name": "Reranker",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1300, 300]
+      "position": [
+        1300,
+        300
+      ]
     },
     {
       "parameters": {
@@ -256,7 +274,10 @@
       "name": "Top-5 Filter",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1520, 300]
+      "position": [
+        1520,
+        300
+      ]
     },
     {
       "parameters": {
@@ -286,7 +307,10 @@
       "name": "LLM Call",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1740, 300]
+      "position": [
+        1740,
+        300
+      ]
     },
     {
       "parameters": {
@@ -296,12 +320,15 @@
       "name": "Eval Gate",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1960, 300]
+      "position": [
+        1960,
+        300
+      ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://xdkojaigrjhzjkqxguxh.supabase.co/rest/v1/ai_traces",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/ai_traces",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -332,12 +359,15 @@
       "name": "Trace Logger",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2180, 300]
+      "position": [
+        2180,
+        300
+      ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://xdkojaigrjhzjkqxguxh.supabase.co/rest/v1/agent_memory",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/agent_memory",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -368,7 +398,10 @@
       "name": "Memory Store",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2400, 300]
+      "position": [
+        2400,
+        300
+      ]
     },
     {
       "parameters": {
@@ -378,7 +411,10 @@
       "name": "Response Builder",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2620, 300]
+      "position": [
+        2620,
+        300
+      ]
     },
     {
       "parameters": {
@@ -400,7 +436,10 @@
       "name": "HTTP Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [2840, 300]
+      "position": [
+        2840,
+        300
+      ]
     }
   ],
   "connections": {
