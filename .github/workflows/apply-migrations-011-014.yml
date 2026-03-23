@@ -1,0 +1,31 @@
+name: Apply Migrations 011-014 (one-time DDL)
+on:
+  workflow_dispatch:
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: MPP-config
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link and push all migrations
+        run: |
+          supabase link --project-ref xdkojaigrjhzjkqxguxh
+          supabase db push --include-all
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+      - name: Verify migration 012 - audit_graph_nodes
+        run: |
+          supabase db execute --sql "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('audit_graph_nodes','audit_graph_edges','ai_traces','agent_memory','warden_consensus','payment_routes') ORDER BY table_name"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
