@@ -1,0 +1,69 @@
+name: Qwen Review Loop
+'on':
+  push:
+    branches:
+    - MPP-config
+  workflow_dispatch: null
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+concurrency:
+  group: qwen-review-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  qwen-review:
+    name: Qwen3.5 Code Review
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        ref: MPP-config
+        fetch-depth: 2
+        token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Get diff
+      run: git diff HEAD~1 -- '*.ts' '*.tsx' '*.sql' '*.yml' | head -500 > /tmp/diff.txt
+    - name: Run Qwen3.5 via Ollama
+      env:
+        OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+      run: python3 .github/scripts/ollama_qwen_review.py
+    - name: Post Qwen review on PR
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SHA: ${{ github.sha }}
+      run: "REVIEW=$(cat /tmp/qwen_review.txt 2>/dev/null || echo 'No review output.')\ngh api repos/${{ github.repository }}/issues/52/comments \\\n  -f body=\"## Qwen3.5 Code Review (Automated)\n\n${REVIEW}\n\
+        \n---\n*APEX Sentinel v3 - Qwen3.5:397b via Ollama Cloud - Commit: ${SHA:0:8}*\" || true\n"
+  kimi-visual-review:
+    name: Kimi K2 Financial Review
+    needs:
+    - qwen-review
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        ref: MPP-config
+        fetch-depth: 2
+        token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Get payment diff
+      run: 'git diff HEAD~1 -- ''src/lib/payments/**'' ''src/app/api/mpp/**'' ''src/components/**'' | head -400 > /tmp/kimi_diff.txt
+
+        echo "Lines: $(wc -l < /tmp/kimi_diff.txt)"
+
+        [ $(wc -l < /tmp/kimi_diff.txt) -gt 3 ] && echo ''HAS_CHANGES=true'' >> $GITHUB_ENV || echo ''HAS_CHANGES=false'' >> $GITHUB_ENV
+
+        '
+    - name: Run Kimi K2 via Ollama
+      if: env.HAS_CHANGES == 'true'
+      env:
+        OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+      run: python3 .github/scripts/ollama_kimi_review.py
+    - name: Post Kimi review on PR
+      if: env.HAS_CHANGES == 'true'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SHA: ${{ github.sha }}
+      run: "REVIEW=$(cat /tmp/kimi_review.txt 2>/dev/null || echo 'No review output.')\ngh api repos/${{ github.repository }}/issues/52/comments \\\n  -f body=\"## Kimi K2 Financial Review (Automated)\n\
+        \n${REVIEW}\n\n---\n*APEX Sentinel v3 - Kimi-K2.5 via Ollama Cloud - Commit: ${SHA:0:8}*\" || true\n"

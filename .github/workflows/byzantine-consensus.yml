@@ -1,0 +1,121 @@
+name: Byzantine Consensus Gate
+'on':
+  pull_request:
+    branches:
+    - main
+    paths:
+    - src/**
+    - supabase/migrations/**
+    - .github/workflows/**
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+jobs:
+  agent-vote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - agent: qwen
+          model: qwen3.5:397b
+          persona: You are Qwen3.5, a security reviewer. Focus on auth bypasses, injection vulnerabilities, exposed secrets, unsafe deserialization, RLS gaps.
+        - agent: kimi
+          model: kimi-k2.5
+          persona: You are Kimi K2, a financial precision reviewer. Focus on numeric precision loss, USD vs ZAR confusion, NUMERIC(18,6) vs NUMERIC(12,2), transaction atomicity.
+        - agent: glm
+          model: glm-5
+          persona: You are GLM-5, an architectural reviewer. Focus on T3 autonomy tier compliance, HITL requirements, Byzantine consensus, SLSA provenance, MPP protocol.
+    steps:
+    - name: Checkout with full history
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - name: Fetch base branch
+      run: git fetch origin main --depth=50
+    - name: Get diff context
+      run: 'BASE=$(git merge-base origin/main HEAD 2>/dev/null || git rev-parse origin/main)
+
+        git diff "$BASE"...HEAD -- ''*.ts'' ''*.tsx'' ''*.sql'' ''*.yml'' | head -400 > /tmp/diff.txt
+
+        echo "Diff lines: $(wc -l < /tmp/diff.txt)"
+
+        '
+    - name: Run ${{ matrix.agent }} via Ollama
+      id: vote
+      env:
+        OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+        AGENT_NAME: ${{ matrix.agent }}
+        MODEL: ${{ matrix.model }}
+        PERSONA: ${{ matrix.persona }}
+        OLLAMA_BYPASS_ON_FAILURE: 'false'
+      run: python3 .github/scripts/ollama_agent_vote.py
+    - name: Upload vote artifact
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: vote-${{ matrix.agent }}
+        path: /tmp/${{ matrix.agent }}_vote.json
+        if-no-files-found: warn
+  consensus:
+    needs: agent-vote
+    runs-on: ubuntu-latest
+    if: always()
+    timeout-minutes: 5
+    steps:
+    - uses: actions/checkout@v4
+    - name: Download all votes
+      uses: actions/download-artifact@v4
+      with:
+        path: votes/
+    - name: Tally Byzantine consensus
+      id: tally
+      run: python3 .github/scripts/ollama_tally_votes.py
+    - name: Post consensus comment on PR
+      uses: actions/github-script@v7
+      continue-on-error: true
+      env:
+        CONSENSUS: ${{ steps.tally.outputs.CONSENSUS }}
+        APPROVE: ${{ steps.tally.outputs.APPROVE_COUNT }}
+        REJECT: ${{ steps.tally.outputs.REJECT_COUNT }}
+        ABSTAIN: ${{ steps.tally.outputs.ABSTAIN_COUNT }}
+        FINDINGS: ${{ steps.tally.outputs.FINDINGS }}
+      with:
+        script: |
+          const c = process.env.CONSENSUS;
+          const a = process.env.APPROVE;
+          const r = process.env.REJECT;
+          const ab = process.env.ABSTAIN;
+          const f = process.env.FINDINGS || 'No findings.';
+
+          let emoji, statusText;
+          if (c === 'approved') {
+            emoji = '✅';
+            statusText = 'APPROVED';
+          } else if (c === 'manual_review_required') {
+            emoji = '⚠️';
+            statusText = 'MANUAL REVIEW REQUIRED';
+          } else {
+            emoji = '❌';
+            statusText = 'REJECTED';
+          }
+
+          await github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            body: `## ${emoji} Byzantine Consensus: ${statusText}\n\n**Votes: ${a} approve | ${r} reject | ${ab} abstain** (⅔ majority required)\n\n### Agent Findings\n${f}\n\n---\n*APEX Sentinel v3 · Qwen3.5 · Kimi-K2.5 · GLM-5 via Ollama Cloud*`
+          });
+    - name: Enforce consensus result
+      if: steps.tally.outputs.CONSENSUS == 'rejected'
+      run: |
+        echo "Byzantine consensus rejected: ${{ steps.tally.outputs.REJECT_COUNT }} agent(s) voted reject."
+        exit 1
+    - name: Warn on manual review required
+      if: steps.tally.outputs.CONSENSUS == 'manual_review_required'
+      run: |
+        echo "::warning::All agents failed to reach the Ollama API. Manual review required - consensus gate bypassed."

@@ -18,6 +18,7 @@
 
 import { describe, expect, it } from '@jest/globals';
 import crypto from 'crypto';
+import { z } from 'zod';
 
 // ─── Helpers mirroring route implementations ─────────────────────────────────
 
@@ -229,19 +230,16 @@ describe('FIX #02 — Paystack HMAC SHA-512 signature verification (CRITICAL)', 
 
 describe('FIX #03 — Error handling and Zod input validation (HIGH)', () => {
   it('Zod rejects a missing email field', () => {
-    const { z } = require('zod');
     const schema = z.object({ email: z.string().email() });
     expect(() => schema.parse({})).toThrow(z.ZodError);
   });
 
   it('Zod rejects a malformed email', () => {
-    const { z } = require('zod');
     const schema = z.object({ email: z.string().email() });
     expect(() => schema.parse({ email: 'not-an-email' })).toThrow(z.ZodError);
   });
 
   it('Zod accepts a valid South African creator email', () => {
-    const { z } = require('zod');
     const schema = z.object({ email: z.string().email() });
     expect(() => schema.parse({ email: 'creator@apex.co.za' })).not.toThrow();
   });
@@ -564,13 +562,13 @@ describe('PATCH — PAYSTACK_SECRET_KEY runtime env guard', () => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe('@vercel/firewall rate-limit — verify route contract', () => {
-  it('@vercel/firewall package is present in node_modules', () => {
+  it('@vercel/firewall package is present in node_modules', async () => {
     // Confirms the dependency was installed; the SDK is imported in verify/route.ts
-    expect(() => require('@vercel/firewall')).not.toThrow();
+    await expect(import('@vercel/firewall')).resolves.toBeDefined();
   });
 
-  it('@vercel/firewall exports checkRateLimit / unstable_checkRateLimit', () => {
-    const fw = require('@vercel/firewall');
+  it('@vercel/firewall exports checkRateLimit / unstable_checkRateLimit', async () => {
+    const fw = await import('@vercel/firewall');
     // The SDK exports both names (stable alias and experimental alias)
     expect(typeof fw.checkRateLimit === 'function' || typeof fw.unstable_checkRateLimit === 'function').toBe(true);
   });

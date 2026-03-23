@@ -39,11 +39,11 @@ const mockSupabase = {
   rpc:  mockRpc,
 };
 
-jest.mock('@/lib/supabase', () => ({
+jest.unstable_mockModule('@/lib/supabase', () => ({
   getSupabaseClient: () => mockSupabase,
 }));
 
-jest.mock('@/lib/api-utils', () => ({
+jest.unstable_mockModule('@/lib/api-utils', () => ({
   log:               jest.fn(),
   generateRequestId: () => 'test-req-id',
 }));

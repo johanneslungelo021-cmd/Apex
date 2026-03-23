@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest",
+    "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watch",
+    "test:ci": "NODE_OPTIONS=--experimental-vm-modules jest --no-coverage --forceExit"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
@@ -42,14 +45,18 @@
     "jose": "^6.2.1",
     "lowlight": "^3.3.0",
     "lucide-react": "^0.576.0",
+    "mppx": "^0.4.7",
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "server-only": "^0.0.1",
     "three": "^0.183.2",
+    "viem": "^2.47.5",
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@babel/plugin-transform-modules-commonjs": "^7.28.6",
+    "@babel/preset-env": "^7.29.2",
     "@jest/globals": "^30.3.0",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^3.0.0",
