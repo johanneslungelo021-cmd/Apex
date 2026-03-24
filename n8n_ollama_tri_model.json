@@ -1,0 +1,319 @@
+{
+  "name": "Apex \u2014 Ollama Tri-Model (DeepSeek-R1 + Qwen3 + Kimi K2)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ollama-tri-model",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        400
+      ],
+      "webhookId": "ollama-tri-model"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst prompt = body.prompt || body.query || body.message || '';\nconst system = body.system || 'You are a precise AI assistant for the Apex fintech platform. Think step by step.';\nconst task   = body.task   || 'general';\nif (!prompt) throw new Error('Missing prompt field in request body');\nreturn [{ json: { prompt, system, task, received_at: new Date().toISOString() } }];"
+      },
+      "id": "prep-2",
+      "name": "Prepare Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.OLLAMA_BASE_URL || 'http://localhost:11434' }}/api/generate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer ={{ $env.OLLAMA_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'deepseek-r1:latest', prompt: $('Prepare Prompt').item.json.system + '\\n\\n' + $('Prepare Prompt').item.json.prompt, stream: false, options: { temperature: 0.6, num_predict: 2048, top_p: 0.95 } }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "ollama-deepseek",
+      "name": "DeepSeek-R1 (Reasoning)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.OLLAMA_BASE_URL || 'http://localhost:11434' }}/api/generate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer ={{ $env.OLLAMA_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'qwen3:latest', prompt: $('Prepare Prompt').item.json.system + '\\n\\n' + $('Prepare Prompt').item.json.prompt, stream: false, options: { temperature: 0.7, num_predict: 2048, top_p: 0.9 } }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "ollama-qwen",
+      "name": "Qwen3 (Analysis)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.OLLAMA_BASE_URL || 'http://localhost:11434' }}/api/generate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer ={{ $env.OLLAMA_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'kimi-k2:latest', prompt: '<think>\\n' + $('Prepare Prompt').item.json.system + '\\n\\n' + $('Prepare Prompt').item.json.prompt + '\\n</think>', stream: false, options: { temperature: 0.5, num_predict: 4096, top_p: 0.85 } }) }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "ollama-kimi",
+      "name": "Kimi K2 (Thinking)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "id": "merge-4",
+      "name": "Merge Model Responses",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1000,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst prompt = $('Prepare Prompt').item.json.prompt;\n\nconst models = [\n  { name: 'deepseek-r1', label: 'DeepSeek-R1 (Reasoning)' },\n  { name: 'qwen3',       label: 'Qwen3 (Analysis)'        },\n  { name: 'kimi-k2',     label: 'Kimi K2 (Thinking)'      },\n];\n\nconst responses = items.map((item, i) => {\n  const raw = item.json;\n  const text = raw.response || raw.message?.content || raw.error || '';\n  // Strip <think> tags from Kimi output for clean display\n  const cleaned = text.replace(/<think>[\\s\\S]*?<\\/think>/gi, '').trim();\n  const wordCount = cleaned.split(/\\s+/).length;\n  const hasCode = (cleaned.match(/```/g) || []).length > 0;\n  const score = wordCount * 0.5 + (hasCode ? 50 : 0) + (cleaned.length > 100 ? 30 : 0);\n  return {\n    model: models[i]?.name || `model_${i}`,\n    label: models[i]?.label || `Model ${i}`,\n    response: cleaned,\n    raw_response: text,\n    word_count: wordCount,\n    has_code: hasCode,\n    score,\n    eval_count: raw.eval_count || 0,\n    total_duration_ms: Math.round((raw.total_duration || 0) / 1e6),\n  };\n});\n\nconst best = [...responses].sort((a, b) => b.score - a.score)[0];\n\nreturn [{ json: {\n  prompt,\n  best_model: best.model,\n  best_label: best.label,\n  best_response: best.response,\n  all_responses: responses,\n  scored_at: new Date().toISOString(),\n} }];"
+      },
+      "id": "score-5",
+      "name": "Score & Select Best",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1240,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/ai_traces",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer ={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  task:    $json.prompt.substring(0, 200),\n  query:   $json.prompt,\n  model:   'tri-model:deepseek-r1+qwen3+kimi-k2',\n  success: true,\n  score:   $json.all_responses.reduce((s,r)=>s+r.score,0) / $json.all_responses.length\n}) }}",
+        "options": {}
+      },
+      "id": "log-6",
+      "name": "Log to ai_traces",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1480,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  success: true,\n  best_model: $('Score & Select Best').item.json.best_label,\n  response:   $('Score & Select Best').item.json.best_response,\n  all_models: $('Score & Select Best').item.json.all_responses.map(r=>({\n    model: r.label, score: r.score, words: r.word_count,\n    duration_ms: r.total_duration_ms\n  })),\n  timestamp: $('Score & Select Best').item.json.scored_at\n}) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "resp-7",
+      "name": "HTTP Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1480,
+        520
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Prompt": {
+      "main": [
+        [
+          {
+            "node": "DeepSeek-R1 (Reasoning)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Qwen3 (Analysis)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Kimi K2 (Thinking)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek-R1 (Reasoning)": {
+      "main": [
+        [
+          {
+            "node": "Merge Model Responses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qwen3 (Analysis)": {
+      "main": [
+        [
+          {
+            "node": "Merge Model Responses",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Kimi K2 (Thinking)": {
+      "main": [
+        [
+          {
+            "node": "Merge Model Responses",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge Model Responses": {
+      "main": [
+        [
+          {
+            "node": "Score & Select Best",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score & Select Best": {
+      "main": [
+        [
+          {
+            "node": "Log to ai_traces",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {}
+}
