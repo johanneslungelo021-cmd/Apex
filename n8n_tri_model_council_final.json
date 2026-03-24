@@ -4,7 +4,7 @@
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "ollama-tri-model",
+        "path": "ollama-tri-model-council",
         "responseMode": "responseNode",
         "options": {}
       },
