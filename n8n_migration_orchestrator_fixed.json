@@ -1,0 +1,102 @@
+{
+  "name": "Apex — Migration Orchestrator (Fixed)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "n1",
+      "name": "Manual Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// PAT read from n8n environment — NEVER hardcode tokens in code nodes\nconst patToken = $env.GITHUB_PAT_TOKEN || '';\nif (!patToken || patToken.length < 20) {\n  return [{ json: { patValid: false, message: 'Set GITHUB_PAT_TOKEN in n8n environment variables (Settings > Variables)' } }];\n}\nreturn [{ json: { patValid: true, message: 'PAT validated from env', tokenLength: patToken.length } }];"
+      },
+      "id": "n2",
+      "name": "Check PAT Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [464, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.patValid }}",
+              "operator": { "type": "boolean", "operation": "true" },
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n3",
+      "name": "Route by PAT Status",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [688, 400]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "1", "name": "deployment_status", "value": "blocked", "type": "string" },
+            { "id": "2", "name": "error", "value": "Set GITHUB_PAT_TOKEN in n8n Settings > Variables", "type": "string" },
+            { "id": "3", "name": "timestamp", "value": "={{ $now.toISO() }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n4",
+      "name": "Record PAT Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [912, 520]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "workflow",
+        "owner": { "__rl": true, "mode": "name", "value": "johanneslungelo021-cmd" },
+        "repository": { "__rl": true, "mode": "name", "value": "Apex" },
+        "workflowId": { "__rl": true, "mode": "filename", "value": "apply-supabase-migrations.yml" },
+        "ref": { "__rl": true, "mode": "name", "value": "main" },
+        "inputs": {}
+      },
+      "id": "n5",
+      "name": "Trigger Apply Migrations",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [912, 304]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "1", "name": "status", "value": "triggered", "type": "string" },
+            { "id": "2", "name": "workflow_file", "value": "apply-supabase-migrations.yml", "type": "string" },
+            { "id": "3", "name": "branch", "value": "main", "type": "string" },
+            { "id": "4", "name": "timestamp", "value": "={{ $now.toISO() }}", "type": "string" },
+            { "id": "5", "name": "supabase_project", "value": "lhhrcqywowyswfrtjowj (apex-platform)", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n6",
+      "name": "Log Success",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1136, 304]
+    }
+  ],
+  "connections": {
+    "Manual Start":            { "main": [[{ "node": "Check PAT Status",         "type": "main", "index": 0 }]] },
+    "Check PAT Status":        { "main": [[{ "node": "Route by PAT Status",       "type": "main", "index": 0 }]] },
+    "Route by PAT Status":     { "main": [[{ "node": "Trigger Apply Migrations",  "type": "main", "index": 0 }],
+                                          [{ "node": "Record PAT Error",          "type": "main", "index": 0 }]] },
+    "Trigger Apply Migrations":{ "main": [[{ "node": "Log Success",               "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}
