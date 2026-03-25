@@ -16,6 +16,10 @@ CREATE TABLE IF NOT EXISTS public.agent_feedback (
 
 CREATE INDEX IF NOT EXISTS idx_agent_feedback_memory_id ON public.agent_feedback(memory_id);
 CREATE INDEX IF NOT EXISTS idx_agent_feedback_type      ON public.agent_feedback(feedback_type);
+CREATE INDEX IF NOT EXISTS idx_agent_feedback_reviewer  ON public.agent_feedback(reviewer_id);
+
+-- Add NOT NULL constraint to memory_id to ensure referential integrity
+ALTER TABLE public.agent_feedback ALTER COLUMN memory_id SET NOT NULL;
 ALTER TABLE public.agent_feedback ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "agent_feedback_service_all" ON public.agent_feedback
   FOR ALL TO service_role USING (true) WITH CHECK (true);
@@ -27,7 +31,16 @@ ALTER TABLE public.agent_memory
 
 CREATE OR REPLACE FUNCTION public.update_win_streak()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  _mem RECORD;
 BEGIN
+  -- Lock the parent row to prevent race conditions
+  SELECT * INTO _mem FROM public.agent_memory WHERE id = NEW.memory_id FOR UPDATE;
+  
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'agent_memory row with id % not found', NEW.memory_id;
+  END IF;
+
   IF NEW.feedback_type = 'correct' THEN
     UPDATE public.agent_memory
     SET win_streak=win_streak+1, total_wins=total_wins+1,

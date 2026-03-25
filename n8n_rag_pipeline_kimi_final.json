@@ -352,7 +352,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ task: $('Sig Validator').item.json.body.task || 'unknown', query: $('Sig Validator').item.json.body.query || '', model: ({'review':'qwen3.5:397b','security':'qwen3.5:397b','decision':'deepseek-v3.2','plan':'deepseek-v3.2','code':'glm-5','fix':'glm-5','financial':'kimi-k2.5','payment':'kimi-k2.5'})[$('Sig Validator').item.json.body.task] || 'deepseek-v3.2', latency: Date.now() - ($('Webhook').item.json._startTime || Date.now()), tokens: $('LLM Call').item.json.eval_count || 0, success: $json.eval_passed, score: $json.faithfulness_score || 0 }) }}",
+        "jsonBody": "={{ JSON.stringify({ task: $('Sig Validator').item.json.body.task || 'unknown', query: $('Sig Validator').item.json.body.query || '', model: ({'review':'qwen3.5:397b','security':'qwen3.5:397b','decision':'deepseek-v3.2','plan':'deepseek-v3.2','code':'glm-5','fix':'glm-5','financial':'kimi-k2.5','payment':'kimi-k2.5'})[$('Sig Validator').item.json.body.task] || 'deepseek-v3.2', latency: Date.now() - ($('Webhook').item.json._startTime || Date.now()), tokens: $('LLM Call').item.json.eval_count || 0, success: $json.eval_passed, score: $json.semantic_similarity || 0 }) }}",
         "options": {}
       },
       "id": "node-10-trace-logger",
@@ -405,7 +405,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const evalResult = $('Eval Gate').item.json;\nconst task = $('Sig Validator').item.json.body.task || '';\nconst modelMap = {'review':'qwen3.5:397b','security':'qwen3.5:397b','decision':'deepseek-v3.2','plan':'deepseek-v3.2','code':'glm-5','fix':'glm-5','financial':'kimi-k2.5','payment':'kimi-k2.5'};\nconst modelUsed = modelMap[task] || 'deepseek-v3.2';\nconst memories = $('Top-5 Filter').item.json.top_memories || [];\n\nconst response = {\n  success: evalResult.eval_passed,\n  answer: evalResult.answer,\n  model: modelUsed,\n  score: {\n    faithfulness: evalResult.faithfulness_score,\n    relevance: evalResult.relevance_score\n  },\n  memories_used: memories.length,\n  memory_ids: memories.map(m => m.id).filter(Boolean),\n  fallback: evalResult.fallback || false,\n  timestamp: new Date().toISOString()\n};\n\nreturn [{ json: response }];"
+        "jsCode": "const evalResult = $('Eval Gate').item.json;\nconst task = $('Sig Validator').item.json.body.task || '';\nconst modelMap = {'review':'qwen3.5:397b','security':'qwen3.5:397b','decision':'deepseek-v3.2','plan':'deepseek-v3.2','code':'glm-5','fix':'glm-5','financial':'kimi-k2.5','payment':'kimi-k2.5'};\nconst modelUsed = modelMap[task] || 'deepseek-v3.2';\nconst memories = $('Top-5 Filter').item.json.top_memories || [];\n\nconst response = {\n  success: evalResult.eval_passed,\n  answer: evalResult.answer,\n  model: modelUsed,\n  score: {\n    semantic_similarity: evalResult.semantic_similarity\n  },\n  memories_used: memories.length,\n  memory_ids: memories.map(m => m.id).filter(Boolean),\n  fallback: evalResult.fallback || false,\n  timestamp: new Date().toISOString()\n};\n\nreturn [{ json: response }];"
       },
       "id": "node-12-response-builder",
       "name": "Response Builder",
