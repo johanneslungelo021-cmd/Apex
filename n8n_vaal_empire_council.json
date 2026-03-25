@@ -1,0 +1,330 @@
+{
+  "name": "VAAL Empire - Tri-Model Council Complete Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ollama-tri-model-council",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Webhook - SuperZ Moltcorp Entry",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [240, 400],
+      "webhookId": "vaal-tri-model-council-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ═══════════════════════════════════════════════════════════════════════════\n// NODE 2: PREPARE PROMPT - DYNAMIC ROUTING FOR MOLTCORP & NUMERAI\n// ═══════════════════════════════════════════════════════════════════════════\n\nconst input = $input.first().json.body || $input.first().json;\nconst platform = input.target_platform || 'Moltcorp';\nconst taskType = input.task_type || 'PR_Audit';\nconst rawData = input.raw_data || {};\nconst context = input.context || '';\nconst metadata = input.metadata || {};\n\nconst PROMPTS = {\n  Numerai: {\n    Model_Optimization: {\n      deepseek_r1: {\n        role: 'Quant Judge',\n        system: `You are DeepSeek-R1, the QUANT JUDGE of the Tri-Model Council.\nReview XGBoost/LightGBM parameter sets for Numerai tournament.\nLook for overfitting risks against v5.0/live.parquet dataset.\nOUTPUT:\n1. Risk Assessment (0-10)\n2. Parameter Analysis\n3. Mathematical Critique\n4. Recommended Adjustments\n5. Expected MMC Impact`,\n        temperature: 0.2\n      },\n      qwen3: {\n        role: 'Feature Architect',\n        system: `You are Qwen3.5, the FEATURE ARCHITECT.\nAnalyze parameters from architectural perspective.\nConsider feature interaction depth, computational efficiency.\nOUTPUT:\n1. Architecture Assessment\n2. Feature Utilization\n3. Generalization Score\n4. Optimization Suggestions`,\n        temperature: 0.4\n      },\n      kimi_k2: {\n        role: 'Meta-Strategist',\n        system: `You are Kimi K2, the META-STRATEGIST.\nSynthesize perspectives for strategic guidance.\nConsider correlation targets, stake sizing.\nOUTPUT:\n1. Strategic Summary\n2. Risk-Adjusted Recommendation\n3. Stake Suggestion\n4. Expected Performance`,\n        temperature: 0.4\n      }\n    }\n  },\n  Moltcorp: {\n    PR_Audit: {\n      deepseek_r1: {\n        role: 'Security Auditor',\n        system: `RUTHLESS security analysis for MOLTCORP/SuperZ platform.\nCheck SQL injection, XSS, auth bypasses, payment gateway issues.\nOUTPUT:\n1. Security Score (0-100)\n2. Critical Issues\n3. Warnings\n4. Suggestions\n5. PASS/FAIL`,\n        temperature: 0.1\n      },\n      qwen3: {\n        role: 'Code Architect',\n        system: `Analyze code structure, design patterns, performance for Apex fintech platform.\nOUTPUT:\n1. Architecture Score\n2. Code Quality Analysis\n3. Performance Impact\n4. Refactoring Recommendations\n5. PASS/CONDITIONAL/FAIL`,\n        temperature: 0.3\n      },\n      kimi_k2: {\n        role: 'UX Guardian',\n        system: `Protect African Futurism UI vision for SuperZ/Moltcorp.\nOUTPUT:\n1. UX Impact Score\n2. User Flow Analysis\n3. Accessibility Check\n4. Design Consistency\n5. APPROVE/FLAG/REJECT`,\n        temperature: 0.4\n      }\n    }\n  }\n};\n\nconst platformPrompts = PROMPTS[platform];\nconst taskPrompts = platformPrompts?.[taskType] || platformPrompts?.Model_Optimization || PROMPTS.Moltcorp.PR_Audit;\n\nreturn [{\n  json: {\n    platform,\n    taskType,\n    timestamp: new Date().toISOString(),\n    botName: 'VAAL_MONEY_BOT',\n    rawData,\n    context,\n    modelPrompts: {\n      deepseek_r1: {\n        model: 'deepseek-v3.2',\n        role: taskPrompts.deepseek_r1.role,\n        system_prompt: taskPrompts.deepseek_r1.system,\n        user_prompt: `TASK: ${taskType}\\nPLATFORM: ${platform}\\nDATA: ${JSON.stringify(rawData, null, 2)}\\nCONTEXT: ${context}`,\n        temperature: taskPrompts.deepseek_r1.temperature\n      },\n      qwen3: {\n        model: 'qwen3.5:397b',\n        role: taskPrompts.qwen3.role,\n        system_prompt: taskPrompts.qwen3.system,\n        user_prompt: `TASK: ${taskType}\\nPLATFORM: ${platform}\\nDATA: ${JSON.stringify(rawData, null, 2)}\\nCONTEXT: ${context}`,\n        temperature: taskPrompts.qwen3.temperature\n      },\n      kimi_k2: {\n        model: 'kimi-k2-thinking',\n        role: taskPrompts.kimi_k2.role,\n        system_prompt: taskPrompts.kimi_k2.system,\n        user_prompt: `TASK: ${taskType}\\nPLATFORM: ${platform}\\nDATA: ${JSON.stringify(rawData, null, 2)}\\nCONTEXT: ${context}`,\n        temperature: taskPrompts.kimi_k2.temperature\n      }\n    },\n    originalPayload: { raw_data: rawData, context, metadata }\n  }\n}];"
+      },
+      "id": "prepare-prompt",
+      "name": "2. Prepare Prompt - Moltcorp/SuperZ",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.OLLAMA_BASE_URL || 'https://api.ollama.com') + '/api/generate' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer ={{ $env.OLLAMA_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'deepseek-v3.2', prompt: $('2. Prepare Prompt - Moltcorp/SuperZ').item.json.modelPrompts.deepseek_r1.system_prompt + '\\n\\n' + $('2. Prepare Prompt - Moltcorp/SuperZ').item.json.modelPrompts.deepseek_r1.user_prompt, stream: false, options: { temperature: 0.2, num_predict: 2048 } }) }}",
+        "options": {
+          "timeout": 180000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": true
+            }
+          }
+        }
+      },
+      "id": "deepseek-node",
+      "name": "DeepSeek-R1 (Reasoning)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 200],
+      "notes": "OLLAMA Node 1 - Quant Judge / Security Auditor"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.OLLAMA_BASE_URL || 'https://api.ollama.com') + '/api/generate' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer ={{ $env.OLLAMA_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'qwen3.5:397b', prompt: $('2. Prepare Prompt - Moltcorp/SuperZ').item.json.modelPrompts.qwen3.system_prompt + '\\n\\n' + $('2. Prepare Prompt - Moltcorp/SuperZ').item.json.modelPrompts.qwen3.user_prompt, stream: false, options: { temperature: 0.4, num_predict: 2048 } }) }}",
+        "options": {
+          "timeout": 180000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": true
+            }
+          }
+        }
+      },
+      "id": "qwen-node",
+      "name": "Qwen3.5 (Analysis)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 400],
+      "notes": "OLLAMA Node 2 - Feature Architect / Code Architect"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.OLLAMA_BASE_URL || 'https://api.ollama.com') + '/api/generate' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer ={{ $env.OLLAMA_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'kimi-k2-thinking', prompt: $('2. Prepare Prompt - Moltcorp/SuperZ').item.json.modelPrompts.kimi_k2.system_prompt + '\\n\\n' + $('2. Prepare Prompt - Moltcorp/SuperZ').item.json.modelPrompts.kimi_k2.user_prompt, stream: false, options: { temperature: 0.4, num_predict: 4096 } }) }}",
+        "options": {
+          "timeout": 180000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": true
+            }
+          }
+        }
+      },
+      "id": "kimi-node",
+      "name": "Kimi K2 (Thinking)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 600],
+      "notes": "OLLAMA Node 3 - Meta-Strategist / UX Guardian"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ═══════════════════════════════════════════════════════════════════════════\n// NODE 5: STRIP THINKING TAGS - CLEAN OUTPUT FOR ALL 3 MODELS\n// ═══════════════════════════════════════════════════════════════════════════\n\nconst items = $input.all();\nconst models = [\n  { id: 'deepseek-r1', label: 'DeepSeek-R1 (Reasoning)', inputPort: 0 },\n  { id: 'qwen3', label: 'Qwen3.5 (Analysis)', inputPort: 1 },\n  { id: 'kimi-k2', label: 'Kimi K2 (Thinking)', inputPort: 2 },\n];\n\nreturn items.map((item, i) => {\n  const raw = item.json.response || item.json.message?.content || '[no response]';\n  // Strip thinking tags from Kimi output\n  const cleaned = raw.replace(/<think[\\s\\S]*?<\\/think>/gi, '').replace(/<think[\\s\\S]*$/gi, '').trim();\n  const timedOut = raw === '[no response]' || cleaned.length < 10;\n  \n  return { json: {\n    model_id: models[i]?.id || `model_${i}`,\n    model_label: models[i]?.label || `Model ${i}`,\n    raw_response: raw,\n    response: cleaned,\n    word_count: cleaned.split(/\\s+/).length,\n    timed_out: timedOut,\n    eval_count: item.json.eval_count || 0,\n    duration_ms: Math.round((item.json.total_duration || 0) / 1e6),\n    platform: $('2. Prepare Prompt - Moltcorp/SuperZ').item.json.platform,\n    taskType: $('2. Prepare Prompt - Moltcorp/SuperZ').item.json.taskType\n  }};\n});"
+      },
+      "id": "strip-tags",
+      "name": "5. Strip Think Tags & Label",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "id": "merge-responses",
+      "name": "6. Merge Model Responses",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ═══════════════════════════════════════════════════════════════════════════\n// NODE 7: ENTERPRISE SCORE RESPONSES - ALGORITHMIC CONSENSUS\n// ═══════════════════════════════════════════════════════════════════════════\n\nconst items = $input.all();\nconst platform = items[0]?.json.platform || 'Moltcorp';\n\n// Score each response\nconst scored = items.map(item => {\n  const { model_id, response, word_count, timed_out } = item.json;\n  if (timed_out) return { ...item.json, score: 0, scoreBreakdown: {}, hard_fail: false };\n\n  const text = response.toLowerCase();\n  let score = 0;\n  let breakdown = {};\n  let hardFail = false;\n\n  // 1. Structure Score (Max 20)\n  const hasSections = (response.match(/^#|^\\d+\\./gm) || []).length;\n  breakdown.structure = Math.min(20, hasSections * 5);\n  score += breakdown.structure;\n\n  // 2. Domain Keywords (Max 40)\n  let keywords = [];\n  if (platform === 'Numerai') {\n    keywords = ['MMC', 'correlation', 'overfitting', 'Kelly', 'XGBoost', 'feature', 'risk', 'stake', 'yield'];\n  } else {\n    keywords = ['vulnerability', 'O(n)', 'latency', 'UX', 'injection', 'refactor', 'efficiency', 'security', 'auth'];\n  }\n  const matchedWords = keywords.filter(k => text.includes(k.toLowerCase())).length;\n  breakdown.domain_knowledge = Math.min(40, matchedWords * 5);\n  score += breakdown.domain_knowledge;\n\n  // 3. Signal Strength (Max 40)\n  const signalWords = ['recommend', 'critical', 'fail', 'pass', 'approve', 'adjust', 'reject'];\n  const signalMatches = signalWords.filter(w => text.includes(w)).length;\n  breakdown.signal = Math.min(40, signalMatches * 8);\n  score += breakdown.signal;\n\n  // 4. Model-Specific Scoring\n  if (model_id === 'deepseek-r1') {\n    // Security/Logic weight: higher for pass/fail\n    if (text.includes('fail') || text.includes('critical')) {\n      hardFail = true;\n      breakdown.security_gate = 30;\n    } else if (text.includes('pass')) {\n      breakdown.security_gate = 20;\n    }\n    score += breakdown.security_gate || 0;\n  } else if (model_id === 'qwen3') {\n    // Code quality weight\n    const scoreMatch = text.match(/score[:\\s]+(\\d+)/);\n    if (scoreMatch) {\n      breakdown.code_quality = parseInt(scoreMatch[1]) / 2.5;\n      score += breakdown.code_quality;\n    }\n  } else if (model_id === 'kimi-k2') {\n    // UX impact weight\n    const impactMap = { low: 10, medium: 20, high: 30 };\n    const impactMatch = text.match(/ux.?impact[:\\s]*(low|medium|high)/);\n    if (impactMatch) {\n      breakdown.ux_impact = impactMap[impactMatch[1]] || 15;\n      score += breakdown.ux_impact;\n    }\n  }\n\n  // 5. Hallucination Penalty (Negative)\n  const waffleWords = ['as an ai', 'important to note', 'in conclusion', 'delve', 'i cannot'];\n  const waffleCount = waffleWords.filter(w => text.includes(w)).length;\n  breakdown.penalty = -(waffleCount * 8);\n  score += breakdown.penalty;\n\n  return { ...item.json, score: Math.max(0, Math.round(score)), scoreBreakdown: breakdown, hard_fail: hardFail };\n});\n\n// Sort by score with tie-breaker favoring DeepSeek for logic\nconst sorted = [...scored].sort((a, b) => {\n  if (b.score === a.score) {\n    if (a.model_id === 'deepseek-r1') return -1;\n    if (b.model_id === 'deepseek-r1') return 1;\n  }\n  return b.score - a.score;\n});\n\nconst winner = sorted[0];\nconst deepseekResult = scored.find(s => s.model_id === 'deepseek-r1');\nconst hardFail = deepseekResult?.hard_fail === true;\n\nconst allScores = {};\nscored.forEach(r => { allScores[r.model_id] = r.score; });\n\nconst avgScore = scored.reduce((sum, r) => sum + r.score, 0) / scored.length;\nconst consensusAchieved = winner.score >= 60 && !hardFail;\n\nreturn [{ json: {\n  best_model: winner.model_id,\n  best_label: winner.model_label,\n  best_response: winner.response,\n  best_score: winner.score,\n  hard_fail: hardFail,\n  consensus_achieved: consensusAchieved,\n  all_scores: allScores,\n  all_responses: scored.map(s => ({\n    model: s.model_label,\n    score: s.score,\n    words: s.word_count,\n    duration_ms: s.duration_ms,\n    timed_out: s.timed_out\n  })),\n  platform,\n  taskType: items[0]?.json.taskType || 'unknown',\n  timestamp: new Date().toISOString()\n}}];"
+      },
+      "id": "score-responses",
+      "name": "7. Enterprise Score & Consensus",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/ai_traces",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer ={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ task: $('7. Enterprise Score & Consensus').item.json.taskType, query: JSON.stringify($('7. Enterprise Score & Consensus').item.json.all_scores), model: $('7. Enterprise Score & Consensus').item.json.best_model + ':vaal-council', success: $('7. Enterprise Score & Consensus').item.json.consensus_achieved, score: $('7. Enterprise Score & Consensus').item.json.best_score }) }}",
+        "options": {}
+      },
+      "id": "log-supabase",
+      "name": "8. Log to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 280]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: $('7. Enterprise Score & Consensus').item.json.hard_fail ? 'REJECTED' : ($('7. Enterprise Score & Consensus').item.json.consensus_achieved ? 'APPROVED' : 'REVIEW_NEEDED'), platform: $('7. Enterprise Score & Consensus').item.json.platform, hard_fail: $('7. Enterprise Score & Consensus').item.json.hard_fail, consensus_achieved: $('7. Enterprise Score & Consensus').item.json.consensus_achieved, winning_model: $('7. Enterprise Score & Consensus').item.json.best_label, response: $('7. Enterprise Score & Consensus').item.json.best_response, confidence_score: $('7. Enterprise Score & Consensus').item.json.best_score, all_models: $('7. Enterprise Score & Consensus').item.json.all_responses, bot: 'VAAL_MONEY_BOT', timestamp: $('7. Enterprise Score & Consensus').item.json.timestamp }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "respond-webhook",
+      "name": "9. Return to SuperZ/Moltcorp",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [1560, 520]
+    }
+  ],
+  "connections": {
+    "Webhook - SuperZ Moltcorp Entry": {
+      "main": [
+        [
+          {
+            "node": "2. Prepare Prompt - Moltcorp/SuperZ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Prepare Prompt - Moltcorp/SuperZ": {
+      "main": [
+        [
+          {
+            "node": "DeepSeek-R1 (Reasoning)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Qwen3.5 (Analysis)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Kimi K2 (Thinking)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek-R1 (Reasoning)": {
+      "main": [
+        [
+          {
+            "node": "5. Strip Think Tags & Label",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qwen3.5 (Analysis)": {
+      "main": [
+        [
+          {
+            "node": "5. Strip Think Tags & Label",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kimi K2 (Thinking)": {
+      "main": [
+        [
+          {
+            "node": "5. Strip Think Tags & Label",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Strip Think Tags & Label": {
+      "main": [
+        [
+          {
+            "node": "6. Merge Model Responses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Merge Model Responses": {
+      "main": [
+        [
+          {
+            "node": "7. Enterprise Score & Consensus",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Enterprise Score & Consensus": {
+      "main": [
+        [
+          {
+            "node": "8. Log to Supabase",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "9. Return to SuperZ/Moltcorp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": true,
+    "timezone": "Africa/Johannesburg"
+  },
+  "pinData": {}
+}
