@@ -1,0 +1,430 @@
+{
+  "name": "GitHub PR Review - Tri-Model Council (DeepSeek-R1 + Qwen3 + Kimi K2)",
+  "nodes": [
+    {
+      "parameters": {
+        "owner": {
+          "__rl": true,
+          "value": "johanneslungelo021-cmd",
+          "mode": "name"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "Apex",
+          "mode": "name"
+        },
+        "events": [
+          "pull_request"
+        ],
+        "options": {}
+      },
+      "id": "github-trigger-1",
+      "name": "GitHub PR Trigger",
+      "type": "n8n-nodes-base.githubTrigger",
+      "typeVersion": 1,
+      "position": [
+        192,
+        400
+      ],
+      "webhookId": "github-pr-webhook",
+      "credentials": {
+        "githubApi": {
+          "id": "githubApi",
+          "name": "GitHub account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.pull_request.diff_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github.v3.diff"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "string"
+            }
+          }
+        }
+      },
+      "id": "fetch-diff-2",
+      "name": "Fetch Code Diff",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        384,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst diffResponse = $input.all()[0];\nconst codeDiff = diffResponse.json.data || diffResponse.json.body || diffResponse.json;\nconst diffText = typeof codeDiff === 'string' ? codeDiff : JSON.stringify(codeDiff);\n\nconst prData   = $('GitHub PR Trigger').item.json;\nconst prTitle  = prData.pull_request?.title || 'Unknown PR';\nconst prNumber = prData.number;\nconst prAuthor = prData.pull_request?.user?.login || 'Unknown';\nconst repoOwner    = prData.repository?.owner?.login || 'Unknown';\nconst repoNameOnly = prData.repository?.name || 'Unknown';\nconst prBody       = prData.pull_request?.body || '';\nconst baseBranch   = prData.pull_request?.base?.ref || 'main';\nconst headBranch   = prData.pull_request?.head?.ref || 'unknown';\n\nconst maxDiffLength = 10000;\nconst diff = diffText.length > maxDiffLength\n  ? diffText.substring(0, maxDiffLength) + '\\n... [TRUNCATED]'\n  : diffText;\n\nconst header = [\n  `PR #${prNumber}: \"${prTitle}\"`,\n  `Author: @${prAuthor} | Branch: ${headBranch} \u2192 ${baseBranch}`,\n  '',\n].join('\\n');\n\nconst diffBlock = ['```diff', diff, '```'].join('\\n');\n\nreturn [{\n  json: {\n    prNumber,\n    prTitle,\n    prAuthor,\n    repoOwner,\n    repoNameOnly,\n    baseBranch,\n    headBranch,\n    // modelPrompts structure \u2014 each model gets a typed prompt + temperature number\n    modelPrompts: {\n      deepseek_r1: {\n        temperature: 0.1,  // strictly typed number\n        prompt: [\n          '\ud83d\udd12 DEEPSEEK R1 \u2014 SECURITY AUDIT',\n          header,\n          'You are DeepSeek R1, a security-focused AI auditor. Hard-review this PR for:',\n          '1. SQL/NoSQL/Command Injection  2. XSS/CSRF  3. Auth bypasses',\n          '4. Hardcoded secrets  5. Vulnerable deps  6. Rate limiting gaps',\n          '',\n          diffBlock,\n          '',\n          'OUTPUT FORMAT:',\n          'VERDICT: PASS | FAIL | BLOCK',\n          'SEVERITY: Critical | High | Medium | Low | None',\n          'VULNERABILITIES: - (list)',\n          'RECOMMENDATIONS: - (list)',\n          'SUMMARY: (one sentence)',\n        ].join('\\n'),\n      },\n      qwen3: {\n        temperature: 0.2,  // strictly typed number\n        prompt: [\n          '\ud83c\udfd7\ufe0f QWEN 3 \u2014 ARCHITECTURE REVIEW',\n          header,\n          'You are Qwen 3, a senior TypeScript/Next.js architect. Review for:',\n          '1. Design patterns  2. Type safety  3. Performance (O-complexity)',\n          '4. Redundant loops  5. Error handling  6. Test coverage',\n          '',\n          diffBlock,\n          '',\n          'OUTPUT FORMAT:',\n          'VERDICT: APPROVE | REQUEST_CHANGES | NEEDS_DISCUSSION',\n          'ARCHITECTURE_SCORE: (1-10)',\n          'ISSUES: - (list with severity)',\n          'IMPROVEMENTS: - (with code examples)',\n          'SUMMARY: (one sentence)',\n        ].join('\\n'),\n      },\n      kimi_k2: {\n        temperature: 0.2,  // strictly typed number\n        prompt: [\n          '<think>',\n          '\ud83c\udfaf KIMI K2 \u2014 PRODUCT IMPACT ASSESSMENT',\n          header,\n          `PR Description: ${prBody.substring(0, 400)}`,\n          '',\n          'You are Kimi K2, product/UX specialist for the Apex African Futurism platform.',\n          '1. Feature roadmap alignment  2. UX impact  3. Backward compat',\n          '4. Edge cases  5. Accessibility  6. Mobile/responsive',\n          '',\n          diffBlock,\n          '',\n          'OUTPUT FORMAT:',\n          'VERDICT: APPROVE | NEEDS_REVISION | NEEDS_DISCUSSION',\n          'PRODUCT_ALIGNMENT: (1-10)',\n          'UX_IMPACT: Positive | Neutral | Negative',\n          'CONCERNS: - (list)',\n          'RECOMMENDATIONS: - (list)',\n          'SUMMARY: (one sentence)',\n          '</think>',\n        ].join('\\n'),\n      },\n    },\n  }\n}];\n"
+      },
+      "id": "prepare-prompts-3",
+      "name": "Prepare Prompts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        592,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.OLLAMA_BASE_URL || 'https://api.ollama.ai') + '/api/generate' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer ={{ $env.OLLAMA_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'deepseek-v3.2', prompt: $('Prepare Prompts').item.json.modelPrompts.deepseek_r1.prompt, stream: false, options: { temperature: $('Prepare Prompts').item.json.modelPrompts.deepseek_r1.temperature, num_predict: 2048 } }) }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "deepseek-4",
+      "name": "DeepSeek-R1 (Security)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        208
+      ],
+      "retryOnFail": {
+        "active": true,
+        "maxTries": 3,
+        "waitBetweenTries": 5000
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.OLLAMA_BASE_URL || 'https://api.ollama.ai') + '/api/generate' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer ={{ $env.OLLAMA_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'qwen3', prompt: $('Prepare Prompts').item.json.modelPrompts.qwen3.prompt, stream: false, options: { temperature: $('Prepare Prompts').item.json.modelPrompts.qwen3.temperature, num_predict: 2048 } }) }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "qwen-5",
+      "name": "Qwen3.5 (Architecture)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        400
+      ],
+      "retryOnFail": {
+        "active": true,
+        "maxTries": 3,
+        "waitBetweenTries": 5000
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.OLLAMA_BASE_URL || 'https://api.ollama.ai') + '/api/generate' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer ={{ $env.OLLAMA_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'kimi-k2', prompt: $('Prepare Prompts').item.json.modelPrompts.kimi_k2.prompt, stream: false, options: { temperature: $('Prepare Prompts').item.json.modelPrompts.kimi_k2.temperature, num_predict: 4096 } }) }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "kimi-6",
+      "name": "Kimi K2 (Product)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        608
+      ],
+      "retryOnFail": {
+        "active": true,
+        "maxTries": 3,
+        "waitBetweenTries": 5000
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst items = $input.all();\nconst models = [\n  { id: 'deepseek-r1', label: 'DeepSeek R1 (Security)'   },\n  { id: 'qwen3',       label: 'Qwen 3 (Architecture)'    },\n  { id: 'kimi-k2',     label: 'Kimi K2 (Product)'        },\n];\nreturn items.map((item, i) => {\n  const raw = item.json.response || item.json.choices?.[0]?.message?.content || '[no response]';\n  const cleaned = raw\n    .replace(/<think[\\s\\S]*?>[\\s\\S]*?<\\/think>/gi, '')\n    .replace(/<thinking>[\\s\\S]*?<\\/thinking>/gi, '')\n    .trim();\n  return { json: {\n    model_id:    models[i]?.id    || `model_${i}`,\n    model_label: models[i]?.label || `Model ${i}`,\n    response:    cleaned,\n    word_count:  cleaned.split(/\\s+/).length,\n    timed_out:   cleaned.length < 10,\n  }};\n});\n"
+      },
+      "id": "strip-think-7",
+      "name": "Strip Think Tags",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1008,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "options": {}
+      },
+      "id": "merge-8",
+      "name": "Merge Model Responses",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1200,
+        400
+      ],
+      "numberOfInputs": 3
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst items    = $input.all();\nconst prepData = $('Prepare Prompts').item.json;\nconst weights  = { 'deepseek-r1': 0.40, 'qwen3': 0.35, 'kimi-k2': 0.25 };\n\nfunction extractVerdict(text) {\n  const m = text.match(/VERDICT:\\s*(PASS|FAIL|BLOCK|APPROVE|REQUEST_CHANGES|NEEDS_DISCUSSION|NEEDS_REVISION)/i);\n  if (!m) return 'NEEDS_REVIEW';\n  const v = m[1].toUpperCase();\n  if (v === 'PASS' || v === 'APPROVE') return 'APPROVE';\n  if (v === 'FAIL' || v === 'BLOCK' || v === 'REQUEST_CHANGES') return 'REQUEST_CHANGES';\n  return 'NEEDS_DISCUSSION';\n}\n\nfunction extractScore(text, modelId) {\n  let score = 50;\n  const t = text.toLowerCase();\n  if (modelId === 'deepseek-r1') {\n    if (t.includes('severity: critical') || t.includes('verdict: block')) return 15;\n    if (t.includes('severity: high')     || t.includes('verdict: fail'))  return 35;\n    if (t.includes('severity: medium'))  return 60;\n    if (t.includes('severity: low')      || t.includes('verdict: pass'))  return 85;\n    if (t.includes('no vulnerabilities')) return 95;\n  } else if (modelId === 'qwen3') {\n    const m = t.match(/architecture_score[:\\s]+(\\d+)/);\n    if (m) return Math.min(parseInt(m[1]) * 10, 100);\n    if (t.includes('verdict: approve')) return 80;\n    if (t.includes('verdict: request_changes')) return 40;\n  } else if (modelId === 'kimi-k2') {\n    const m = t.match(/product_alignment[:\\s]+(\\d+)/);\n    if (m) return Math.min(parseInt(m[1]) * 10, 100);\n    if (t.includes('ux_impact: positive')) return 85;\n    if (t.includes('ux_impact: negative')) return 35;\n    if (t.includes('verdict: approve')) return 75;\n  }\n  return score;\n}\n\nconst scored = items.map(item => {\n  const { model_id, model_label, response, timed_out } = item.json;\n  const score   = timed_out ? 0 : extractScore(response, model_id);\n  const verdict = timed_out ? 'TIMEOUT' : extractVerdict(response);\n  const wScore  = score * (weights[model_id] || 0.33);\n  return { model_id, model_label, response, score, verdict, wScore };\n});\n\n// Security hard-gate: deepseek REQUEST_CHANGES + score < 50 \u2192 auto-reject\nconst ds = scored.find(r => r.model_id === 'deepseek-r1');\nconst hardBlock = ds?.verdict === 'REQUEST_CHANGES' && ds?.score < 50;\n\nlet finalVerdict = 'APPROVE';\nif (hardBlock) {\n  finalVerdict = 'REQUEST_CHANGES';\n} else {\n  const vs = scored.map(r => r.verdict);\n  if (vs.filter(v => v === 'REQUEST_CHANGES').length >= 2) finalVerdict = 'REQUEST_CHANGES';\n  else if (vs.filter(v => v === 'NEEDS_DISCUSSION').length >= 2) finalVerdict = 'NEEDS_DISCUSSION';\n}\n\nconst winner = scored.reduce((a, b) => b.wScore > a.wScore ? b : a);\nconst icon   = finalVerdict === 'APPROVE' ? '\u2705' : finalVerdict === 'REQUEST_CHANGES' ? '\u274c' : '\u26a0\ufe0f';\n\nconst comment = [\n  `${icon} **Apex Tri-Model Council \u2014 PR Review**`,\n  `**PR #${prepData.prNumber}: ${prepData.prTitle}**`,\n  `**Author:** @${prepData.prAuthor} | **Branch:** \\`${prepData.headBranch}\\` \u2192 \\`${prepData.baseBranch}\\``,\n  '',\n  '---',\n  '',\n  '### \ud83d\udcca Model Scores',\n  '',\n  '| Model | Domain | Score | Weight | Verdict |',\n  '|-------|--------|-------|--------|---------|',\n  `| DeepSeek R1 | \ud83d\udd12 Security     | ${scored[0].score}/100 | 40% | ${scored[0].verdict} |`,\n  `| Qwen 3      | \ud83c\udfd7\ufe0f Architecture | ${scored[1].score}/100 | 35% | ${scored[1].verdict} |`,\n  `| Kimi K2     | \ud83c\udfaf Product      | ${scored[2].score}/100 | 25% | ${scored[2].verdict} |`,\n  '',\n  '---',\n  '',\n  `### \ud83c\udfc6 Best Response: ${winner.model_label}`,\n  '',\n  '```',\n  winner.response.substring(0, 2500) + (winner.response.length > 2500 ? '\\n... [truncated]' : ''),\n  '```',\n  '',\n  '---',\n  '',\n  `### ${icon} Final Verdict: **${finalVerdict}**`,\n  '',\n  '*Reviewed by Apex Tri-Model Council: DeepSeek R1 + Qwen 3 + Kimi K2 | Africa/Johannesburg*',\n].join('\\n');\n\nreturn [{\n  json: {\n    prNumber:     prepData.prNumber,\n    prTitle:      prepData.prTitle,\n    prAuthor:     prepData.prAuthor,\n    repoOwner:    prepData.repoOwner,\n    repoName:     prepData.repoNameOnly,\n    finalVerdict,\n    winner:       winner.model_label,\n    final_review: comment,\n    scores: { deepseek: scored[0].score, qwen: scored[1].score, kimi: scored[2].score },\n    verdicts: { deepseek: scored[0].verdict, qwen: scored[1].verdict, kimi: scored[2].verdict },\n  }\n}];\n"
+      },
+      "id": "score-9",
+      "name": "Score & Consensus",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1408,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/pr_reviews",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer ={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ pr_number: $json.prNumber, pr_title: $json.prTitle, pr_author: $json.prAuthor, repo_name: $json.repoOwner + '/' + $json.repoName, deepseek_score: $json.scores.deepseek, qwen_score: $json.scores.qwen, kimi_score: $json.scores.kimi, final_verdict: $json.finalVerdict, winner_model: $json.winner }) }}",
+        "options": {}
+      },
+      "id": "log-supabase-10",
+      "name": "Log to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1600,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "createComment",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('Score & Consensus').item.json.repoOwner }}"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('Score & Consensus').item.json.repoName }}"
+        },
+        "issueNumber": "={{ $('Score & Consensus').item.json.prNumber }}",
+        "body": "={{ $('Score & Consensus').item.json.final_review }}"
+      },
+      "id": "post-comment-11",
+      "name": "Post Review to GitHub PR",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        512
+      ],
+      "credentials": {
+        "githubApi": {
+          "id": "githubApi",
+          "name": "GitHub account 2"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "GitHub PR Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Code Diff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Code Diff": {
+      "main": [
+        [
+          {
+            "node": "Prepare Prompts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Prompts": {
+      "main": [
+        [
+          {
+            "node": "DeepSeek-R1 (Security)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Qwen3.5 (Architecture)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Kimi K2 (Product)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek-R1 (Security)": {
+      "main": [
+        [
+          {
+            "node": "Strip Think Tags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qwen3.5 (Architecture)": {
+      "main": [
+        [
+          {
+            "node": "Strip Think Tags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kimi K2 (Product)": {
+      "main": [
+        [
+          {
+            "node": "Strip Think Tags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Strip Think Tags": {
+      "main": [
+        [
+          {
+            "node": "Merge Model Responses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Model Responses": {
+      "main": [
+        [
+          {
+            "node": "Score & Consensus",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score & Consensus": {
+      "main": [
+        [
+          {
+            "node": "Log to Supabase",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Post Review to GitHub PR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "timezone": "Africa/Johannesburg",
+    "availableInMCP": true
+  }
+}

@@ -4,7 +4,11 @@
     {
       "parameters": {
         "httpMethod": "POST",
+ main
         "path": "ollama-tri-model-council",
+
+        "path": "apex-tri-model-council",
+ supa-migrations
         "responseMode": "responseNode",
         "options": {}
       },
