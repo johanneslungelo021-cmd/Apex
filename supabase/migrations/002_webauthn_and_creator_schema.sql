@@ -274,3 +274,12 @@ EXCEPTION
     RETURN jsonb_build_object('error', SQLERRM, 'code', SQLSTATE);
 END;
 $$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- Security: Revoke public access from SECURITY DEFINER functions
+-- ══════════════════════════════════════════════════════════════════════
+REVOKE ALL ON FUNCTION public.set_updated_at() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.process_treasury_split() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.process_treasury_split_on_update() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.register_webauthn_credential(UUID, TEXT, TEXT, TEXT, BIGINT, TEXT[], TEXT, BOOLEAN, TIMESTAMPTZ, UUID) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.purge_expired_webauthn_challenges() FROM PUBLIC;

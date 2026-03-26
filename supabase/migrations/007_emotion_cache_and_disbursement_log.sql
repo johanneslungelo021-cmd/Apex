@@ -112,6 +112,12 @@ CREATE POLICY "disbursement_log_auditor_read" ON public.disbursement_log
     )
   );
 
+-- ══════════════════════════════════════════════════════════════════════
+-- Security: Revoke public access from SECURITY DEFINER functions
+-- ══════════════════════════════════════════════════════════════════════
+REVOKE ALL ON FUNCTION public.upsert_emotion_cache(TEXT, TEXT, TEXT, NUMERIC, NUMERIC, TEXT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.protect_signed_disbursement() FROM PUBLIC;
+
 -- ─── FX Rate Cache ────────────────────────────────────────────────────────────
 -- 1-hour TTL cache for SARB exchange rates used in cross-border transactions
 

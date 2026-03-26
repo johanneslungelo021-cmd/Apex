@@ -91,3 +91,8 @@ CREATE POLICY "ai_traces_service"       ON public.ai_traces       FOR ALL TO ser
 CREATE POLICY "agent_memory_service"    ON public.agent_memory    FOR ALL TO service_role USING (true) WITH CHECK (true);
 CREATE POLICY "warden_consensus_service" ON public.warden_consensus FOR ALL TO service_role USING (true) WITH CHECK (true);
 CREATE POLICY "payment_routes_service"  ON public.payment_routes  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- ══════════════════════════════════════════════════════════════════════
+-- Security: Revoke public access from SECURITY DEFINER functions
+-- ══════════════════════════════════════════════════════════════════════
+REVOKE ALL ON FUNCTION public.get_similar_memories(vector(768), INT, FLOAT) FROM PUBLIC;

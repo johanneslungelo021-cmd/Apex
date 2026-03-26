@@ -239,8 +239,8 @@ jobs:
                 exit 1
               fi
 
-              # Check for proper function termination
-              if grep -q "CREATE.*FUNCTION" "$file" && ! grep -q "LANGUAGE plpgsql\|LANGUAGE sql" "$file"; then
+              # Check for proper function termination (use OR REPLACE to avoid matching CREATE TRIGGER ... EXECUTE FUNCTION)
+              if grep -q "CREATE\( OR REPLACE\)\? FUNCTION" "$file" && ! grep -q "LANGUAGE plpgsql\|LANGUAGE sql" "$file"; then
                 echo "❌ FAIL: Function without LANGUAGE declaration in $file"
                 exit 1
               fi

@@ -46,3 +46,8 @@ EXCEPTION
   WHEN OTHERS                THEN RETURN jsonb_build_object('error', SQLERRM, 'code', SQLSTATE);
 END;
 $$;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- Security: Revoke public access from SECURITY DEFINER functions
+-- ══════════════════════════════════════════════════════════════════════
+REVOKE ALL ON FUNCTION public.insert_transaction_serializable(UUID, UUID, NUMERIC(18,6), NUMERIC(18,6), TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, BOOLEAN, TEXT, BOOLEAN, TEXT, TEXT, TEXT, TEXT, JSONB) FROM PUBLIC;

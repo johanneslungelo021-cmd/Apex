@@ -57,3 +57,8 @@ CREATE INDEX IF NOT EXISTS idx_webhook_events_created_at ON public.webhook_event
 ALTER TABLE public.webhook_events ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "webhook_events_service_all" ON public.webhook_events
   FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- ══════════════════════════════════════════════════════════════════════
+-- Security: Revoke public access from SECURITY DEFINER functions
+-- ══════════════════════════════════════════════════════════════════════
+REVOKE ALL ON FUNCTION public.insert_transaction_serializable(UUID, UUID, NUMERIC(12,2), NUMERIC(12,2), TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, BOOLEAN, TEXT, BOOLEAN, TEXT, TEXT, TEXT, TEXT, JSONB) FROM PUBLIC;
