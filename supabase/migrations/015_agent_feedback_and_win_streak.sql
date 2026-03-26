@@ -1,6 +1,7 @@
 -- Migration 015: Agent Feedback Table and Win Streak Statistics
 -- Fixes: Missing method column, deadlocks, full table scans, and security
 -- PRs: #58 and #59 - Consolidated database fix
+-- Version: 2.0 - With deterministic lock ordering and score calculation
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 1. Add missing column for n8n Trace Logger
@@ -29,37 +30,99 @@ CREATE INDEX IF NOT EXISTS idx_agent_feedback_trace_id ON public.agent_feedback(
 CREATE INDEX IF NOT EXISTS idx_agent_feedback_outcome ON public.agent_feedback(outcome);
 
 -- ═══════════════════════════════════════════════════════════════════════════
--- 3. The Deadlock-Safe Recompute Function
+-- 3. The Deadlock-Safe Recompute Function (v2.0)
 -- ═══════════════════════════════════════════════════════════════════════════
--- Handles concurrent updates safely with row-level locking
--- Prevents stale stats on OLD memory_id when UPDATE changes the reference
+-- Key improvements:
+-- - Deterministic lock ordering (smaller UUID first) to prevent deadlocks
+-- - Score recalculation with clamping to [0.0, 1.0] boundary
+-- - Handles UPDATE where memory_id changes
 CREATE OR REPLACE FUNCTION public.recompute_memory_stats()
 RETURNS TRIGGER
 SECURITY DEFINER
 AS $$
 DECLARE
     _mem_id UUID;
+    _old_mem_id UUID;
+    _new_mem_id UUID;
+    _wins INTEGER;
+    _losses INTEGER;
+    _partial INTEGER;
+    _score FLOAT;
 BEGIN
-    -- A. Handle UPDATE where memory_id changes (prevents stale stats on OLD memory)
-    IF TG_OP = 'UPDATE' AND OLD.memory_id IS DISTINCT FROM NEW.memory_id THEN
-        -- Lock and update the OLD memory row
-        PERFORM id FROM public.agent_memory WHERE id = OLD.memory_id FOR UPDATE;
+    -- ── Step 1: Determine which memory IDs need updating ─────────────────────
+    _old_mem_id := OLD.memory_id;
+    _new_mem_id := COALESCE(NEW.memory_id, NULL);
+
+    -- ── Step 2: Handle UPDATE where memory_id changes ───────────────────────
+    -- Use DETERMINISTIC LOCK ORDERING to prevent deadlocks
+    -- Always lock the smaller UUID first
+    IF TG_OP = 'UPDATE' AND _old_mem_id IS DISTINCT FROM _new_mem_id THEN
+        IF _old_mem_id < _new_mem_id THEN
+            -- Lock OLD first, then NEW (if NEW exists)
+            PERFORM id FROM public.agent_memory WHERE id = _old_mem_id FOR UPDATE;
+            IF _new_mem_id IS NOT NULL THEN
+                PERFORM id FROM public.agent_memory WHERE id = _new_mem_id FOR UPDATE;
+            END IF;
+        ELSE
+            -- Lock NEW first, then OLD
+            IF _new_mem_id IS NOT NULL THEN
+                PERFORM id FROM public.agent_memory WHERE id = _new_mem_id FOR UPDATE;
+            END IF;
+            PERFORM id FROM public.agent_memory WHERE id = _old_mem_id FOR UPDATE;
+        END IF;
+
+        -- Update OLD memory stats and score
+        SELECT
+            COUNT(*) FILTER (WHERE outcome = 'win'),
+            COUNT(*) FILTER (WHERE outcome = 'loss'),
+            COUNT(*) FILTER (WHERE outcome = 'partial')
+        INTO _wins, _losses, _partial
+        FROM public.agent_feedback WHERE memory_id = _old_mem_id;
+
+        -- Calculate score: 0.5 baseline + wins bonus - losses penalty + partial small bonus
+        _score := LEAST(1.0, GREATEST(0.0,
+            0.5 + (COALESCE(_wins, 0) * 0.05) - (COALESCE(_losses, 0) * 0.10) + (COALESCE(_partial, 0) * 0.02)
+        ));
+
         UPDATE public.agent_memory
-        SET total_wins = (SELECT COUNT(*) FROM public.agent_feedback WHERE memory_id = OLD.memory_id AND outcome = 'win'),
-            total_losses = (SELECT COUNT(*) FROM public.agent_feedback WHERE memory_id = OLD.memory_id AND outcome = 'loss'),
-            total_partial = (SELECT COUNT(*) FROM public.agent_feedback WHERE memory_id = OLD.memory_id AND outcome = 'partial')
-        WHERE id = OLD.memory_id;
+        SET total_wins = COALESCE(_wins, 0),
+            total_losses = COALESCE(_losses, 0),
+            total_partial = COALESCE(_partial, 0),
+            score = _score
+        WHERE id = _old_mem_id;
+
+        -- Continue to update NEW memory below
+        _mem_id := _new_mem_id;
+    ELSE
+        -- INSERT or DELETE: only one memory to update
+        _mem_id := COALESCE(NEW.memory_id, OLD.memory_id);
     END IF;
 
-    -- B. Handle INSERT, DELETE, and the NEW memory_id for UPDATE
-    _mem_id := COALESCE(NEW.memory_id, OLD.memory_id);
+    -- ── Step 3: Update the primary memory row ───────────────────────────────
     IF _mem_id IS NOT NULL THEN
-        -- Lock and update the active memory row
+        -- Lock the memory row
         PERFORM id FROM public.agent_memory WHERE id = _mem_id FOR UPDATE;
+
+        -- Get counts with single query
+        SELECT
+            COUNT(*) FILTER (WHERE outcome = 'win'),
+            COUNT(*) FILTER (WHERE outcome = 'loss'),
+            COUNT(*) FILTER (WHERE outcome = 'partial')
+        INTO _wins, _losses, _partial
+        FROM public.agent_feedback WHERE memory_id = _mem_id;
+
+        -- Calculate score with clamping
+        -- Formula: 0.5 baseline + 0.05 per win - 0.10 per loss + 0.02 per partial
+        -- Clamped to [0.0, 1.0]
+        _score := LEAST(1.0, GREATEST(0.0,
+            0.5 + (COALESCE(_wins, 0) * 0.05) - (COALESCE(_losses, 0) * 0.10) + (COALESCE(_partial, 0) * 0.02)
+        ));
+
         UPDATE public.agent_memory
-        SET total_wins = (SELECT COUNT(*) FROM public.agent_feedback WHERE memory_id = _mem_id AND outcome = 'win'),
-            total_losses = (SELECT COUNT(*) FROM public.agent_feedback WHERE memory_id = _mem_id AND outcome = 'loss'),
-            total_partial = (SELECT COUNT(*) FROM public.agent_feedback WHERE memory_id = _mem_id AND outcome = 'partial')
+        SET total_wins = COALESCE(_wins, 0),
+            total_losses = COALESCE(_losses, 0),
+            total_partial = COALESCE(_partial, 0),
+            score = _score
         WHERE id = _mem_id;
     END IF;
 
@@ -101,7 +164,13 @@ COMMENT ON TABLE public.agent_feedback IS
     'Links AI execution traces to memory entries with outcome tracking (win/loss/partial) for reinforcement learning.';
 
 COMMENT ON FUNCTION public.recompute_memory_stats() IS
-    'Trigger function that safely updates win/loss/partial counts on agent_memory. Uses row-level locking to prevent deadlocks. Handles memory_id changes in UPDATE operations to avoid stale statistics.';
+    'Deadlock-safe trigger function that updates win/loss/partial counts and calculates score on agent_memory.
+
+Key features:
+- Deterministic lock ordering (smaller UUID first) prevents deadlocks in concurrent updates
+- Score formula: 0.5 + (wins * 0.05) - (losses * 0.10) + (partial * 0.02)
+- Score clamped to [0.0, 1.0] boundary
+- Handles memory_id changes in UPDATE operations';
 
 COMMENT ON COLUMN public.ai_traces.method IS
     'HTTP method used for the AI request (GET, POST, etc.) - added for n8n Trace Logger compatibility.';
