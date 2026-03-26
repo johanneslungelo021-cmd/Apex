@@ -16,7 +16,7 @@ name: Apex CI — Green By Design
 
 on:
   pull_request:
-    branches: [main, digital-apex]
+    branches: [main]
     paths:
       - 'src/**'
       - 'supabase/**'
@@ -26,7 +26,7 @@ on:
       - 'package.json'
       - 'tsconfig.json'
   push:
-    branches: [main, digital-apex]
+    branches: [main]
     paths:
       - 'src/**'
       - 'supabase/**'
