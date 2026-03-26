@@ -6,7 +6,7 @@ jobs:
   migrate:
     runs-on: ubuntu-latest
     env:
-      SUPABASE_URL: https://lhhrcqywowyswfrtjowj.supabase.co
+      SUPABASE_URL: https://${{ secrets.SUPABASE_PROJECT_REF }}.supabase.co
     steps:
       - uses: actions/checkout@v4
 
@@ -15,4 +15,4 @@ jobs:
           # Apply DDL using the service role key
           cat supabase/migrations/011_amount_precision.sql
           echo "Migration file validated — apply manually via SQL Editor"
-          echo "SQL Editor: https://supabase.com/dashboard/project/lhhrcqywowyswfrtjowj/sql/new"
+          echo "SQL Editor: https://supabase.com/dashboard/project/${{ secrets.SUPABASE_PROJECT_REF }}/sql/new"
