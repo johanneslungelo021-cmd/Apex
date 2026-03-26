@@ -281,13 +281,13 @@ describe('MPP Analytics Route — real mppx charge intent', () => {
 
   it('unauthenticated request → HTTP 402', async () => {
     const { GET } = await import('@/app/api/mpp/analytics/route');
-    const res = await GET(new Request('https://apex.test/api/mpp/analytics?creator_id=uuid'));
+    const res = await GET(new Request('https://apex.test/api/mpp/analytics?creator_id=00000000-0000-0000-0000-000000000001'));
     expect(res.status).toBe(402);
   });
 
   it('402 response has WWW-Authenticate: Payment header (the MPP challenge)', async () => {
     const { GET } = await import('@/app/api/mpp/analytics/route');
-    const res = await GET(new Request('https://apex.test/api/mpp/analytics?creator_id=uuid'));
+    const res = await GET(new Request('https://apex.test/api/mpp/analytics?creator_id=00000000-0000-0000-0000-000000000001'));
     expect(res.status).toBe(402);
     const header = res.headers.get('www-authenticate') ?? '';
     expect(header.toLowerCase()).toContain('payment');
@@ -295,14 +295,14 @@ describe('MPP Analytics Route — real mppx charge intent', () => {
 
   it('challenge header advertises "tempo" payment method', async () => {
     const { GET } = await import('@/app/api/mpp/analytics/route');
-    const res = await GET(new Request('https://apex.test/api/mpp/analytics?creator_id=uuid'));
+    const res = await GET(new Request('https://apex.test/api/mpp/analytics?creator_id=00000000-0000-0000-0000-000000000001'));
     const header = res.headers.get('www-authenticate') ?? '';
     expect(header.toLowerCase()).toContain('tempo');
   });
 
   it('challenge includes APEX_TEMPO_RECIPIENT address (where to pay)', async () => {
     const { GET } = await import('@/app/api/mpp/analytics/route');
-    const res = await GET(new Request('https://apex.test/api/mpp/analytics?creator_id=uuid'));
+    const res = await GET(new Request('https://apex.test/api/mpp/analytics?creator_id=00000000-0000-0000-0000-000000000001'));
     const header = res.headers.get('www-authenticate') ?? '';
     // mppx encodes the challenge as a base64url JSON blob in the request= param.
     // Decode it to assert the recipient address is present inside the challenge payload.
