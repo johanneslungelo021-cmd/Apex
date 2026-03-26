@@ -83,22 +83,25 @@ describe("Fix 2 — Dynamic imports for Three.js / R3F", () => {
   });
 
   it("uses next/dynamic for SentientCanvasScene with ssr: false", () => {
-    expect(pageContent).toContain(
-      "import('@/components/sentient/SentientCanvasScene')",
+    // Match both single and double quotes for import path
+    expect(pageContent).toMatch(
+      /import\(['"]@\/components\/sentient\/SentientCanvasScene['"]\)/,
     );
     expect(pageContent).toMatch(/SentientCanvasScene[\s\S]{0,200}ssr:\s*false/);
   });
 
   it("uses next/dynamic for MagneticReticle with ssr: false", () => {
-    expect(pageContent).toContain(
-      "import('@/components/sentient/MagneticReticle')",
+    // Match both single and double quotes for import path
+    expect(pageContent).toMatch(
+      /import\(['"]@\/components\/sentient\/MagneticReticle['"]\)/,
     );
     expect(pageContent).toMatch(/MagneticReticle[\s\S]{0,200}ssr:\s*false/);
   });
 
   it("uses next/dynamic for SensoryControls with ssr: false", () => {
-    expect(pageContent).toContain(
-      "import('@/components/sentient/SensoryControls')",
+    // Match both single and double quotes for import path
+    expect(pageContent).toMatch(
+      /import\(['"]@\/components\/sentient\/SensoryControls['"]\)/,
     );
     expect(pageContent).toMatch(/SensoryControls[\s\S]{0,200}ssr:\s*false/);
   });
@@ -125,13 +128,15 @@ describe("Fix 2 — SentientCanvasScene component", () => {
   });
 
   it("imports Canvas from @react-three/fiber (only here, not in page)", () => {
-    expect(scene).toContain("from '@react-three/fiber'");
+    // Match both single and double quotes
+    expect(scene).toMatch(/from\s+['"]@react-three\/fiber['"]/);
     expect(scene).toContain("Canvas");
   });
 
   it("imports EmotionalSwarm internally (not leaked to page bundle)", () => {
-    expect(scene).toContain(
-      "import EmotionalSwarm from '@/components/sentient/EmotionalSwarm'",
+    // Match both single and double quotes
+    expect(scene).toMatch(
+      /import\s+EmotionalSwarm\s+from\s+['"]@\/components\/sentient\/EmotionalSwarm['"]/,
     );
   });
 
@@ -329,10 +334,11 @@ describe("Fix 8 — R3F ref mutation pattern", () => {
   });
 
   it("uses useRef for animation values (rotation, opacity, color)", () => {
-    expect(swarm).toContain("currentSpeed   = useRef");
-    expect(swarm).toContain("currentOpacity = useRef");
-    expect(swarm).toContain("targetColor    = useRef");
-    expect(swarm).toContain("currentColor   = useRef");
+    // Match with flexible spacing (actual code uses normal spacing)
+    expect(swarm).toMatch(/currentSpeed\s*=\s*useRef/);
+    expect(swarm).toMatch(/currentOpacity\s*=\s*useRef/);
+    expect(swarm).toMatch(/targetColor\s*=\s*useRef/);
+    expect(swarm).toMatch(/currentColor\s*=\s*useRef/);
   });
 
   it("THREE.Color objects are allocated once via useRef (no per-frame garbage)", () => {
@@ -443,11 +449,11 @@ describe("Integration — end-to-end performance contract", () => {
   it("SentientCanvasScene is the single entry point for all Three.js code", () => {
     const scene = read("src/components/sentient/SentientCanvasScene.tsx");
     const swarm = read("src/components/sentient/EmotionalSwarm.tsx");
-    // Canvas lives here
-    expect(scene).toContain("from '@react-three/fiber'");
+    // Canvas lives here - match both single and double quotes
+    expect(scene).toMatch(/from\s+['"]@react-three\/fiber['"]/);
     // Geometry/rendering in swarm
-    expect(swarm).toContain("from '@react-three/fiber'");
-    expect(swarm).toContain("from 'three'");
+    expect(swarm).toMatch(/from\s+['"]@react-three\/fiber['"]/);
+    expect(swarm).toMatch(/from\s+['"]three['"]/);
   });
 
   it("layout.tsx has both font optimisation AND resource hints", () => {
