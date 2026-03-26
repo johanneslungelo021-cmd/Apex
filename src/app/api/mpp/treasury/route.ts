@@ -44,7 +44,7 @@ export const GET = async (_request: Request) => {
   }
 
   const handler = mppx.tempo.session({ amount: MPP_PRICING.treasuryQuery, unitType: 'query' })(
-    async (request: Request) => {
+    async (_request: Request) => {
       const requestId = generateRequestId();
       const supabase  = getSupabaseClient();
 
@@ -74,7 +74,7 @@ export const GET = async (_request: Request) => {
       }
 
       const summary   = summaryResult.data;
-      const pool      = poolResult.data ?? [];
+      const _pool      = poolResult.data ?? [];
       const disbLog   = disbResult.data ?? [];
       const proposals = proposalResult.data ?? [];
 

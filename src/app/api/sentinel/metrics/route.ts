@@ -35,7 +35,7 @@ export const GET = async (request: Request) => {
   }
 
   const handler = mppx.tempo.charge({ amount: MPP_PRICING.analyticsQuery })(
-    async (innerRequest: Request) => {
+    async (_innerRequest: Request) => {
       const requestId = generateRequestId();
       const supabase = getSupabaseClient();
 
