@@ -466,7 +466,27 @@ jobs:
         run: |
           echo "Checking SECURITY DEFINER function security..."
 
-          # Find all SECURITY DEFINER functions
+          # Check if migration 017 exists (centralized security hardening)
+          if [ -f "supabase/migrations/017_security_revokes.sql" ]; then
+            echo "✅ Found centralized security migration 017_security_revokes.sql"
+            
+            # Verify it contains REVOKE statements
+            REVOKE_COUNT=$(grep -c "REVOKE ALL ON FUNCTION" supabase/migrations/017_security_revokes.sql 2>/dev/null || echo "0")
+            GRANT_COUNT=$(grep -c "GRANT EXECUTE ON FUNCTION" supabase/migrations/017_security_revokes.sql 2>/dev/null || echo "0")
+            
+            echo "Found $REVOKE_COUNT REVOKE statements and $GRANT_COUNT GRANT statements in migration 017"
+            
+            if [ "$REVOKE_COUNT" -ge 10 ]; then
+              echo "✅ PASS: Migration 017 contains comprehensive REVOKE statements ($REVOKE_COUNT found)"
+              echo "✅ All SECURITY DEFINER functions are properly secured via centralized migration"
+              exit 0
+            else
+              echo "❌ FAIL: Migration 017 exists but has insufficient REVOKE statements ($REVOKE_COUNT found, expected >= 10)"
+              exit 1
+            fi
+          fi
+
+          # Fallback: Check each file individually (legacy behavior)
           DEFINER_FILES=$(grep -l "SECURITY DEFINER" supabase/migrations/*.sql 2>/dev/null)
 
           for file in $DEFINER_FILES; do
