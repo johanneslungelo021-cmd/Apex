@@ -7,9 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "lint:fix": "eslint --fix",
+    "type-check": "tsc --noEmit",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
     "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watch",
-    "test:ci": "NODE_OPTIONS=--experimental-vm-modules jest --no-coverage --forceExit"
+    "test:ci": "NODE_OPTIONS=--experimental-vm-modules jest --no-coverage --forceExit",
+    "prepare": "husky install"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
@@ -66,9 +69,21 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "supabase": "^2.84.4",
     "tailwindcss": "^4",
     "ts-jest": "^29.4.6",
     "typescript": "^5"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
   },
   "ignoreScripts": [
     "sharp",

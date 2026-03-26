@@ -20,8 +20,8 @@ jobs:
   migrate:
     runs-on: ubuntu-latest
     env:
-      SUPABASE_PROJECT_REF: xdkojaigrjhzjkqxguxh
-      SUPABASE_URL: https://xdkojaigrjhzjkqxguxh.supabase.co
+      SUPABASE_PROJECT_REF: lhhrcqywowyswfrtjowj
+      SUPABASE_URL: https://lhhrcqywowyswfrtjowj.supabase.co
 
     steps:
       - uses: actions/checkout@v4

@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Run lint-staged for fast checks
+npx lint-staged
+
+# Run type check
+npx tsc --noEmit
+
+# Run unit tests
+npm run test:ci -- --passWithNoTests
+

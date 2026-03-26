@@ -20,14 +20,14 @@ jobs:
 
       - name: Deploy reranker function
         run: |
-          supabase functions deploy reranker --project-ref xdkojaigrjhzjkqxguxh --no-verify-jwt
+          supabase functions deploy reranker --project-ref lhhrcqywowyswfrtjowj --no-verify-jwt
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
       - name: Verify function
         run: |
           curl -s -o /tmp/reranker_test.txt -w "HTTP %{http_code}" \
-            -X POST "https://xdkojaigrjhzjkqxguxh.supabase.co/functions/v1/reranker" \
+            -X POST "https://lhhrcqywowyswfrtjowj.supabase.co/functions/v1/reranker" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
             -H "Content-Type: application/json" \
             -d '{"query":"test payment","documents":[{"id":"1","content":"payment processing system"}]}'
