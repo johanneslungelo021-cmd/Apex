@@ -52,7 +52,4 @@ EXCEPTION
 END;
 $$;
 
--- ══════════════════════════════════════════════════════════════════════
--- Security: Revoke public access from SECURITY DEFINER functions
--- ══════════════════════════════════════════════════════════════════════
-REVOKE ALL ON FUNCTION public.insert_transaction_serializable(UUID, UUID, NUMERIC(38,8), NUMERIC(38,8), TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, BOOLEAN, TEXT, BOOLEAN, TEXT, TEXT, TEXT, TEXT, JSONB) FROM PUBLIC;
+

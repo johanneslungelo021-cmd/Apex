@@ -170,12 +170,4 @@ COMMENT ON FUNCTION public.get_treasury_summary() IS
 COMMENT ON FUNCTION public.get_creator_analytics(UUID) IS
     'Returns aggregated creator analytics without client-side processing. Callers should use NUMERIC types for amounts.';
 
--- ══════════════════════════════════════════════════════════════════════
--- Security: Revoke public access from SECURITY DEFINER functions
--- ══════════════════════════════════════════════════════════════════════
-REVOKE ALL ON FUNCTION public.get_treasury_summary() FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.get_creator_analytics(UUID) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.get_recent_transactions(UUID, INT) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.get_treasury_pool_entries(INT) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.get_recent_disbursements(INT) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.get_active_proposals(INT) FROM PUBLIC;
+

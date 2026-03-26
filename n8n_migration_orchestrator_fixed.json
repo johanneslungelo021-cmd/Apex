@@ -42,9 +42,24 @@
       "parameters": {
         "assignments": {
           "assignments": [
-            { "id": "1", "name": "deployment_status", "value": "blocked", "type": "string" },
-            { "id": "2", "name": "error", "value": "Set GITHUB_PAT_TOKEN in n8n Settings > Variables", "type": "string" },
-            { "id": "3", "name": "timestamp", "value": "={{ $now.toISO() }}", "type": "string" }
+            {
+              "id": "1",
+              "name": "deployment_status",
+              "value": "blocked",
+              "type": "string"
+            },
+            {
+              "id": "2",
+              "name": "error",
+              "value": "Set GITHUB_PAT_TOKEN in n8n Settings > Variables",
+              "type": "string"
+            },
+            {
+              "id": "3",
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
           ]
         },
         "options": {}
@@ -59,9 +74,17 @@
       "parameters": {
         "authentication": "oAuth2",
         "resource": "workflow",
-        "owner": { "__rl": true, "mode": "name", "value": "johanneslungelo021-cmd" },
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "johanneslungelo021-cmd"
+        },
         "repository": { "__rl": true, "mode": "name", "value": "Apex" },
-        "workflowId": { "__rl": true, "mode": "filename", "value": "apply-supabase-migrations.yml" },
+        "workflowId": {
+          "__rl": true,
+          "mode": "filename",
+          "value": "apply-supabase-migrations.yml"
+        },
         "ref": { "__rl": true, "mode": "name", "value": "main" },
         "inputs": {}
       },
@@ -75,11 +98,31 @@
       "parameters": {
         "assignments": {
           "assignments": [
-            { "id": "1", "name": "status", "value": "triggered", "type": "string" },
-            { "id": "2", "name": "workflow_file", "value": "apply-supabase-migrations.yml", "type": "string" },
+            {
+              "id": "1",
+              "name": "status",
+              "value": "triggered",
+              "type": "string"
+            },
+            {
+              "id": "2",
+              "name": "workflow_file",
+              "value": "apply-supabase-migrations.yml",
+              "type": "string"
+            },
             { "id": "3", "name": "branch", "value": "main", "type": "string" },
-            { "id": "4", "name": "timestamp", "value": "={{ $now.toISO() }}", "type": "string" },
-            { "id": "5", "name": "supabase_project", "value": "lhhrcqywowyswfrtjowj (apex-platform)", "type": "string" }
+            {
+              "id": "4",
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "5",
+              "name": "supabase_project",
+              "value": "apex-platform",
+              "type": "string"
+            }
           ]
         },
         "options": {}
@@ -92,11 +135,21 @@
     }
   ],
   "connections": {
-    "Manual Start":            { "main": [[{ "node": "Check PAT Status",         "type": "main", "index": 0 }]] },
-    "Check PAT Status":        { "main": [[{ "node": "Route by PAT Status",       "type": "main", "index": 0 }]] },
-    "Route by PAT Status":     { "main": [[{ "node": "Trigger Apply Migrations",  "type": "main", "index": 0 }],
-                                          [{ "node": "Record PAT Error",          "type": "main", "index": 0 }]] },
-    "Trigger Apply Migrations":{ "main": [[{ "node": "Log Success",               "type": "main", "index": 0 }]] }
+    "Manual Start": {
+      "main": [[{ "node": "Check PAT Status", "type": "main", "index": 0 }]]
+    },
+    "Check PAT Status": {
+      "main": [[{ "node": "Route by PAT Status", "type": "main", "index": 0 }]]
+    },
+    "Route by PAT Status": {
+      "main": [
+        [{ "node": "Trigger Apply Migrations", "type": "main", "index": 0 }],
+        [{ "node": "Record PAT Error", "type": "main", "index": 0 }]
+      ]
+    },
+    "Trigger Apply Migrations": {
+      "main": [[{ "node": "Log Success", "type": "main", "index": 0 }]]
+    }
   },
   "settings": { "executionOrder": "v1" }
 }
