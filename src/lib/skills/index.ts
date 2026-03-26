@@ -16,18 +16,18 @@
  */
 
 // Re-export all skill adapters
-export { createChatCompletion, type ChatMessage } from './chat';
-export { webSearch, type SearchResult } from './web-search';
-export { textToSpeech, type TTSOptions } from './tts';
-export { generateImage, type ImageGenerationOptions } from './image-generation';
-export { analyzeImage, type VLMResult } from './vlm';
+export { createChatCompletion, type ChatMessage } from "./chat";
+export { webSearch, type SearchResult } from "./web-search";
+export { textToSpeech, type TTSOptions } from "./tts";
+export { generateImage, type ImageGenerationOptions } from "./image-generation";
+export { analyzeImage, type VLMResult } from "./vlm";
 
 // Skill status for health checks
 // NOTE: tts and imageGeneration are stubs — no working backend yet
 export const SKILLS_STATUS = {
   chat: true,
   webSearch: true,
-  tts: false,              // Stub — no working TTS backend yet
-  imageGeneration: false,  // Stub — no working image gen backend yet
+  tts: false, // Stub — no working TTS backend yet
+  imageGeneration: false, // Stub — no working image gen backend yet
   vlm: true,
 } as const;

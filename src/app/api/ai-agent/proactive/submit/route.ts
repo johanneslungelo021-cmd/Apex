@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = 'edge';
-export const dynamic = 'force-dynamic';
+export const runtime = "edge";
+export const dynamic = "force-dynamic";
 
 interface SubmitTransactionBody {
   intent: string;
@@ -16,8 +16,10 @@ export async function POST(request: NextRequest): Promise<Response> {
 
   if (!xrplServiceUrl) {
     return NextResponse.json(
-      { error: 'XRPL submission service not configured. Set XRPL_SERVICE_URL.' },
-      { status: 501 }
+      {
+        error: "XRPL submission service not configured. Set XRPL_SERVICE_URL.",
+      },
+      { status: 501 },
     );
   }
 
@@ -31,8 +33,8 @@ export async function POST(request: NextRequest): Promise<Response> {
 
     if (!intent || !destination) {
       return NextResponse.json(
-        { error: 'Missing required fields: intent, destination' },
-        { status: 400 }
+        { error: "Missing required fields: intent, destination" },
+        { status: 400 },
       );
     }
 
@@ -41,8 +43,8 @@ export async function POST(request: NextRequest): Promise<Response> {
 
     try {
       const res = await fetch(`${xrplServiceUrl}/submit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ intent, amount, currency, destination, userId }),
         signal: ac.signal,
       });
@@ -50,8 +52,8 @@ export async function POST(request: NextRequest): Promise<Response> {
       if (!res.ok) {
         const err = await res.text().catch(() => `HTTP ${res.status}`);
         return NextResponse.json(
-          { error: 'XRPL service error', details: err },
-          { status: 502 }
+          { error: "XRPL service error", details: err },
+          { status: 502 },
         );
       }
 
@@ -60,18 +62,20 @@ export async function POST(request: NextRequest): Promise<Response> {
     } finally {
       if (tid !== undefined) clearTimeout(tid);
     }
-
   } catch (error: unknown) {
-    if (error instanceof Error && error.name === 'AbortError') {
+    if (error instanceof Error && error.name === "AbortError") {
       return NextResponse.json(
-        { error: 'Gateway Timeout', details: 'The XRPL submission service timed out.' },
-        { status: 504 }
+        {
+          error: "Gateway Timeout",
+          details: "The XRPL submission service timed out.",
+        },
+        { status: 504 },
       );
     }
 
     return NextResponse.json(
-      { error: 'Transaction submission failed', details: String(error) },
-      { status: 500 }
+      { error: "Transaction submission failed", details: String(error) },
+      { status: 500 },
     );
   }
 }

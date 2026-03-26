@@ -16,13 +16,13 @@
 export interface ImageGenerationOptions {
   prompt: string;
   size?:
-    | '1024x1024'
-    | '768x1344'
-    | '864x1152'
-    | '1344x768'
-    | '1152x864'
-    | '1440x720'
-    | '720x1440';
+    | "1024x1024"
+    | "768x1344"
+    | "864x1152"
+    | "1344x768"
+    | "1152x864"
+    | "1440x720"
+    | "720x1440";
 }
 
 export interface ImageGenerationResult {
@@ -43,6 +43,7 @@ export async function generateImage(
   return {
     base64: null,
     success: false,
-    error: 'Image generation is not configured. Add an image generation API key to enable this skill.',
+    error:
+      "Image generation is not configured. Add an image generation API key to enable this skill.",
   };
 }

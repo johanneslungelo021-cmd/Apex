@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 /**
  * SpeakButton — Accessible TTS Trigger Component
@@ -11,20 +11,20 @@
  *          and any place an AI-generated message should be readable aloud.
  */
 
-import { Volume2, VolumeX, Loader2 } from 'lucide-react';
-import { useSpeech } from '@/hooks/useSpeech';
-import { useSensoryPreferences } from '@/hooks/useSensoryPreferences';
+import { Volume2, VolumeX, Loader2 } from "lucide-react";
+import { useSpeech } from "@/hooks/useSpeech";
+import { useSensoryPreferences } from "@/hooks/useSensoryPreferences";
 
 interface SpeakButtonProps {
   text: string;
-  emotionContext?: 'neutral' | 'encouraging' | 'cautionary' | 'celebratory';
+  emotionContext?: "neutral" | "encouraging" | "cautionary" | "celebratory";
   className?: string;
   useHQ?: boolean;
 }
 
 export function SpeakButton({
   text,
-  className = '',
+  className = "",
   useHQ = false,
 }: SpeakButtonProps) {
   const speech = useSpeech();
@@ -44,9 +44,9 @@ export function SpeakButton({
   return (
     <button
       onClick={() => void handleClick()}
-      aria-label={speech.isSpeaking ? 'Stop reading' : 'Read aloud'}
+      aria-label={speech.isSpeaking ? "Stop reading" : "Read aloud"}
       aria-pressed={speech.isSpeaking}
-      title={speech.isSpeaking ? 'Stop' : 'Read aloud'}
+      title={speech.isSpeaking ? "Stop" : "Read aloud"}
       className={`
         flex items-center justify-center w-7 h-7 rounded-lg
         text-zinc-500 hover:text-white transition-colors

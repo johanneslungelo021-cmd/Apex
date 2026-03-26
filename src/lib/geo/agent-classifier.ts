@@ -12,7 +12,7 @@
  * @module lib/geo/agent-classifier
  */
 
-export type AgentRole = 'human' | 'dataScraper' | 'searchCrawler' | 'assistant';
+export type AgentRole = "human" | "dataScraper" | "searchCrawler" | "assistant";
 
 export interface ClassifiedAgent {
   role: AgentRole;
@@ -22,44 +22,44 @@ export interface ClassifiedAgent {
 // ─── Known Agent Strings ──────────────────────────────────────────────────────
 
 const DATA_SCRAPERS: readonly string[] = [
-  'GPTBot',
-  'ClaudeBot',
-  'Google-Extended',
-  'Bytespider',
-  'CCBot',
-  'FacebookBot',
-  'Amazonbot',
-  'Applebot-Extended',
-  'cohere-training-data-crawler',
-  'anthropic-ai',
-  'omgili',
-  'omgilibot',
-  'PetalBot',
-  'AdsBot',
+  "GPTBot",
+  "ClaudeBot",
+  "Google-Extended",
+  "Bytespider",
+  "CCBot",
+  "FacebookBot",
+  "Amazonbot",
+  "Applebot-Extended",
+  "cohere-training-data-crawler",
+  "anthropic-ai",
+  "omgili",
+  "omgilibot",
+  "PetalBot",
+  "AdsBot",
 ];
 
 const SEARCH_CRAWLERS: readonly string[] = [
-  'PerplexityBot',
-  'BingPreview',
-  'YouBot',
-  'BraveSoftware',
-  'DuckDuckBot',
+  "PerplexityBot",
+  "BingPreview",
+  "YouBot",
+  "BraveSoftware",
+  "DuckDuckBot",
 ];
 
 const ASSISTANTS: readonly string[] = [
-  'ChatGPT-User',
-  'Claude-User',
-  'Claude-SearchBot',
-  'Perplexity-User',
-  'Gemini-Deep-Research',
-  'DuckAssistBot',
-  'meta-externalagent',
-  'Operator',
+  "ChatGPT-User",
+  "Claude-User",
+  "Claude-SearchBot",
+  "Perplexity-User",
+  "Gemini-Deep-Research",
+  "DuckAssistBot",
+  "meta-externalagent",
+  "Operator",
 ];
 
 // ─── Accept-Header Markdown Signals ──────────────────────────────────────────
 
-const MARKDOWN_ACCEPT_TYPES = ['text/markdown', 'text/x-markdown'] as const;
+const MARKDOWN_ACCEPT_TYPES = ["text/markdown", "text/x-markdown"] as const;
 
 // ─── Classifier ───────────────────────────────────────────────────────────────
 
@@ -72,27 +72,27 @@ const MARKDOWN_ACCEPT_TYPES = ['text/markdown', 'text/x-markdown'] as const;
  */
 export function classifyAgent(
   userAgent: string,
-  accept: string = ''
+  accept: string = "",
 ): ClassifiedAgent {
-  const ua = userAgent ?? '';
-  const acc = accept ?? '';
+  const ua = userAgent ?? "";
+  const acc = accept ?? "";
 
   for (const agent of ASSISTANTS) {
-    if (ua.includes(agent)) return { role: 'assistant', name: agent };
+    if (ua.includes(agent)) return { role: "assistant", name: agent };
   }
   for (const agent of SEARCH_CRAWLERS) {
-    if (ua.includes(agent)) return { role: 'searchCrawler', name: agent };
+    if (ua.includes(agent)) return { role: "searchCrawler", name: agent };
   }
   for (const agent of DATA_SCRAPERS) {
-    if (ua.includes(agent)) return { role: 'dataScraper', name: agent };
+    if (ua.includes(agent)) return { role: "dataScraper", name: agent };
   }
 
   // Explicit Markdown Accept header — treat as machine client even if UA unknown
   if (MARKDOWN_ACCEPT_TYPES.some((t) => acc.includes(t))) {
-    return { role: 'assistant', name: 'markdown-accept' };
+    return { role: "assistant", name: "markdown-accept" };
   }
 
-  return { role: 'human', name: 'browser' };
+  return { role: "human", name: "browser" };
 }
 
 /**
@@ -100,7 +100,7 @@ export function classifyAgent(
  * Both AI assistants and search crawlers benefit from pre-rendered Markdown.
  */
 export function wantsMarkdown(agent: ClassifiedAgent): boolean {
-  return agent.role === 'assistant' || agent.role === 'searchCrawler';
+  return agent.role === "assistant" || agent.role === "searchCrawler";
 }
 
 /**
@@ -108,5 +108,5 @@ export function wantsMarkdown(agent: ClassifiedAgent): boolean {
  * Used for differential crawl-delay handling in headers.
  */
 export function isDataScraper(agent: ClassifiedAgent): boolean {
-  return agent.role === 'dataScraper';
+  return agent.role === "dataScraper";
 }

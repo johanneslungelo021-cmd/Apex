@@ -11,10 +11,10 @@
  * Township slang / Iscamtho, and SA English code-switching patterns.
  */
 
-import { codeSwitchCounter } from '../observability/pillar4Metrics';
+import { codeSwitchCounter } from "../observability/pillar4Metrics";
 
-export type SALanguageCode = 'zu-ZA' | 'st-ZA' | 'af-ZA' | 'slang' | 'default';
-export type Formality = 'formal' | 'casual' | 'mixed';
+export type SALanguageCode = "zu-ZA" | "st-ZA" | "af-ZA" | "slang" | "default";
+export type Formality = "formal" | "casual" | "mixed";
 
 export interface CodeSwitchContext {
   detectedLanguageHints: string[];
@@ -34,36 +34,36 @@ export interface LanguageStyle {
 
 export const VERNACULAR_MOMENTS = {
   greeting_first: {
-    'zu-ZA': 'Sawubona — I see you.',
-    'st-ZA': 'Dumelang — peace be with you.',
-    'af-ZA': 'Welkom by Apex Central.',
-    default: 'Welcome to Apex Central.',
+    "zu-ZA": "Sawubona — I see you.",
+    "st-ZA": "Dumelang — peace be with you.",
+    "af-ZA": "Welkom by Apex Central.",
+    default: "Welcome to Apex Central.",
   },
   acknowledgment: {
-    'zu-ZA': 'Yebo, I hear you.',
-    casual: 'Sharp, I hear you.',
-    default: 'I hear you.',
+    "zu-ZA": "Yebo, I hear you.",
+    casual: "Sharp, I hear you.",
+    default: "I hear you.",
   },
   empathy: {
-    'zu-ZA': "Eish, that's heavy.",
-    casual: 'Eish, I get it.',
+    "zu-ZA": "Eish, that's heavy.",
+    casual: "Eish, I get it.",
     default: "I understand — that's not easy.",
   },
   celebration: {
-    'zu-ZA': "Sho! That's the move right there.",
-    casual: 'Sharp sharp! 🔥',
+    "zu-ZA": "Sho! That's the move right there.",
+    casual: "Sharp sharp! 🔥",
     default: "That's outstanding work.",
   },
   encouragement: {
-    ubuntu: 'Siyaphumelela — we succeed together.',
+    ubuntu: "Siyaphumelela — we succeed together.",
     casual: "You've got this. And you're not doing it alone.",
     default: "You have the capacity. Let's build.",
   },
   farewell: {
-    'zu-ZA': 'Sala kahle — stay well.',
-    'st-ZA': 'Robala hantle — rest well.',
-    casual: 'Stay sharp. The Empire grows.',
-    default: 'Until next time.',
+    "zu-ZA": "Sala kahle — stay well.",
+    "st-ZA": "Robala hantle — rest well.",
+    casual: "Stay sharp. The Empire grows.",
+    default: "Until next time.",
   },
 } as const;
 
@@ -71,13 +71,16 @@ export const VERNACULAR_MOMENTS = {
 
 /** Vernacular marker patterns for each SA language / dialect. */
 const VERNACULAR_PATTERNS: Record<string, RegExp> = {
-  'zu-ZA': /\b(sawubona|yebo|eish|sho|sharp|ngiyabonga|unjani|ninjani|haibo|mara|wena)\b/i,
-  'st-ZA': /\b(dumelang|khotso|ke|batla|tseba|ntate|mme|rona|bua)\b/i,
-  'af-ZA': /\b(baie|dankie|hoe gaan|lekker|mooi|ouens|braai|boet|jy|ek)\b/i,
-  slang:   /\b(howzit|bru|china|izzit|shame|ag|naai|jislaaik|eita|skatta|mlungu)\b/i,
+  "zu-ZA":
+    /\b(sawubona|yebo|eish|sho|sharp|ngiyabonga|unjani|ninjani|haibo|mara|wena)\b/i,
+  "st-ZA": /\b(dumelang|khotso|ke|batla|tseba|ntate|mme|rona|bua)\b/i,
+  "af-ZA": /\b(baie|dankie|hoe gaan|lekker|mooi|ouens|braai|boet|jy|ek)\b/i,
+  slang:
+    /\b(howzit|bru|china|izzit|shame|ag|naai|jislaaik|eita|skatta|mlungu)\b/i,
 };
 
-const FORMAL_MARKERS = /\b(please|kindly|would you|could you|regarding|furthermore|I am writing|I would like)\b/i;
+const FORMAL_MARKERS =
+  /\b(please|kindly|would you|could you|regarding|furthermore|I am writing|I would like)\b/i;
 const CASUAL_MARKERS = /\b(hey|yo|sup|lol|gonna|wanna|nah|yeah|tbh|ngl|fr)\b/i;
 
 /**
@@ -97,18 +100,18 @@ export function detectUserLanguageStyle(message: string): LanguageStyle {
   }
 
   const formality: Formality = FORMAL_MARKERS.test(message)
-    ? 'formal'
+    ? "formal"
     : CASUAL_MARKERS.test(message) || hasVernacular
-      ? 'casual'
-      : 'mixed';
+      ? "casual"
+      : "mixed";
 
   // Pillar 4: emit code-switch detection metric
   if (hasVernacular) {
     for (const lang of detected) {
-      codeSwitchCounter.add(1, { language: lang, detected: 'true' });
+      codeSwitchCounter.add(1, { language: lang, detected: "true" });
     }
   } else {
-    codeSwitchCounter.add(1, { language: 'english', detected: 'false' });
+    codeSwitchCounter.add(1, { language: "english", detected: "false" });
   }
 
   return { hasVernacular, detectedLanguages: detected, formality };
@@ -121,7 +124,7 @@ export function detectUserLanguageStyle(message: string): LanguageStyle {
 export function selectVernacularPhrase(
   moment: keyof typeof VERNACULAR_MOMENTS,
   detectedLanguages: string[],
-  formality: Formality
+  formality: Formality,
 ): string {
   const options = VERNACULAR_MOMENTS[moment] as Record<string, string>;
 
@@ -131,9 +134,9 @@ export function selectVernacularPhrase(
   }
 
   // Try formality-based fallback
-  if (formality === 'casual' && 'casual' in options) return options['casual'];
+  if (formality === "casual" && "casual" in options) return options["casual"];
 
-  return options['default'] ?? '';
+  return options["default"] ?? "";
 }
 
 /**
@@ -141,9 +144,9 @@ export function selectVernacularPhrase(
  * Only called when code-switching is detected.
  */
 export function buildLanguageMirrorInstruction(style: LanguageStyle): string {
-  if (!style.hasVernacular) return '';
+  if (!style.hasVernacular) return "";
 
-  const langs = style.detectedLanguages.join(', ');
+  const langs = style.detectedLanguages.join(", ");
   return (
     `\n<language_mirror>\n` +
     `The user is naturally code-switching with ${langs}. ` +

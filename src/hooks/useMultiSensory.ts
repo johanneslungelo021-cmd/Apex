@@ -1,9 +1,9 @@
 // src/hooks/useMultiSensory.ts
-'use client';
+"use client";
 
-import { useCallback, useEffect, useRef } from 'react';
-import type { EmotionState } from './useEmotionEngine';
-import { useSensoryPreferences } from './useSensoryPreferences';
+import { useCallback, useEffect, useRef } from "react";
+import type { EmotionState } from "./useEmotionEngine";
+import { useSensoryPreferences } from "./useSensoryPreferences";
 
 export function useMultiSensory() {
   const prefs = useSensoryPreferences();
@@ -13,14 +13,15 @@ export function useMultiSensory() {
   const vibTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const getCtx = useCallback((): AudioContext | null => {
-    if (typeof window === 'undefined') return null;
+    if (typeof window === "undefined") return null;
     if (ctxRef.current) return ctxRef.current;
     try {
       const AC =
         window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        (window as unknown as { webkitAudioContext: typeof AudioContext })
+          .webkitAudioContext;
       if (!AC) return null;
-      ctxRef.current = new AC({ latencyHint: 'interactive' });
+      ctxRef.current = new AC({ latencyHint: "interactive" });
       masterRef.current = ctxRef.current.createGain();
       masterRef.current.gain.setValueAtTime(0.35, ctxRef.current.currentTime);
       masterRef.current.connect(ctxRef.current.destination);
@@ -32,22 +33,22 @@ export function useMultiSensory() {
 
   const resume = useCallback(async () => {
     const ctx = getCtx();
-    if (ctx?.state === 'suspended') await ctx.resume().catch(() => {});
+    if (ctx?.state === "suspended") await ctx.resume().catch(() => {});
   }, [getCtx]);
 
   // Auto-resume AudioContext on first user interaction
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === "undefined") return;
     const h = () => {
       void resume();
-      window.removeEventListener('click', h);
-      window.removeEventListener('touchend', h);
+      window.removeEventListener("click", h);
+      window.removeEventListener("touchend", h);
     };
-    window.addEventListener('click', h);
-    window.addEventListener('touchend', h);
+    window.addEventListener("click", h);
+    window.addEventListener("touchend", h);
     return () => {
-      window.removeEventListener('click', h);
-      window.removeEventListener('touchend', h);
+      window.removeEventListener("click", h);
+      window.removeEventListener("touchend", h);
     };
   }, [resume]);
 
@@ -61,7 +62,7 @@ export function useMultiSensory() {
       }
     });
     activeRef.current = [];
-    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) {
       try {
         navigator.vibrate(0);
       } catch {
@@ -76,29 +77,37 @@ export function useMultiSensory() {
 
   const vibrate = useCallback(
     (p: number | number[]) => {
-      if (!prefs.haptics || typeof navigator === 'undefined' || !('vibrate' in navigator)) return;
+      if (
+        !prefs.haptics ||
+        typeof navigator === "undefined" ||
+        !("vibrate" in navigator)
+      )
+        return;
       try {
         navigator.vibrate(p);
       } catch {
         // vibrate unavailable
       }
     },
-    [prefs.haptics]
+    [prefs.haptics],
   );
 
   const trigger = useCallback(
     (emotionState: EmotionState) => {
       stopAll();
 
-      if (emotionState === 'dormant') return;
+      if (emotionState === "dormant") return;
 
       const ctx = getCtx();
-      const canPlay = prefs.audio && ctx && ctx.state === 'running';
+      const canPlay = prefs.audio && ctx && ctx.state === "running";
 
-      if (emotionState === 'awakened') {
+      if (emotionState === "awakened") {
         if (canPlay && ctx && masterRef.current) {
           const now = ctx.currentTime;
-          const osc = new OscillatorNode(ctx, { type: 'sine', frequency: 1800 });
+          const osc = new OscillatorNode(ctx, {
+            type: "sine",
+            frequency: 1800,
+          });
           const gain = new GainNode(ctx);
           gain.gain.setValueAtTime(0.0001, now);
           gain.gain.setValueAtTime(0.25, now + 0.001);
@@ -112,10 +121,10 @@ export function useMultiSensory() {
         vibrate(25);
       }
 
-      if (emotionState === 'processing') {
+      if (emotionState === "processing") {
         if (canPlay && ctx && masterRef.current) {
           const now = ctx.currentTime;
-          const osc = new OscillatorNode(ctx, { type: 'sine', frequency: 40 });
+          const osc = new OscillatorNode(ctx, { type: "sine", frequency: 40 });
           const gain = new GainNode(ctx);
           gain.gain.setValueAtTime(0.0001, now);
           gain.gain.setTargetAtTime(0.35, now, 0.05);
@@ -128,11 +137,14 @@ export function useMultiSensory() {
         vibTimerRef.current = setInterval(() => vibrate([30, 100, 30]), 460);
       }
 
-      if (emotionState === 'resolved') {
+      if (emotionState === "resolved") {
         if (canPlay && ctx && masterRef.current) {
           const now = ctx.currentTime;
           [261.63, 329.63, 392.0].forEach((freq) => {
-            const osc = new OscillatorNode(ctx!, { type: 'sine', frequency: freq });
+            const osc = new OscillatorNode(ctx!, {
+              type: "sine",
+              frequency: freq,
+            });
             const gain = new GainNode(ctx!);
             gain.gain.setValueAtTime(0.0001, now);
             gain.gain.setValueAtTime(0.2, now + 0.002);
@@ -147,7 +159,7 @@ export function useMultiSensory() {
         vibrate(50);
       }
     },
-    [stopAll, getCtx, vibrate, prefs.audio]
+    [stopAll, getCtx, vibrate, prefs.audio],
   );
 
   useEffect(
@@ -155,7 +167,7 @@ export function useMultiSensory() {
       stopAll();
       ctxRef.current?.close();
     },
-    [stopAll]
+    [stopAll],
   );
 
   return { trigger, resume };

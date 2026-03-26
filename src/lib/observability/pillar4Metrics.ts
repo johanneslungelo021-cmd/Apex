@@ -18,9 +18,9 @@
  * @module lib/observability/pillar4Metrics
  */
 
-import { metrics } from '@opentelemetry/api';
+import { metrics } from "@opentelemetry/api";
 
-const meter = metrics.getMeter('apex-pillar4-bones');
+const meter = metrics.getMeter("apex-pillar4-bones");
 
 // ─── Identity Enrichment ──────────────────────────────────────────────────────
 
@@ -31,8 +31,8 @@ const meter = metrics.getMeter('apex-pillar4-bones');
  *   outcome = 'success' | 'error'
  */
 export const enrichmentCounter = meter.createCounter(
-  'apex_identity_enrichment_total',
-  { description: 'Total identity enrichment calls by tier and outcome' }
+  "apex_identity_enrichment_total",
+  { description: "Total identity enrichment calls by tier and outcome" },
 );
 
 /**
@@ -42,11 +42,11 @@ export const enrichmentCounter = meter.createCounter(
  * Unit: milliseconds
  */
 export const enrichmentLatencyHistogram = meter.createHistogram(
-  'apex_identity_enrichment_latency_ms',
+  "apex_identity_enrichment_latency_ms",
   {
-    description: 'Identity enrichment latency in milliseconds',
-    unit: 'ms',
-  }
+    description: "Identity enrichment latency in milliseconds",
+    unit: "ms",
+  },
 );
 
 // ─── Tone Drift Detection ─────────────────────────────────────────────────────
@@ -58,8 +58,8 @@ export const enrichmentLatencyHistogram = meter.createHistogram(
  *                  | 'Robotic refusal' | 'Generic opener' | 'Assistant self-reference'
  */
 export const toneViolationCounter = meter.createCounter(
-  'apex_tone_violation_total',
-  { description: 'Tone drift violations detected in model output by type' }
+  "apex_tone_violation_total",
+  { description: "Tone drift violations detected in model output by type" },
 );
 
 /**
@@ -68,8 +68,8 @@ export const toneViolationCounter = meter.createCounter(
  *   outcome = 'clean' | 'violated'
  */
 export const toneValidationCounter = meter.createCounter(
-  'apex_tone_validation_total',
-  { description: 'Tone validation checks by outcome (clean or violated)' }
+  "apex_tone_validation_total",
+  { description: "Tone validation checks by outcome (clean or violated)" },
 );
 
 // ─── Sentiment Analysis ───────────────────────────────────────────────────────
@@ -82,8 +82,8 @@ export const toneValidationCounter = meter.createCounter(
  *   outcome = 'success' | 'fallback' | 'cache_hit'
  */
 export const sentimentCounter = meter.createCounter(
-  'apex_sentiment_analysis_total',
-  { description: 'Sentiment analysis calls by tier, emotion, and outcome' }
+  "apex_sentiment_analysis_total",
+  { description: "Sentiment analysis calls by tier, emotion, and outcome" },
 );
 
 /**
@@ -93,11 +93,11 @@ export const sentimentCounter = meter.createCounter(
  * Unit: milliseconds
  */
 export const sentimentLatencyHistogram = meter.createHistogram(
-  'apex_sentiment_latency_ms',
+  "apex_sentiment_latency_ms",
   {
-    description: 'Sentiment analysis latency in milliseconds by tier',
-    unit: 'ms',
-  }
+    description: "Sentiment analysis latency in milliseconds by tier",
+    unit: "ms",
+  },
 );
 
 // ─── Code Switch Detection ────────────────────────────────────────────────────
@@ -108,10 +108,10 @@ export const sentimentLatencyHistogram = meter.createHistogram(
  *   language = 'zu-ZA' | 'st-ZA' | 'af-ZA' | 'slang' | 'english'
  *   detected = 'true' | 'false'  (vernacular detected vs plain English)
  */
-export const codeSwitchCounter = meter.createCounter(
-  'apex_code_switch_total',
-  { description: 'Language style detection events by language and vernacular presence' }
-);
+export const codeSwitchCounter = meter.createCounter("apex_code_switch_total", {
+  description:
+    "Language style detection events by language and vernacular presence",
+});
 
 // ─── Empathy Engine ───────────────────────────────────────────────────────────
 
@@ -124,8 +124,8 @@ export const codeSwitchCounter = meter.createCounter(
  *   severity   = 'low' | 'medium' | 'high' | 'critical'
  */
 export const empathyErrorCounter = meter.createCounter(
-  'apex_error_humanized_total',
-  { description: 'Humanized error events by error code and severity' }
+  "apex_error_humanized_total",
+  { description: "Humanized error events by error code and severity" },
 );
 
 // ─── Rate Limiting Observability ──────────────────────────────────────────────
@@ -137,8 +137,8 @@ export const empathyErrorCounter = meter.createCounter(
  *   outcome = 'allowed' | 'blocked'
  */
 export const departmentRateLimitCounter = meter.createCounter(
-  'apex_department_rate_limit_total',
-  { description: 'Department route rate limit events by route and outcome' }
+  "apex_department_rate_limit_total",
+  { description: "Department route rate limit events by route and outcome" },
 );
 
 // ─── Search API Observability ─────────────────────────────────────────────────
@@ -151,6 +151,6 @@ export const departmentRateLimitCounter = meter.createCounter(
  * Used in: src/app/api/search/route.ts (line 1)
  */
 export const searchQueryCounter = meter.createCounter(
-  'apex_search_query_total',
-  { description: 'Web search API requests by status (Perplexity sonar)' }
+  "apex_search_query_total",
+  { description: "Web search API requests by status (Perplexity sonar)" },
 );

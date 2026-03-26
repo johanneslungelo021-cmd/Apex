@@ -1,20 +1,50 @@
 // src/components/sentient/EmotionalSwarm.tsx
-'use client';
+"use client";
 
-import { useRef, useMemo } from 'react';
-import { useFrame } from '@react-three/fiber';
-import { Points, PointMaterial } from '@react-three/drei';
-import * as THREE from 'three';
-import { useEmotionEngine, type EmotionState } from '@/hooks/useEmotionEngine';
+import { useRef, useMemo } from "react";
+import { useFrame } from "@react-three/fiber";
+import { Points, PointMaterial } from "@react-three/drei";
+import * as THREE from "three";
+import { useEmotionEngine, type EmotionState } from "@/hooks/useEmotionEngine";
 
 const SWARM_CONFIG: Record<
   EmotionState,
-  { speed: number; spread: number; size: number; opacity: number; color: string }
+  {
+    speed: number;
+    spread: number;
+    size: number;
+    opacity: number;
+    color: string;
+  }
 > = {
-  dormant:    { speed: 0.015, spread: 20, size: 0.015, opacity: 0.25, color: '#ffffff' },
-  awakened:   { speed: 0.04,  spread: 18, size: 0.022, opacity: 0.5,  color: '#10b981' },
-  processing: { speed: 0.12,  spread: 25, size: 0.035, opacity: 0.8,  color: '#8b5cf6' },
-  resolved:   { speed: 0.005, spread: 15, size: 0.018, opacity: 0.6,  color: '#3b82f6' },
+  dormant: {
+    speed: 0.015,
+    spread: 20,
+    size: 0.015,
+    opacity: 0.25,
+    color: "#ffffff",
+  },
+  awakened: {
+    speed: 0.04,
+    spread: 18,
+    size: 0.022,
+    opacity: 0.5,
+    color: "#10b981",
+  },
+  processing: {
+    speed: 0.12,
+    spread: 25,
+    size: 0.035,
+    opacity: 0.8,
+    color: "#8b5cf6",
+  },
+  resolved: {
+    speed: 0.005,
+    spread: 15,
+    size: 0.018,
+    opacity: 0.6,
+    color: "#3b82f6",
+  },
 };
 
 export default function EmotionalSwarm() {
@@ -32,7 +62,7 @@ export default function EmotionalSwarm() {
       return seed / 0x7fffffff;
     };
     for (let i = 0; i < count; i++) {
-      arr[i * 3]     = (rand() - 0.5) * 20;
+      arr[i * 3] = (rand() - 0.5) * 20;
       arr[i * 3 + 1] = (rand() - 0.5) * 20;
       arr[i * 3 + 2] = (rand() - 0.5) * 20;
     }
@@ -40,10 +70,10 @@ export default function EmotionalSwarm() {
   }, []);
 
   // Live refs for smooth lerping
-  const currentSpeed   = useRef(0.015);
+  const currentSpeed = useRef(0.015);
   const currentOpacity = useRef(0.25);
-  const targetColor    = useRef(new THREE.Color('#ffffff'));
-  const currentColor   = useRef(new THREE.Color('#ffffff'));
+  const targetColor = useRef(new THREE.Color("#ffffff"));
+  const currentColor = useRef(new THREE.Color("#ffffff"));
 
   useFrame(({ clock }) => {
     if (!ref.current || !matRef.current) return;
@@ -51,12 +81,13 @@ export default function EmotionalSwarm() {
     const config = SWARM_CONFIG[state];
 
     // Smooth speed lerp
-    currentSpeed.current += (config.speed * intensity - currentSpeed.current) * 0.04;
+    currentSpeed.current +=
+      (config.speed * intensity - currentSpeed.current) * 0.04;
     ref.current.rotation.x = t * currentSpeed.current;
     ref.current.rotation.y = t * currentSpeed.current * 1.3;
 
     // Processing jitter
-    if (state === 'processing') {
+    if (state === "processing") {
       ref.current.rotation.z = Math.sin(t * 4) * 0.02 * intensity;
     } else {
       ref.current.rotation.z *= 0.95;
@@ -70,7 +101,7 @@ export default function EmotionalSwarm() {
     matRef.current.size = THREE.MathUtils.lerp(
       matRef.current.size,
       config.size * intensity,
-      0.05
+      0.05,
     );
 
     // Smooth color lerp

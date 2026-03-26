@@ -23,9 +23,9 @@
  * @see https://nextjs.org/docs/app/api-reference/file-conventions/error
  * @module app/error
  */
-'use client';
+"use client";
 
-import { useEffect } from 'react';
+import { useEffect } from "react";
 
 interface ErrorProps {
   error: Error & { digest?: string };
@@ -35,10 +35,10 @@ interface ErrorProps {
 export default function Error({ error, reset }: ErrorProps) {
   useEffect(() => {
     // Log to Vercel Function Logs — correlate with digest in dashboard
-    console.error('[Apex] Render error caught by error.tsx boundary:', {
+    console.error("[Apex] Render error caught by error.tsx boundary:", {
       message: error.message,
       digest: error.digest,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
     });
   }, [error]);
 
@@ -74,10 +74,12 @@ export default function Error({ error, reset }: ErrorProps) {
           </svg>
         </div>
 
-        <h1 className="text-xl font-bold text-white mb-2">Something went wrong</h1>
+        <h1 className="text-xl font-bold text-white mb-2">
+          Something went wrong
+        </h1>
         <p className="text-white/50 text-sm mb-8 leading-relaxed">
-          The Apex interface encountered an unexpected error. Your data is safe —
-          this is a display issue only.
+          The Apex interface encountered an unexpected error. Your data is safe
+          — this is a display issue only.
         </p>
 
         {/* Error digest for support reference */}

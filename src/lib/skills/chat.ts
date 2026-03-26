@@ -12,10 +12,10 @@
  * @module lib/skills/chat
  */
 
-import { fetchWithTimeout } from '@/lib/api-utils';
+import { fetchWithTimeout } from "@/lib/api-utils";
 
 export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
+  role: "system" | "user" | "assistant";
   content: string;
 }
 
@@ -32,8 +32,8 @@ export interface ChatCompletionResult {
   error?: string;
 }
 
-const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
-const DEFAULT_MODEL = 'llama-3.1-8b-instant';
+const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
+const DEFAULT_MODEL = "llama-3.1-8b-instant";
 const DEFAULT_TIMEOUT_MS = 15_000;
 
 /**
@@ -56,9 +56,9 @@ export async function createChatCompletion(
 
   if (!apiKey) {
     return {
-      content: '',
+      content: "",
       success: false,
-      error: 'GROQ_API_KEY not configured',
+      error: "GROQ_API_KEY not configured",
     };
   }
 
@@ -66,10 +66,10 @@ export async function createChatCompletion(
     const response = await fetchWithTimeout(
       GROQ_ENDPOINT,
       {
-        method: 'POST',
+        method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           model: DEFAULT_MODEL,
@@ -85,25 +85,25 @@ export async function createChatCompletion(
     if (!response.ok) {
       const text = await response.text();
       return {
-        content: '',
+        content: "",
         success: false,
         error: `Groq API error ${response.status}: ${text.slice(0, 200)}`,
       };
     }
 
-    const data = await response.json() as {
+    const data = (await response.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
     };
 
     const content = data.choices?.[0]?.message?.content;
 
     if (!content) {
-      return { content: '', success: false, error: 'No content in response' };
+      return { content: "", success: false, error: "No content in response" };
     }
 
     return { content, success: true };
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
-    return { content: '', success: false, error: errorMessage };
+    return { content: "", success: false, error: errorMessage };
   }
 }

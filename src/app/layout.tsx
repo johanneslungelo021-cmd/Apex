@@ -26,7 +26,10 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
-import { buildOrganizationSchema, buildWebSiteSchema } from "@/lib/geo/schema-builder";
+import {
+  buildOrganizationSchema,
+  buildWebSiteSchema,
+} from "@/lib/geo/schema-builder";
 
 // Geist Sans — primary UI font (local font, no Google Fonts CDN required)
 // Equivalent to: Geist({ variable, display: "swap", preload: true })
@@ -73,7 +76,8 @@ const geistMono = localFont({
   fallback: ["ui-monospace", "Menlo", "monospace"],
 });
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://apex-central.vercel.app";
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://apex-central.vercel.app";
 const SITE_NAME = "Apex Central — Vaal AI Empire";
 const SITE_DESCRIPTION =
   "A South African AI-powered digital income platform. Discover real opportunities under R2000 to start, get personalised AI guidance, and access XRPL autonomous orchestration for sub-3-second digital income transactions.";
@@ -189,5 +193,3 @@ export default function RootLayout({
     </html>
   );
 }
-
-

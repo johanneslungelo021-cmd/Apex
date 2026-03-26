@@ -13,8 +13,8 @@
  * @module lib/supabase
  */
 
-import 'server-only';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import "server-only";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 // Global singleton — reused across invocations in the same warm serverless instance.
 let _client: SupabaseClient | null = null;
@@ -29,10 +29,14 @@ export function getSupabaseClient(): SupabaseClient {
   const key = process.env.SUPABASE_SECRET_KEY;
 
   if (!url) {
-    throw new Error('[supabase] SUPABASE_URL is not set. Add it to Vercel Environment Variables.');
+    throw new Error(
+      "[supabase] SUPABASE_URL is not set. Add it to Vercel Environment Variables.",
+    );
   }
   if (!key) {
-    throw new Error('[supabase] SUPABASE_SECRET_KEY is not set. Add it to Vercel Environment Variables.');
+    throw new Error(
+      "[supabase] SUPABASE_SECRET_KEY is not set. Add it to Vercel Environment Variables.",
+    );
   }
 
   _client = createClient(url, key, {

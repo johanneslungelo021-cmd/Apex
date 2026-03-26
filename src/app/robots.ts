@@ -15,126 +15,127 @@
  * @module app/robots
  */
 
-import type { MetadataRoute } from 'next';
+import type { MetadataRoute } from "next";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://apex-central.vercel.app';
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://apex-central.vercel.app";
 
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
       // ── Standard search engines — full access ──────────────────────────────
       {
-        userAgent: 'Googlebot',
-        allow: '/',
+        userAgent: "Googlebot",
+        allow: "/",
       },
       {
-        userAgent: 'Bingbot',
-        allow: '/',
+        userAgent: "Bingbot",
+        allow: "/",
       },
       {
-        userAgent: 'Slurp', // Yahoo
-        allow: '/',
+        userAgent: "Slurp", // Yahoo
+        allow: "/",
       },
 
       // ── AI search crawlers — full access + Markdown shadow-routes ──────────
       // These power AI-generated answers. We actively want inclusion.
       {
-        userAgent: 'PerplexityBot',
-        allow: ['/'],
+        userAgent: "PerplexityBot",
+        allow: ["/"],
         // Markdown shadow-routes explicitly allowed
       },
       {
-        userAgent: 'YouBot',
-        allow: '/',
+        userAgent: "YouBot",
+        allow: "/",
       },
       {
-        userAgent: 'DuckDuckBot',
-        allow: '/',
+        userAgent: "DuckDuckBot",
+        allow: "/",
       },
 
       // ── AI assistants — full access (fetching content for user prompts) ─────
       {
-        userAgent: 'ChatGPT-User',
-        allow: '/',
+        userAgent: "ChatGPT-User",
+        allow: "/",
       },
       {
-        userAgent: 'Claude-User',
-        allow: '/',
+        userAgent: "Claude-User",
+        allow: "/",
       },
       {
-        userAgent: 'Claude-SearchBot',
-        allow: '/',
+        userAgent: "Claude-SearchBot",
+        allow: "/",
       },
       {
-        userAgent: 'Perplexity-User',
-        allow: '/',
+        userAgent: "Perplexity-User",
+        allow: "/",
       },
       {
-        userAgent: 'Operator', // OpenAI Operator agent
-        allow: '/',
+        userAgent: "Operator", // OpenAI Operator agent
+        allow: "/",
       },
 
       // ── AI training scrapers — restricted; public content only ─────────────
       // Allow public pages (including our GEO-optimised /api/mx/* docs)
       // but exclude API execution endpoints and raw data routes.
       {
-        userAgent: 'GPTBot',
-        allow: ['/', '/api/mx/'],
-        disallow: ['/api/ai-agent', '/api/register', '/api/analytics'],
+        userAgent: "GPTBot",
+        allow: ["/", "/api/mx/"],
+        disallow: ["/api/ai-agent", "/api/register", "/api/analytics"],
         crawlDelay: 1,
       },
       {
-        userAgent: 'ClaudeBot',
-        allow: ['/', '/api/mx/'],
-        disallow: ['/api/ai-agent', '/api/register', '/api/analytics'],
+        userAgent: "ClaudeBot",
+        allow: ["/", "/api/mx/"],
+        disallow: ["/api/ai-agent", "/api/register", "/api/analytics"],
         crawlDelay: 1,
       },
       {
-        userAgent: 'Google-Extended',
-        allow: ['/', '/api/mx/'],
-        disallow: ['/api/'],
+        userAgent: "Google-Extended",
+        allow: ["/", "/api/mx/"],
+        disallow: ["/api/"],
       },
       {
-        userAgent: 'Bytespider',
-        allow: ['/', '/api/mx/'],
-        disallow: ['/api/ai-agent', '/api/register', '/api/analytics'],
+        userAgent: "Bytespider",
+        allow: ["/", "/api/mx/"],
+        disallow: ["/api/ai-agent", "/api/register", "/api/analytics"],
         crawlDelay: 2,
       },
       {
-        userAgent: 'CCBot',
-        allow: ['/', '/api/mx/'],
-        disallow: ['/api/'],
+        userAgent: "CCBot",
+        allow: ["/", "/api/mx/"],
+        disallow: ["/api/"],
         crawlDelay: 2,
       },
       {
-        userAgent: 'anthropic-ai',
-        allow: ['/', '/api/mx/'],
-        disallow: ['/api/ai-agent', '/api/register', '/api/analytics'],
+        userAgent: "anthropic-ai",
+        allow: ["/", "/api/mx/"],
+        disallow: ["/api/ai-agent", "/api/register", "/api/analytics"],
         crawlDelay: 1,
       },
       {
-        userAgent: 'Amazonbot',
-        allow: ['/', '/api/mx/'],
-        disallow: ['/api/'],
+        userAgent: "Amazonbot",
+        allow: ["/", "/api/mx/"],
+        disallow: ["/api/"],
         crawlDelay: 2,
       },
       {
-        userAgent: 'FacebookBot',
-        allow: '/',
-        disallow: ['/api/ai-agent', '/api/register'],
+        userAgent: "FacebookBot",
+        allow: "/",
+        disallow: ["/api/ai-agent", "/api/register"],
       },
       {
-        userAgent: 'cohere-training-data-crawler',
-        allow: ['/', '/api/mx/'],
-        disallow: ['/api/'],
+        userAgent: "cohere-training-data-crawler",
+        allow: ["/", "/api/mx/"],
+        disallow: ["/api/"],
         crawlDelay: 2,
       },
 
       // ── Default — allow all unlisted bots ─────────────────────────────────
       {
-        userAgent: '*',
-        allow: '/',
-        disallow: ['/api/register', '/api/analytics'],
+        userAgent: "*",
+        allow: "/",
+        disallow: ["/api/register", "/api/analytics"],
       },
     ],
 

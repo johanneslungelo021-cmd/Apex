@@ -15,11 +15,11 @@
  * @module hooks/useVoiceInput
  */
 
-'use client';
+"use client";
 
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { useSensoryPreferences } from './useSensoryPreferences';
-import { useEmotionEngine } from './useEmotionEngine';
+import { useState, useCallback, useRef, useEffect } from "react";
+import { useSensoryPreferences } from "./useSensoryPreferences";
+import { useEmotionEngine } from "./useEmotionEngine";
 
 export interface VoiceInputState {
   /** Whether the microphone is actively recording */
@@ -72,24 +72,26 @@ declare global {
 }
 
 export function useVoiceInput(
-  onFinalTranscript?: (text: string) => void
+  onFinalTranscript?: (text: string) => void,
 ): VoiceInputState {
   const { audio } = useSensoryPreferences();
   const emotion = useEmotionEngine();
 
   const [isListening, setIsListening] = useState(false);
-  const [interimText, setInterimText] = useState('');
-  const [finalText, setFinalText] = useState('');
+  const [interimText, setInterimText] = useState("");
+  const [finalText, setFinalText] = useState("");
   const [error, setError] = useState<string | null>(null);
   // Lazy initializer runs client-side only ('use client') — safe, no hydration mismatch
   const [isSupported] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window;
+    if (typeof window === "undefined") return false;
+    return "SpeechRecognition" in window || "webkitSpeechRecognition" in window;
   });
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   // Stable ref to callback — avoids stale closure in recognition.onresult
-  const onFinalRef = useRef<((text: string) => void) | undefined>(onFinalTranscript);
+  const onFinalRef = useRef<((text: string) => void) | undefined>(
+    onFinalTranscript,
+  );
   useEffect(() => {
     onFinalRef.current = onFinalTranscript;
   }, [onFinalTranscript]);
@@ -97,18 +99,20 @@ export function useVoiceInput(
   const stopListening = useCallback(() => {
     recognitionRef.current?.stop();
     setIsListening(false);
-    setInterimText('');
+    setInterimText("");
   }, []);
 
   const startListening = useCallback(() => {
     if (!isSupported) {
-      setError('Voice input is not supported in this browser. Try Chrome or Edge.');
+      setError(
+        "Voice input is not supported in this browser. Try Chrome or Edge.",
+      );
       return;
     }
 
     // Require audio preference to be enabled
     if (!audio) {
-      setError('Enable audio in accessibility settings to use voice input.');
+      setError("Enable audio in accessibility settings to use voice input.");
       return;
     }
 
@@ -118,8 +122,8 @@ export function useVoiceInput(
     }
 
     setError(null);
-    setFinalText('');
-    setInterimText('');
+    setFinalText("");
+    setInterimText("");
 
     const SpeechRecognitionCtor =
       window.SpeechRecognition ?? window.webkitSpeechRecognition;
@@ -127,19 +131,19 @@ export function useVoiceInput(
     const recognition = new SpeechRecognitionCtor();
 
     // Try en-ZA first, browser will fall back gracefully
-    recognition.lang = 'en-ZA';
+    recognition.lang = "en-ZA";
     recognition.continuous = false; // single utterance per click
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
 
     recognition.onstart = () => {
       setIsListening(true);
-      emotion.transition('processing');
+      emotion.transition("processing");
     };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let interim = '';
-      let final = '';
+      let interim = "";
+      let final = "";
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
@@ -155,34 +159,35 @@ export function useVoiceInput(
       if (interim) setInterimText(interim);
       if (final) {
         setFinalText(final.trim());
-        setInterimText('');
+        setInterimText("");
         onFinalRef.current?.(final.trim());
-        emotion.transition('resolved');
-        setTimeout(() => emotion.transition('dormant'), 1000);
+        emotion.transition("resolved");
+        setTimeout(() => emotion.transition("dormant"), 1000);
       }
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      if (event.error === 'aborted' || event.error === 'no-speech') {
+      if (event.error === "aborted" || event.error === "no-speech") {
         // User stopped or no speech — not a real error
         setIsListening(false);
-        setInterimText('');
+        setInterimText("");
         return;
       }
       const messages: Record<string, string> = {
-        'not-allowed': 'Microphone access denied. Please allow microphone permissions.',
-        'network': 'Network error during speech recognition.',
-        'audio-capture': 'No microphone detected.',
-        'service-not-allowed': 'Speech service not available.',
+        "not-allowed":
+          "Microphone access denied. Please allow microphone permissions.",
+        network: "Network error during speech recognition.",
+        "audio-capture": "No microphone detected.",
+        "service-not-allowed": "Speech service not available.",
       };
       setError(messages[event.error] ?? `Speech error: ${event.error}`);
       setIsListening(false);
-      setInterimText('');
+      setInterimText("");
     };
 
     recognition.onend = () => {
       setIsListening(false);
-      setInterimText('');
+      setInterimText("");
     };
 
     recognitionRef.current = recognition;
@@ -190,14 +195,16 @@ export function useVoiceInput(
     try {
       recognition.start();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start voice input.');
+      setError(
+        err instanceof Error ? err.message : "Failed to start voice input.",
+      );
       setIsListening(false);
     }
   }, [isSupported, audio, isListening, stopListening, emotion]);
 
   const clearTranscript = useCallback(() => {
-    setFinalText('');
-    setInterimText('');
+    setFinalText("");
+    setInterimText("");
     setError(null);
   }, []);
 

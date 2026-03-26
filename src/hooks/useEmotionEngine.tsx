@@ -1,5 +1,5 @@
 // src/hooks/useEmotionEngine.ts
-'use client';
+"use client";
 
 import {
   createContext,
@@ -10,9 +10,9 @@ import {
   useMemo,
   useEffect,
   type ReactNode,
-} from 'react';
+} from "react";
 
-export type EmotionState = 'dormant' | 'awakened' | 'processing' | 'resolved';
+export type EmotionState = "dormant" | "awakened" | "processing" | "resolved";
 
 export interface EmotionApi {
   state: EmotionState;
@@ -31,7 +31,7 @@ export interface EmotionApi {
 const EmotionContext = createContext<EmotionApi | null>(null);
 
 export function EmotionProvider({ children }: { children: ReactNode }) {
-  const [state, setStateRaw] = useState<EmotionState>('dormant');
+  const [state, setStateRaw] = useState<EmotionState>("dormant");
   const [previous, setPrevious] = useState<EmotionState | null>(null);
   const [intensity, setIntensity] = useState(1);
   const [isCycleActive, setIsCycleActive] = useState(false);
@@ -58,28 +58,31 @@ export function EmotionProvider({ children }: { children: ReactNode }) {
       timeouts.current = [];
       setIsCycleActive(true);
 
-      transition('awakened');
+      transition("awakened");
       setIntensity(1.2);
 
       const t1 = setTimeout(() => {
-        transition('processing');
+        transition("processing");
         setIntensity(1.5);
       }, 500);
 
       const t2 = setTimeout(() => {
-        transition('resolved');
+        transition("resolved");
         setIntensity(0.8);
       }, 500 + processingMs);
 
-      const t3 = setTimeout(() => {
-        transition('dormant');
-        setIntensity(1);
-        setIsCycleActive(false);
-      }, 500 + processingMs + 1500);
+      const t3 = setTimeout(
+        () => {
+          transition("dormant");
+          setIntensity(1);
+          setIsCycleActive(false);
+        },
+        500 + processingMs + 1500,
+      );
 
       timeouts.current = [t1, t2, t3];
     },
-    [transition]
+    [transition],
   );
 
   const pulse = useCallback((pulseIntensity = 1) => {
@@ -104,14 +107,25 @@ export function EmotionProvider({ children }: { children: ReactNode }) {
       stateAge,
       pulse,
     }),
-    [state, previous, intensity, transition, runCycle, isCycleActive, stateAge, pulse]
+    [
+      state,
+      previous,
+      intensity,
+      transition,
+      runCycle,
+      isCycleActive,
+      stateAge,
+      pulse,
+    ],
   );
 
-  return <EmotionContext.Provider value={api}>{children}</EmotionContext.Provider>;
+  return (
+    <EmotionContext.Provider value={api}>{children}</EmotionContext.Provider>
+  );
 }
 
 export function useEmotionEngine(): EmotionApi {
   const ctx = useContext(EmotionContext);
-  if (!ctx) throw new Error('useEmotionEngine requires <EmotionProvider>');
+  if (!ctx) throw new Error("useEmotionEngine requires <EmotionProvider>");
   return ctx;
 }

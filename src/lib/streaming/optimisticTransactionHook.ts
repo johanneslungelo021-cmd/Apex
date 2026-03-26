@@ -13,9 +13,13 @@ import {
   useOptimisticTransaction,
   type TransactionIntent,
   type TransactionEvent,
-} from './OptimisticTransactionUI';
+} from "./OptimisticTransactionUI";
 
-export { useOptimisticTransaction, type TransactionIntent, type TransactionEvent };
+export {
+  useOptimisticTransaction,
+  type TransactionIntent,
+  type TransactionEvent,
+};
 
 /**
  * OptimisticTransactionState — convenience type so callers can annotate
@@ -27,4 +31,4 @@ export { useOptimisticTransaction, type TransactionIntent, type TransactionEvent
  */
 export type OptimisticTransactionState = ReturnType<
   typeof useOptimisticTransaction
->['transactionState'];
+>["transactionState"];

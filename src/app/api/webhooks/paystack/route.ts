@@ -1,4 +1,4 @@
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 /**
  * Paystack Treasury Webhook
@@ -28,26 +28,35 @@ export const runtime = 'nodejs';
  * @module api/webhooks/paystack
  */
 
-import { NextResponse } from 'next/server';
-import crypto from 'crypto';
-import { getSupabaseClient } from '@/lib/supabase';
-import { log, generateRequestId } from '@/lib/api-utils';
+import { NextResponse } from "next/server";
+import crypto from "crypto";
+import { getSupabaseClient } from "@/lib/supabase";
+import { log, generateRequestId } from "@/lib/api-utils";
 
-const SERVICE = 'webhook-paystack';
+const SERVICE = "webhook-paystack";
 
 /** One-way SHA-256 hash for PII-safe log correlation. FIX #04. */
 function hashForLog(value: string): string {
-  return crypto.createHash('sha256').update(String(value)).digest('hex').slice(0, 8);
+  return crypto
+    .createHash("sha256")
+    .update(String(value))
+    .digest("hex")
+    .slice(0, 8);
 }
 
 export async function POST(request: Request): Promise<Response> {
   const requestId = generateRequestId();
 
   // ── FIX #02: Signature check ────────────────────────────────────────────────
-  const signature = request.headers.get('x-paystack-signature');
+  const signature = request.headers.get("x-paystack-signature");
   if (!signature) {
-    log({ level: 'warn', service: SERVICE, message: 'Missing x-paystack-signature header', requestId });
-    return NextResponse.json({ error: 'Missing signature' }, { status: 401 });
+    log({
+      level: "warn",
+      service: SERVICE,
+      message: "Missing x-paystack-signature header",
+      requestId,
+    });
+    return NextResponse.json({ error: "Missing signature" }, { status: 401 });
   }
 
   // MUST read raw body with .text() BEFORE any JSON parsing.
@@ -59,26 +68,30 @@ export async function POST(request: Request): Promise<Response> {
   const paystackSecret = process.env.PAYSTACK_SECRET_KEY;
   if (!paystackSecret) {
     log({
-      level: 'error',
+      level: "error",
       service: SERVICE,
-      message: 'PAYSTACK_SECRET_KEY is not set in environment — treasury bridge offline',
+      message:
+        "PAYSTACK_SECRET_KEY is not set in environment — treasury bridge offline",
       requestId,
     });
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
   }
 
   // Compute expected HMAC SHA-512
   const expectedHash = crypto
-    .createHmac('sha512', paystackSecret)
+    .createHmac("sha512", paystackSecret)
     .update(rawBody)
-    .digest('hex');
+    .digest("hex");
 
   // FIX #02: timingSafeEqual prevents timing oracle attacks
   let signatureValid = false;
   try {
     signatureValid = crypto.timingSafeEqual(
-      Buffer.from(expectedHash, 'hex'),
-      Buffer.from(signature, 'hex'),
+      Buffer.from(expectedHash, "hex"),
+      Buffer.from(signature, "hex"),
     );
   } catch {
     // Buffer length mismatch (malformed signature) — treat as invalid
@@ -86,8 +99,13 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   if (!signatureValid) {
-    log({ level: 'warn', service: SERVICE, message: 'Invalid Paystack signature — potential forgery', requestId });
-    return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+    log({
+      level: "warn",
+      service: SERVICE,
+      message: "Invalid Paystack signature — potential forgery",
+      requestId,
+    });
+    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
   // ── FIX #03: Structured payload validation ───────────────────────────────────
@@ -95,33 +113,58 @@ export async function POST(request: Request): Promise<Response> {
   try {
     event = JSON.parse(rawBody);
   } catch {
-    log({ level: 'warn', service: SERVICE, message: 'Malformed JSON in webhook body', requestId });
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    log({
+      level: "warn",
+      service: SERVICE,
+      message: "Malformed JSON in webhook body",
+      requestId,
+    });
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
   // Validate event type field exists and is a string
-  if (!event.event || typeof event.event !== 'string') {
-    return NextResponse.json({ error: 'Invalid event structure' }, { status: 400 });
+  if (!event.event || typeof event.event !== "string") {
+    return NextResponse.json(
+      { error: "Invalid event structure" },
+      { status: 400 },
+    );
   }
 
   // Acknowledge non-charge events without processing (idempotent 200)
-  if (event.event !== 'charge.success') {
-    log({ level: 'info', service: SERVICE, message: `Ignored event: ${event.event}`, requestId });
+  if (event.event !== "charge.success") {
+    log({
+      level: "info",
+      service: SERVICE,
+      message: `Ignored event: ${event.event}`,
+      requestId,
+    });
     return NextResponse.json({ received: true }, { status: 200 });
   }
 
   // Validate data object
-  if (!event.data || typeof event.data !== 'object' || Array.isArray(event.data)) {
-    return NextResponse.json({ error: 'Missing event data' }, { status: 400 });
+  if (
+    !event.data ||
+    typeof event.data !== "object" ||
+    Array.isArray(event.data)
+  ) {
+    return NextResponse.json({ error: "Missing event data" }, { status: 400 });
   }
 
   const data = event.data as Record<string, unknown>;
 
   // FIX #03: data.reference is the correct Paystack field — NOT data.external_id
   const reference = data.reference;
-  if (!reference || typeof reference !== 'string') {
-    log({ level: 'warn', service: SERVICE, message: 'Missing data.reference in charge.success', requestId });
-    return NextResponse.json({ error: 'Missing payment reference' }, { status: 400 });
+  if (!reference || typeof reference !== "string") {
+    log({
+      level: "warn",
+      service: SERVICE,
+      message: "Missing data.reference in charge.success",
+      requestId,
+    });
+    return NextResponse.json(
+      { error: "Missing payment reference" },
+      { status: 400 },
+    );
   }
 
   // Extract metadata sent during payment initialization
@@ -129,14 +172,30 @@ export async function POST(request: Request): Promise<Response> {
   const creatorId = metadata.creator_id;
   const amountKobo = data.amount;
 
-  if (!creatorId || typeof creatorId !== 'string') {
-    log({ level: 'warn', service: SERVICE, message: 'Missing metadata.creator_id', requestId });
-    return NextResponse.json({ error: 'Missing creator_id in metadata' }, { status: 400 });
+  if (!creatorId || typeof creatorId !== "string") {
+    log({
+      level: "warn",
+      service: SERVICE,
+      message: "Missing metadata.creator_id",
+      requestId,
+    });
+    return NextResponse.json(
+      { error: "Missing creator_id in metadata" },
+      { status: 400 },
+    );
   }
 
-  if (typeof amountKobo !== 'number' || amountKobo <= 0) {
-    log({ level: 'warn', service: SERVICE, message: 'Invalid amount in webhook payload', requestId });
-    return NextResponse.json({ error: 'Invalid payment amount' }, { status: 400 });
+  if (typeof amountKobo !== "number" || amountKobo <= 0) {
+    log({
+      level: "warn",
+      service: SERVICE,
+      message: "Invalid amount in webhook payload",
+      requestId,
+    });
+    return NextResponse.json(
+      { error: "Invalid payment amount" },
+      { status: 400 },
+    );
   }
 
   // ── Insert into immutable ledger ──────────────────────────────────────────────
@@ -155,68 +214,83 @@ export async function POST(request: Request): Promise<Response> {
     // type to fall back via ternary ('subscription') while source_type fell back
     // via nullish-coalescing ('standard_subscription') — logically consistent but
     // the relationship was invisible. Now both fields derive from one variable.
-    const normalizedSource = typeof metadata.source_type === 'string'
-      ? metadata.source_type
-      : 'standard_subscription';
+    const normalizedSource =
+      typeof metadata.source_type === "string"
+        ? metadata.source_type
+        : "standard_subscription";
 
-    const { error: dbError } = await supabaseAdmin.from('transactions').insert({
+    const { error: dbError } = await supabaseAdmin.from("transactions").insert({
       creator_id: creatorId,
       amount_zar: amountZar,
       platform_fee_zar: platformFeeZar,
-      gateway: 'paystack',
+      gateway: "paystack",
       gateway_ref: reference, // Paystack unique reference
       external_id: reference, // UNIQUE constraint — idempotency key
-      status: 'success',
-      type: normalizedSource === 'one_time' ? 'one_time' : 'subscription',
+      status: "success",
+      type: normalizedSource === "one_time" ? "one_time" : "subscription",
       source_type: normalizedSource,
-      community_impact: metadata.community_impact === true || metadata.community_impact === 'true',
-      emotion_state: 'neutral',
+      community_impact:
+        metadata.community_impact === true ||
+        metadata.community_impact === "true",
+      emotion_state: "neutral",
       metadata: data, // Store full Paystack payload for audit
     });
 
     if (dbError) {
       // Code 23505 = unique_violation — duplicate webhook, already processed
-      if (dbError.code === '23505') {
+      if (dbError.code === "23505") {
         log({
-          level: 'info',
+          level: "info",
           service: SERVICE,
-          message: 'Duplicate webhook — already processed',
+          message: "Duplicate webhook — already processed",
           requestId,
           ref: hashForLog(reference), // FIX #04
         });
-        return NextResponse.json({ received: true, status: 'already_processed' }, { status: 200 });
+        return NextResponse.json(
+          { received: true, status: "already_processed" },
+          { status: 200 },
+        );
       }
       log({
-        level: 'error',
+        level: "error",
         service: SERVICE,
-        message: 'Ledger insert failed',
+        message: "Ledger insert failed",
         requestId,
         creatorToken: hashForLog(creatorId), // FIX #04
         dbCode: dbError.code,
       });
-      return NextResponse.json({ error: 'Ledger write failure' }, { status: 500 });
+      return NextResponse.json(
+        { error: "Ledger write failure" },
+        { status: 500 },
+      );
     }
 
     log({
-      level: 'info',
+      level: "info",
       service: SERVICE,
-      message: 'Sovereign Treasury updated',
+      message: "Sovereign Treasury updated",
       requestId,
       creatorToken: hashForLog(creatorId), // FIX #04
       amountZar,
     });
 
     // Treasury split trigger fires automatically via Supabase trigger
-    return NextResponse.json({ status: 'Sovereign Treasury Updated' }, { status: 200 });
+    return NextResponse.json(
+      { status: "Sovereign Treasury Updated" },
+      { status: 200 },
+    );
   } catch (err) {
     // FIX #03: Never expose internal error detail to caller
     log({
-      level: 'error',
+      level: "error",
       service: SERVICE,
-      message: 'Unexpected webhook processing error',
+      message: "Unexpected webhook processing error",
       requestId,
-      errMsg: err instanceof Error ? err.message : 'Unknown',
+      errMsg: err instanceof Error ? err.message : "Unknown",
     });
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
   }
 }

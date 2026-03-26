@@ -10,94 +10,96 @@
 
 export interface OrganizationSchema {
   [key: string]: unknown;
-  '@context': 'https://schema.org';
-  '@type': 'Organization';
+  "@context": "https://schema.org";
+  "@type": "Organization";
   name: string;
   url: string;
   description: string;
-  foundingLocation: { '@type': 'Place'; name: string };
+  foundingLocation: { "@type": "Place"; name: string };
   knowsAbout: string[];
   sameAs: string[];
 }
 
 export interface WebSiteSchema {
   [key: string]: unknown;
-  '@context': 'https://schema.org';
-  '@type': 'WebSite';
+  "@context": "https://schema.org";
+  "@type": "WebSite";
   name: string;
   url: string;
   description: string;
   inLanguage: string;
   potentialAction: {
-    '@type': 'SearchAction';
-    target: { '@type': 'EntryPoint'; urlTemplate: string };
-    'query-input': string;
+    "@type": "SearchAction";
+    target: { "@type": "EntryPoint"; urlTemplate: string };
+    "query-input": string;
   };
 }
 
 export interface TechArticleSchema {
   [key: string]: unknown;
-  '@context': 'https://schema.org';
-  '@type': 'TechArticle';
+  "@context": "https://schema.org";
+  "@type": "TechArticle";
   headline: string;
   abstract: string;
   datePublished: string;
   dateModified: string;
   inLanguage: string;
-  author: { '@type': 'Organization'; name: string; url: string };
-  publisher: { '@type': 'Organization'; name: string; url: string };
-  about: { '@type': 'Thing'; name: string; description: string };
-  speakable: { '@type': 'SpeakableSpecification'; cssSelector: string[] };
+  author: { "@type": "Organization"; name: string; url: string };
+  publisher: { "@type": "Organization"; name: string; url: string };
+  about: { "@type": "Thing"; name: string; description: string };
+  speakable: { "@type": "SpeakableSpecification"; cssSelector: string[] };
   keywords: string[];
-  isPartOf: { '@type': 'WebSite'; name: string; url: string };
+  isPartOf: { "@type": "WebSite"; name: string; url: string };
 }
 
 // ─── Apex Platform Constants ──────────────────────────────────────────────────
 
-const APEX_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://apex-central.vercel.app';
-const APEX_NAME = 'Apex Central — Vaal AI Empire';
+const APEX_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://apex-central.vercel.app";
+const APEX_NAME = "Apex Central — Vaal AI Empire";
 const APEX_DESCRIPTION =
-  'A living digital platform helping South African creators build sustainable digital income through AI-powered opportunity discovery, XRPL autonomous orchestration, and real-time market intelligence.';
+  "A living digital platform helping South African creators build sustainable digital income through AI-powered opportunity discovery, XRPL autonomous orchestration, and real-time market intelligence.";
 
 // ─── Schema Builders ──────────────────────────────────────────────────────────
 
 export function buildOrganizationSchema(): OrganizationSchema {
   return {
-    '@context': 'https://schema.org',
-    '@type': 'Organization',
+    "@context": "https://schema.org",
+    "@type": "Organization",
     name: APEX_NAME,
     url: APEX_URL,
     description: APEX_DESCRIPTION,
-    foundingLocation: { '@type': 'Place', name: 'Vaal Triangle, Gauteng, South Africa' },
+    foundingLocation: {
+      "@type": "Place",
+      name: "Vaal Triangle, Gauteng, South Africa",
+    },
     knowsAbout: [
-      'XRPL blockchain orchestration',
-      'South African digital income',
-      'AI agent swarms',
-      'DeFi settlement infrastructure',
-      'African Futurism technology',
-      'Generative AI platforms',
+      "XRPL blockchain orchestration",
+      "South African digital income",
+      "AI agent swarms",
+      "DeFi settlement infrastructure",
+      "African Futurism technology",
+      "Generative AI platforms",
     ],
-    sameAs: [
-      'https://github.com/johanneslungelo021-cmd/Apex',
-    ],
+    sameAs: ["https://github.com/johanneslungelo021-cmd/Apex"],
   };
 }
 
 export function buildWebSiteSchema(): WebSiteSchema {
   return {
-    '@context': 'https://schema.org',
-    '@type': 'WebSite',
+    "@context": "https://schema.org",
+    "@type": "WebSite",
     name: APEX_NAME,
     url: APEX_URL,
     description: APEX_DESCRIPTION,
-    inLanguage: 'en-ZA',
+    inLanguage: "en-ZA",
     potentialAction: {
-      '@type': 'SearchAction',
+      "@type": "SearchAction",
       target: {
-        '@type': 'EntryPoint',
+        "@type": "EntryPoint",
         urlTemplate: `${APEX_URL}/?q={search_term_string}`,
       },
-      'query-input': 'required name=search_term_string',
+      "query-input": "required name=search_term_string",
     },
   };
 }
@@ -117,49 +119,51 @@ export interface TechArticleOptions {
   extraSpeakableSelectors?: string[];
 }
 
-export function buildTechArticleSchema(opts: TechArticleOptions): TechArticleSchema {
+export function buildTechArticleSchema(
+  opts: TechArticleOptions,
+): TechArticleSchema {
   const now = new Date().toISOString();
   const published = opts.datePublished ?? now;
   const modified = opts.dateModified ?? published;
 
   // Default speakable selectors target AgentReadableChunk summaries and hero H1
   const speakableSelectors = [
-    '.geo-answer-first',
-    'h1',
-    '.key-takeaways',
+    ".geo-answer-first",
+    "h1",
+    ".key-takeaways",
     ...(opts.extraSpeakableSelectors ?? []),
   ];
 
   return {
-    '@context': 'https://schema.org',
-    '@type': 'TechArticle',
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
     headline: opts.headline,
     abstract: opts.abstract,
     datePublished: published,
     dateModified: modified,
-    inLanguage: 'en-ZA',
+    inLanguage: "en-ZA",
     author: {
-      '@type': 'Organization',
+      "@type": "Organization",
       name: APEX_NAME,
       url: APEX_URL,
     },
     publisher: {
-      '@type': 'Organization',
+      "@type": "Organization",
       name: APEX_NAME,
       url: APEX_URL,
     },
     about: {
-      '@type': 'Thing',
+      "@type": "Thing",
       name: opts.aboutName,
       description: opts.aboutDescription,
     },
     speakable: {
-      '@type': 'SpeakableSpecification',
+      "@type": "SpeakableSpecification",
       cssSelector: speakableSelectors,
     },
     keywords: opts.keywords,
     isPartOf: {
-      '@type': 'WebSite',
+      "@type": "WebSite",
       name: APEX_NAME,
       url: APEX_URL,
     },

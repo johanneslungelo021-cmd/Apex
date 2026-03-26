@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 /**
  * CinematicPortalCard — Compound Interest Edition
@@ -13,23 +13,29 @@
  * Each layer multiplies the previous — zero stand-alone effects.
  */
 
-import { useState, useRef, useCallback, useEffect, type CSSProperties } from 'react';
-import Link from 'next/link';
-import { motion, AnimatePresence, type Variants } from 'framer-motion';
+import {
+  useState,
+  useRef,
+  useCallback,
+  useEffect,
+  type CSSProperties,
+} from "react";
+import Link from "next/link";
+import { motion, AnimatePresence, type Variants } from "framer-motion";
 
 // ─── Real hook APIs (no assumed methods) ────────────────────────────────────
-import { useEmotionEngine, type EmotionState } from '@/hooks/useEmotionEngine';
-import { useMultiSensory } from '@/hooks/useMultiSensory';
-import { useMagneticCursor } from '@/hooks/useMagneticCursor';
+import { useEmotionEngine, type EmotionState } from "@/hooks/useEmotionEngine";
+import { useMultiSensory } from "@/hooks/useMultiSensory";
+import { useMagneticCursor } from "@/hooks/useMagneticCursor";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type PortalEmotion =
-  | 'calm'
-  | 'focused'
-  | 'volatile'
-  | 'optimistic'
-  | 'joyful';
+  | "calm"
+  | "focused"
+  | "volatile"
+  | "optimistic"
+  | "joyful";
 
 export interface PortalProps {
   id: string;
@@ -67,7 +73,10 @@ function replaceAlpha(rgba: string, alpha: number): string {
  *     →  '0 0 84.0px 11.2px rgba(16,185,129,0.35)'
  */
 function scaleGlowSpread(shadow: string, factor: number): string {
-  return shadow.replace(/([\d.]+)px/g, (_, n) => `${(parseFloat(n) * factor).toFixed(1)}px`);
+  return shadow.replace(
+    /([\d.]+)px/g,
+    (_, n) => `${(parseFloat(n) * factor).toFixed(1)}px`,
+  );
 }
 
 // ─── Layer 2: Emotion mapping ─────────────────────────────────────────────────
@@ -87,39 +96,39 @@ type GlowConfig = {
 
 const EMOTION_MAP: Record<PortalEmotion, GlowConfig> = {
   calm: {
-    engineState: 'dormant',
-    glow:        '0 0 60px 8px rgba(148,163,184,0.18)',
-    border:      'rgba(148,163,184,0.25)',
-    overlay:     'rgba(30,41,59,0.35)',
-    badge:       'CALM',
+    engineState: "dormant",
+    glow: "0 0 60px 8px rgba(148,163,184,0.18)",
+    border: "rgba(148,163,184,0.25)",
+    overlay: "rgba(30,41,59,0.35)",
+    badge: "CALM",
   },
   focused: {
-    engineState: 'processing',
-    glow:        '0 0 70px 10px rgba(139,92,246,0.30)',
-    border:      'rgba(139,92,246,0.40)',
-    overlay:     'rgba(88,28,135,0.25)',
-    badge:       'FOCUSED',
+    engineState: "processing",
+    glow: "0 0 70px 10px rgba(139,92,246,0.30)",
+    border: "rgba(139,92,246,0.40)",
+    overlay: "rgba(88,28,135,0.25)",
+    badge: "FOCUSED",
   },
   volatile: {
-    engineState: 'awakened',
-    glow:        '0 0 80px 14px rgba(16,185,129,0.35)',
-    border:      'rgba(16,185,129,0.45)',
-    overlay:     'rgba(6,78,59,0.20)',
-    badge:       'VOLATILE',
+    engineState: "awakened",
+    glow: "0 0 80px 14px rgba(16,185,129,0.35)",
+    border: "rgba(16,185,129,0.45)",
+    overlay: "rgba(6,78,59,0.20)",
+    badge: "VOLATILE",
   },
   optimistic: {
-    engineState: 'resolved',
-    glow:        '0 0 65px 10px rgba(56,189,248,0.30)',
-    border:      'rgba(56,189,248,0.40)',
-    overlay:     'rgba(12,74,110,0.20)',
-    badge:       'OPTIMISTIC',
+    engineState: "resolved",
+    glow: "0 0 65px 10px rgba(56,189,248,0.30)",
+    border: "rgba(56,189,248,0.40)",
+    overlay: "rgba(12,74,110,0.20)",
+    badge: "OPTIMISTIC",
   },
   joyful: {
-    engineState: 'resolved',
-    glow:        '0 0 75px 12px rgba(250,204,21,0.28)',
-    border:      'rgba(250,204,21,0.38)',
-    overlay:     'rgba(113,63,18,0.18)',
-    badge:       'JOYFUL',
+    engineState: "resolved",
+    glow: "0 0 75px 12px rgba(250,204,21,0.28)",
+    border: "rgba(250,204,21,0.38)",
+    overlay: "rgba(113,63,18,0.18)",
+    badge: "JOYFUL",
   },
 };
 
@@ -129,25 +138,39 @@ const EMOTION_MAP: Record<PortalEmotion, GlowConfig> = {
 // inline transition objects inside variant keys without it.
 
 const subtitleVariants: Variants = {
-  hidden:  { opacity: 0, y: 20, filter: 'blur(4px)' },
-  visible: { opacity: 1, y: 0,  filter: 'blur(0px)',
-    transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1] } },
-  exit:    { opacity: 0, y: 8,  filter: 'blur(2px)',
-    transition: { duration: 0.25 } },
+  hidden: { opacity: 0, y: 20, filter: "blur(4px)" },
+  visible: {
+    opacity: 1,
+    y: 0,
+    filter: "blur(0px)",
+    transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1] },
+  },
+  exit: {
+    opacity: 0,
+    y: 8,
+    filter: "blur(2px)",
+    transition: { duration: 0.25 },
+  },
 };
 
 const enterBtnVariants: Variants = {
-  hidden:  { opacity: 0, x: 12, scale: 0.92 },
-  visible: { opacity: 1, x: 0,  scale: 1,
-    transition: { delay: 0.12, duration: 0.45, ease: [0.22, 1, 0.36, 1] } },
-  exit:    { opacity: 0, x: 6,  scale: 0.96,
-    transition: { duration: 0.2 } },
+  hidden: { opacity: 0, x: 12, scale: 0.92 },
+  visible: {
+    opacity: 1,
+    x: 0,
+    scale: 1,
+    transition: { delay: 0.12, duration: 0.45, ease: [0.22, 1, 0.36, 1] },
+  },
+  exit: { opacity: 0, x: 6, scale: 0.96, transition: { duration: 0.2 } },
 };
 
 const idVariants: Variants = {
-  rest:    { opacity: 0.45, letterSpacing: '0.15em' },
-  hovered: { opacity: 1,    letterSpacing: '0.30em',
-    transition: { duration: 0.4, ease: 'easeOut' } },
+  rest: { opacity: 0.45, letterSpacing: "0.15em" },
+  hovered: {
+    opacity: 1,
+    letterSpacing: "0.30em",
+    transition: { duration: 0.4, ease: "easeOut" },
+  },
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -164,9 +187,9 @@ export default function CinematicPortalCard({
   const videoRef = useRef<HTMLVideoElement>(null);
 
   // ── Layer 1: Real hook APIs ──────────────────────────────────────────────
-  const { transition, intensity } = useEmotionEngine();   // was: setEmotion()
-  const { trigger }               = useMultiSensory();    // was: playHapticFeedback / playAmbientSound
-  const { isHovering }            = useMagneticCursor();  // was: setCursorState()
+  const { transition, intensity } = useEmotionEngine(); // was: setEmotion()
+  const { trigger } = useMultiSensory(); // was: playHapticFeedback / playAmbientSound
+  const { isHovering } = useMagneticCursor(); // was: setCursorState()
 
   const config = EMOTION_MAP[emotionState];
 
@@ -182,19 +205,19 @@ export default function CinematicPortalCard({
 
   const handleMouseLeave = useCallback(() => {
     setIsHovered(false);
-    transition('dormant');
-    trigger('dormant');
+    transition("dormant");
+    trigger("dormant");
     videoRef.current?.pause();
   }, [transition, trigger]);
 
   // Layer 4: intensity from engine scales the card's glow SPREAD RADIUS (not alpha)
   const dynamicGlow = isHovered
     ? scaleGlowSpread(config.glow, Math.min(intensity, 2))
-    : 'none';
+    : "none";
 
   // Layer 5: scan-line shimmer — visible only while hovered
   const shimmerStyle: CSSProperties = isHovered
-    ? { animation: 'apexScanline 2.4s linear infinite' }
+    ? { animation: "apexScanline 2.4s linear infinite" }
     : {};
 
   // Bug 3 fix: inject keyframes once per document, not once per card instance.
@@ -206,15 +229,15 @@ export default function CinematicPortalCard({
   //   - Unconditional cleanup was wrong — it removed the element when any card
   //     unmounted, even if 5 others still needed it
   useEffect(() => {
-    const MARKER = 'data-apex-portal-keyframes';
-    const COUNTER_KEY = '__apexPortalCardCount__';
+    const MARKER = "data-apex-portal-keyframes";
+    const COUNTER_KEY = "__apexPortalCardCount__";
     const win = window as typeof window & { [COUNTER_KEY]?: number };
 
     win[COUNTER_KEY] = (win[COUNTER_KEY] ?? 0) + 1;
 
     if (!document.querySelector(`[${MARKER}]`)) {
-      const style = document.createElement('style');
-      style.setAttribute(MARKER, '');
+      const style = document.createElement("style");
+      style.setAttribute(MARKER, "");
       style.textContent = `
         @keyframes apexScanline {
           0%   { transform: translateY(-100%); }
@@ -248,12 +271,12 @@ export default function CinematicPortalCard({
         style={{
           // Layer 2 compounds with Layer 4 intensity
           boxShadow: dynamicGlow,
-          border: `1px solid ${isHovered ? config.border : 'rgba(255,255,255,0.07)'}`,
-          transition: 'box-shadow 0.6s ease, border-color 0.4s ease',
+          border: `1px solid ${isHovered ? config.border : "rgba(255,255,255,0.07)"}`,
+          transition: "box-shadow 0.6s ease, border-color 0.4s ease",
           // Glass substrate
-          background: 'rgba(10,10,14,0.72)',
-          backdropFilter: 'blur(18px) saturate(160%)',
-          WebkitBackdropFilter: 'blur(18px) saturate(160%)',
+          background: "rgba(10,10,14,0.72)",
+          backdropFilter: "blur(18px) saturate(160%)",
+          WebkitBackdropFilter: "blur(18px) saturate(160%)",
         }}
       >
         {/* ── Cinematic video background ───────────────────────────────── */}
@@ -267,8 +290,9 @@ export default function CinematicPortalCard({
           className="absolute inset-0 w-full h-full object-cover"
           style={{
             opacity: isHovered ? 1 : 0.35,
-            transform: isHovered ? 'scale(1.06)' : 'scale(1.0)',
-            transition: 'opacity 0.9s ease, transform 1.1s cubic-bezier(0.22,1,0.36,1)',
+            transform: isHovered ? "scale(1.06)" : "scale(1.0)",
+            transition:
+              "opacity 0.9s ease, transform 1.1s cubic-bezier(0.22,1,0.36,1)",
           }}
         />
 
@@ -277,7 +301,7 @@ export default function CinematicPortalCard({
           className="absolute inset-0 z-10 pointer-events-none"
           style={{
             background: `linear-gradient(to top, rgba(0,0,0,0.88) 0%, ${config.overlay} 55%, rgba(0,0,0,0.10) 100%)`,
-            transition: 'background 0.6s ease',
+            transition: "background 0.6s ease",
           }}
         />
 
@@ -303,7 +327,7 @@ export default function CinematicPortalCard({
             className="absolute inset-4 rounded-3xl z-20 pointer-events-none"
             style={{
               border: `1px solid ${config.border}`,
-              animation: 'apexPulseRing 1.8s ease-in-out infinite',
+              animation: "apexPulseRing 1.8s ease-in-out infinite",
             }}
             aria-hidden="true"
           />
@@ -323,7 +347,7 @@ export default function CinematicPortalCard({
               style={{
                 background: replaceAlpha(config.border, 0.15),
                 border: `1px solid ${config.border}`,
-                color: 'rgba(255,255,255,0.70)',
+                color: "rgba(255,255,255,0.70)",
               }}
               animate={{ opacity: isHovered ? 1 : 0.5 }}
               transition={{ duration: 0.3 }}
@@ -335,7 +359,7 @@ export default function CinematicPortalCard({
             <motion.span
               className="font-mono text-xs text-white/40 tabular-nums"
               variants={idVariants}
-              animate={isHovered ? 'hovered' : 'rest'}
+              animate={isHovered ? "hovered" : "rest"}
             >
               {id}
             </motion.span>
@@ -348,14 +372,15 @@ export default function CinematicPortalCard({
               <motion.h2
                 className="font-semibold tracking-tighter text-white leading-none"
                 style={{
-                  fontFamily: "'Bebas Neue', 'DIN Condensed', 'Impact', sans-serif",
-                  fontSize: 'clamp(3rem, 5vw, 4rem)',
+                  fontFamily:
+                    "'Bebas Neue', 'DIN Condensed', 'Impact', sans-serif",
+                  fontSize: "clamp(3rem, 5vw, 4rem)",
                 }}
                 animate={{
                   y: isHovered ? -4 : 0,
                   textShadow: isHovered
                     ? `0 0 30px ${config.border}`
-                    : '0 0 0px transparent',
+                    : "0 0 0px transparent",
                 }}
                 transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
               >
@@ -394,10 +419,10 @@ export default function CinematicPortalCard({
                   <span
                     className="flex items-center gap-2 px-6 py-3 rounded-2xl text-sm font-medium text-white whitespace-nowrap"
                     style={{
-                      background: 'rgba(255,255,255,0.10)',
-                      backdropFilter: 'blur(14px)',
+                      background: "rgba(255,255,255,0.10)",
+                      backdropFilter: "blur(14px)",
                       border: `1px solid ${config.border}`,
-                      boxShadow: `0 0 20px ${replaceAlpha(config.border, 0.20)}`,
+                      boxShadow: `0 0 20px ${replaceAlpha(config.border, 0.2)}`,
                     }}
                   >
                     ENTER

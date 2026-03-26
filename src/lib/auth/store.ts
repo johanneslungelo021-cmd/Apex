@@ -19,7 +19,7 @@
  * @module lib/auth/store
  */
 
-import { getSupabaseClient } from '@/lib/supabase';
+import { getSupabaseClient } from "@/lib/supabase";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -51,7 +51,7 @@ function rowToUser(row: UserRow): StoredUser {
   return {
     id: row.id,
     email: row.email,
-    passwordHash: row.password_hash ?? '',
+    passwordHash: row.password_hash ?? "",
     displayName: row.display_name,
     createdAt: row.created_at,
     lastLoginAt: row.last_login_at,
@@ -66,12 +66,16 @@ function rowToUser(row: UserRow): StoredUser {
  * Credential lookup — includes password_hash for bcrypt verification.
  * Never expose the result directly to the client.
  */
-export async function findUserByEmail(email: string): Promise<StoredUser | null> {
+export async function findUserByEmail(
+  email: string,
+): Promise<StoredUser | null> {
   const db = getSupabaseClient();
   const { data, error } = await db
-    .from('users')
-    .select('id, email, password_hash, display_name, created_at, last_login_at, province')
-    .eq('email', email.toLowerCase().trim())
+    .from("users")
+    .select(
+      "id, email, password_hash, display_name, created_at, last_login_at, province",
+    )
+    .eq("email", email.toLowerCase().trim())
     .maybeSingle();
 
   if (error) throw new Error(`[store] findUserByEmail: ${error.message}`);
@@ -84,9 +88,9 @@ export async function findUserByEmail(email: string): Promise<StoredUser | null>
 export async function findUserById(id: string): Promise<StoredUser | null> {
   const db = getSupabaseClient();
   const { data, error } = await db
-    .from('users')
-    .select('id, email, display_name, created_at, last_login_at, province')
-    .eq('id', id)
+    .from("users")
+    .select("id, email, display_name, created_at, last_login_at, province")
+    .eq("id", id)
     .maybeSingle();
 
   if (error) throw new Error(`[store] findUserById: ${error.message}`);
@@ -99,7 +103,7 @@ export async function findUserById(id: string): Promise<StoredUser | null> {
  */
 export async function createUser(user: StoredUser): Promise<void> {
   const db = getSupabaseClient();
-  const { error } = await db.from('users').insert({
+  const { error } = await db.from("users").insert({
     id: user.id,
     email: user.email.toLowerCase().trim(),
     password_hash: user.passwordHash,
@@ -111,10 +115,10 @@ export async function createUser(user: StoredUser): Promise<void> {
 
   if (error) {
     if (
-      error.code === '23505' &&
-      error.details?.toLowerCase().includes('(email)')
+      error.code === "23505" &&
+      error.details?.toLowerCase().includes("(email)")
     ) {
-      throw new Error('DUPLICATE_EMAIL');
+      throw new Error("DUPLICATE_EMAIL");
     }
     throw new Error(`[store] createUser: ${error.message}`);
   }
@@ -123,12 +127,12 @@ export async function createUser(user: StoredUser): Promise<void> {
 /**
  * Update the province for a user (set during onboarding).
  */
-export async function updateUserProvince(id: string, province: string): Promise<void> {
+export async function updateUserProvince(
+  id: string,
+  province: string,
+): Promise<void> {
   const db = getSupabaseClient();
-  const { error } = await db
-    .from('users')
-    .update({ province })
-    .eq('id', id);
+  const { error } = await db.from("users").update({ province }).eq("id", id);
 
   if (error) throw new Error(`[store] updateUserProvince: ${error.message}`);
 }
@@ -139,9 +143,9 @@ export async function updateUserProvince(id: string, province: string): Promise<
 export async function updateLastLogin(id: string): Promise<void> {
   const db = getSupabaseClient();
   const { error } = await db
-    .from('users')
+    .from("users")
     .update({ last_login_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq("id", id);
 
   if (error) throw new Error(`[store] updateLastLogin: ${error.message}`);
 }
@@ -152,8 +156,8 @@ export async function updateLastLogin(id: string): Promise<void> {
 export async function getUserCount(): Promise<number> {
   const db = getSupabaseClient();
   const { count, error } = await db
-    .from('users')
-    .select('*', { count: 'exact', head: true });
+    .from("users")
+    .select("*", { count: "exact", head: true });
 
   if (error) throw new Error(`[store] getUserCount: ${error.message}`);
   return count ?? 0;

@@ -18,9 +18,9 @@
 
 export interface TTSOptions {
   text: string;
-  voice?: 'tongtong' | 'jingjing' | 'xiaoyi' | 'wanwan';
+  voice?: "tongtong" | "jingjing" | "xiaoyi" | "wanwan";
   speed?: number;
-  format?: 'wav' | 'mp3' | 'pcm';
+  format?: "wav" | "mp3" | "pcm";
 }
 
 export interface TTSResult {
@@ -41,6 +41,6 @@ export async function textToSpeech(_options: TTSOptions): Promise<TTSResult> {
     audioBuffer: null,
     success: false,
     error:
-      'Server-side TTS is not configured. Use the Web Speech API (client-side) via useMultiSensory hook instead.',
+      "Server-side TTS is not configured. Use the Web Speech API (client-side) via useMultiSensory hook instead.",
   };
 }

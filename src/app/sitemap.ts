@@ -14,9 +14,10 @@
  * @module app/sitemap
  */
 
-import type { MetadataRoute } from 'next';
+import type { MetadataRoute } from "next";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://apex-central.vercel.app';
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://apex-central.vercel.app";
 const NOW = new Date().toISOString();
 
 export default function sitemap(): MetadataRoute.Sitemap {
@@ -25,7 +26,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     {
       url: SITE_URL,
       lastModified: NOW,
-      changeFrequency: 'hourly', // News + opportunities refresh constantly
+      changeFrequency: "hourly", // News + opportunities refresh constantly
       priority: 1.0,
     },
 
@@ -34,25 +35,25 @@ export default function sitemap(): MetadataRoute.Sitemap {
     {
       url: `${SITE_URL}/api/mx/home`,
       lastModified: NOW,
-      changeFrequency: 'hourly',
+      changeFrequency: "hourly",
       priority: 0.9,
     },
     {
       url: `${SITE_URL}/api/mx/about`,
       lastModified: NOW,
-      changeFrequency: 'weekly',
+      changeFrequency: "weekly",
       priority: 0.8,
     },
     {
       url: `${SITE_URL}/api/mx/memory`,
       lastModified: NOW,
-      changeFrequency: 'weekly',
+      changeFrequency: "weekly",
       priority: 0.8,
     },
     {
       url: `${SITE_URL}/api/mx/opportunities`,
       lastModified: NOW,
-      changeFrequency: 'hourly', // Live Scout Agent data
+      changeFrequency: "hourly", // Live Scout Agent data
       priority: 0.9,
     },
 
@@ -60,7 +61,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     {
       url: `${SITE_URL}/about`,
       lastModified: NOW,
-      changeFrequency: 'monthly',
+      changeFrequency: "monthly",
       priority: 0.6,
     },
   ];

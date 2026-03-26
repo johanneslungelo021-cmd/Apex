@@ -1,7 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 /**
  * Metrics API Route — real GitHub repository data only
@@ -34,7 +34,7 @@ const CACHE_TTL_MS = 5 * 60 * 1_000;
 // Single-flight pattern: track ongoing request to prevent concurrent duplicate fetches
 let pendingRequest: Promise<GitHubMetrics> | null = null;
 
-const GITHUB_REPO = 'johanneslungelo021-cmd/Apex';
+const GITHUB_REPO = "johanneslungelo021-cmd/Apex";
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}`;
 const GITHUB_TIMEOUT_MS = 8_000;
 
@@ -47,18 +47,18 @@ function githubFallback(): GitHubMetrics {
     size: 0,
     lastUpdated: new Date().toISOString(),
     fullName: GITHUB_REPO,
-    description: 'Apex — AI-Powered Digital Income Platform for South Africa',
-    language: 'TypeScript',
+    description: "Apex — AI-Powered Digital Income Platform for South Africa",
+    language: "TypeScript",
   };
 }
 
 async function fetchGitHubMetrics(): Promise<GitHubMetrics> {
   const headers: HeadersInit = {
-    Accept: 'application/vnd.github.v3+json',
-    'User-Agent': 'Apex-Sentient-Interface',
+    Accept: "application/vnd.github.v3+json",
+    "User-Agent": "Apex-Sentient-Interface",
   };
   const token = process.env.GITHUB_TOKEN;
-  if (token) headers['Authorization'] = `token ${token}`;
+  if (token) headers["Authorization"] = `token ${token}`;
 
   for (let attempt = 1; attempt <= 2; attempt++) {
     const ac = new AbortController();
@@ -81,8 +81,9 @@ async function fetchGitHubMetrics(): Promise<GitHubMetrics> {
         size: d.size ?? 0,
         lastUpdated: d.updated_at ?? new Date().toISOString(),
         fullName: d.full_name ?? GITHUB_REPO,
-        description: d.description ?? 'Apex — AI-Powered Digital Income Platform',
-        language: d.language ?? 'TypeScript',
+        description:
+          d.description ?? "Apex — AI-Powered Digital Income Platform",
+        language: d.language ?? "TypeScript",
       };
     } catch (err) {
       clearTimeout(tid);

@@ -1,4 +1,4 @@
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 /**
  * Session Validation — GET /api/auth/me
@@ -10,12 +10,12 @@ export const runtime = 'nodejs';
  * @module api/auth/me
  */
 
-import { NextResponse } from 'next/server';
-import { log } from '@/lib/api-utils';
-import { getTokenFromRequest, verifySession } from '@/lib/auth/session';
-import { findUserById, type StoredUser } from '@/lib/auth/store';
+import { NextResponse } from "next/server";
+import { log } from "@/lib/api-utils";
+import { getTokenFromRequest, verifySession } from "@/lib/auth/session";
+import { findUserById, type StoredUser } from "@/lib/auth/store";
 
-const SERVICE = 'auth-me';
+const SERVICE = "auth-me";
 
 export async function GET(req: Request): Promise<Response> {
   const token = getTokenFromRequest(req);
@@ -23,7 +23,7 @@ export async function GET(req: Request): Promise<Response> {
   if (!token) {
     return NextResponse.json(
       { authenticated: false, user: null },
-      { status: 200 }
+      { status: 200 },
     );
   }
 
@@ -31,7 +31,7 @@ export async function GET(req: Request): Promise<Response> {
   if (!session) {
     return NextResponse.json(
       { authenticated: false, user: null },
-      { status: 200 }
+      { status: 200 },
     );
   }
 
@@ -42,20 +42,23 @@ export async function GET(req: Request): Promise<Response> {
     user = await findUserById(session.userId);
   } catch (err) {
     log({
-      level: 'error',
+      level: "error",
       service: SERVICE,
-      message: `Supabase lookup failed: ${err instanceof Error ? err.message : 'Unknown'}`,
+      message: `Supabase lookup failed: ${err instanceof Error ? err.message : "Unknown"}`,
     });
     return NextResponse.json(
-      { error: 'service_unavailable', message: 'Auth service temporarily unavailable.' },
-      { status: 503 }
+      {
+        error: "service_unavailable",
+        message: "Auth service temporarily unavailable.",
+      },
+      { status: 503 },
     );
   }
 
   if (!user) {
     return NextResponse.json(
       { authenticated: false, user: null },
-      { status: 200 }
+      { status: 200 },
     );
   }
 
