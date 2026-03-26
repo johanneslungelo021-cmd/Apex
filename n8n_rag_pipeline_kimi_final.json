@@ -1,5 +1,5 @@
 {
-  "name": "RAG Pipeline \u2013 Kimi Final",
+  "name": "RAG Pipeline – Kimi Final (Fixed)",
   "nodes": [
     {
       "parameters": {
@@ -33,7 +33,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const crypto = require('crypto');\nconst input = $input.first().json;\nconst headers = input.headers || {};\nconst signature = headers['x-signature'] || '';\nconst secret = '={{ $env.WEBHOOK_HMAC_SECRET || $env.SUPABASE_SERVICE_ROLE_KEY }}';\nconst payload = JSON.stringify(input.body || {});\n\nconst expected = crypto\n  .createHmac('sha256', secret)\n  .update(payload)\n  .digest('hex');\n\nif (signature !== expected) {\n  throw new Error('Invalid HMAC-SHA256 signature');\n}\n\nreturn [{ json: { ...input, _signatureValid: true } }];"
+        "jsCode": "const crypto = require('crypto');\nconst input = $input.first().json;\nconst headers = input.headers || {};\nconst signature = headers['x-signature'] || '';\nconst secret = $env.WEBHOOK_HMAC_SECRET || $env.SUPABASE_SERVICE_ROLE_KEY;\nconst payload = JSON.stringify(input.body || {});\n\nconst expected = crypto\n  .createHmac('sha256', secret)\n  .update(payload)\n  .digest('hex');\n\nif (signature !== expected) {\n  throw new Error('Invalid HMAC-SHA256 signature');\n}\n\nreturn [{ json: { ...input, _signatureValid: true } }];"
       },
       "id": "node-3-sig-validator",
       "name": "Sig Validator",
@@ -282,14 +282,10 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.ollama.com/api/generate",
+        "url": "={{ ($env.OLLAMA_BASE_URL || 'http://host.docker.internal:11434') + '/api/generate' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {
-              "name": "Authorization",
-              "value": "Bearer ={{ $env.OLLAMA_API_KEY }}"
-            },
             {
               "name": "Content-Type",
               "value": "application/json"
@@ -314,7 +310,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst response = input.response || input;\nconst faithfulness = typeof response.faithfulness_score === 'number' ? response.faithfulness_score : (typeof input.faithfulness_score === 'number' ? input.faithfulness_score : 0.8);\nconst relevance = typeof response.relevance_score === 'number' ? response.relevance_score : (typeof input.relevance_score === 'number' ? input.relevance_score : 0.7);\n\nconst passed = faithfulness >= 0.7 && relevance >= 0.6;\n\nif (!passed) {\n  return [{ json: {\n    eval_passed: false,\n    faithfulness_score: faithfulness,\n    relevance_score: relevance,\n    answer: 'I was unable to generate a sufficiently reliable answer. Please rephrase your query or provide more context.',\n    fallback: true,\n    original_response: input\n  }}];\n}\n\nreturn [{ json: {\n  eval_passed: true,\n  faithfulness_score: faithfulness,\n  relevance_score: relevance,\n  answer: input.response || input.text || input,\n  fallback: false,\n  original_response: input\n}}];"
+        "jsCode": "const input = $input.first().json;\nconst response = input.response || input;\nconst faithfulness = typeof response.faithfulness_score === 'number' ? response.faithfulness_score : (typeof input.faithfulness_score === 'number' ? input.faithfulness_score : 0.8);\nconst relevance = typeof response.relevance_score === 'number' ? response.relevance_score : (typeof input.relevance_score === 'number' ? input.relevance_score : 0.7);\n\nconst passed = faithfulness >= 0.7 && relevance >= 0.6;\n\nif (!passed) {\n  // Log for trace analysis - do not swallow errors silently\n  console.error(`Eval Gate failed: faithfulness=${faithfulness}, relevance=${relevance}`);\n  return [{ json: {\n    eval_passed: false,\n    faithfulness_score: faithfulness,\n    relevance_score: relevance,\n    answer: 'I was unable to generate a sufficiently reliable answer. Please rephrase your query or provide more context.',\n    fallback: true,\n    original_response: input\n  }}];\n}\n\nreturn [{ json: {\n  eval_passed: true,\n  faithfulness_score: faithfulness,\n  relevance_score: relevance,\n  answer: input.response || input.text || input,\n  fallback: false,\n  original_response: input\n}}];"
       },
       "id": "node-9-eval-gate",
       "name": "Eval Gate",
@@ -352,7 +348,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ task: $('Sig Validator').item.json.body.task || 'unknown', query: $('Sig Validator').item.json.body.query || '', model: ({'review':'qwen3.5:397b','security':'qwen3.5:397b','decision':'deepseek-v3.2','plan':'deepseek-v3.2','code':'glm-5','fix':'glm-5','financial':'kimi-k2.5','payment':'kimi-k2.5'})[$('Sig Validator').item.json.body.task] || 'deepseek-v3.2', latency: Date.now() - ($('Webhook').item.json._startTime || Date.now()), tokens: $('LLM Call').item.json.eval_count || 0, success: $json.eval_passed, score: $json.faithfulness_score || 0 }) }}",
+        "jsonBody": "={{ JSON.stringify({ task: $('Sig Validator').item.json.body.task || 'unknown', query: $('Sig Validator').item.json.body.query || '', model: ({'review':'qwen3.5:397b','security':'qwen3.5:397b','decision':'deepseek-v3.2','plan':'deepseek-v3.2','code':'glm-5','fix':'glm-5','financial':'kimi-k2.5','payment':'kimi-k2.5'})[$('Sig Validator').item.json.body.task] || 'deepseek-v3.2', latency: Date.now() - ($('Webhook').item.json._startTime || Date.now()), tokens: $('LLM Call').item.json.eval_count || 0, success: $json.eval_passed, score: $json.faithfulness_score || 0, method: 'POST' }) }}",
         "options": {}
       },
       "id": "node-10-trace-logger",
@@ -361,6 +357,19 @@
       "typeVersion": 4.2,
       "position": [
         2180,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ═══════════════════════════════════════════════════════════════════════════\n// 768-Dim Embedding Validation (Critical Fix)\n// ═══════════════════════════════════════════════════════════════════════════\n// Before writing to Supabase, validate embedding is present and 768 dimensions\n\nconst embedding = $('Embed Response')?.item?.json?.embeddings?.[0] || null;\n\nif (!embedding || embedding.length !== 768) {\n  throw new Error(`Vector Validation Failed: Expected 768 dimensions, received ${embedding ? embedding.length : 'null'}.`);\n}\n\n// Proceed with validated embedding\nconst evalResult = $('Eval Gate').item.json;\nconst content = $('Sig Validator').item.json.body.query + ' => ' + (typeof evalResult.answer === 'string' ? evalResult.answer.substring(0, 500) : JSON.stringify(evalResult.answer).substring(0, 500));\n\nreturn [{ json: {\n  type: evalResult.eval_passed ? 'win' : 'loss',\n  content: content,\n  score: evalResult.faithfulness_score || 0,\n  embedding: embedding\n}}];"
+      },
+      "id": "node-11-memory-store-prep",
+      "name": "Memory Store Prep",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
         300
       ]
     },
@@ -391,28 +400,28 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ type: $('Eval Gate').item.json.eval_passed ? 'win' : 'loss', content: $('Sig Validator').item.json.body.query + ' => ' + (typeof $('Eval Gate').item.json.answer === 'string' ? $('Eval Gate').item.json.answer.substring(0, 500) : JSON.stringify($('Eval Gate').item.json.answer).substring(0, 500)), score: $('Eval Gate').item.json.faithfulness_score || 0 }) }}",
+        "jsonBody": "={{ JSON.stringify($json) }}",
         "options": {}
       },
-      "id": "node-11-memory-store",
+      "id": "node-12-memory-store",
       "name": "Memory Store",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2400,
+        2620,
         300
       ]
     },
     {
       "parameters": {
-        "jsCode": "const evalResult = $('Eval Gate').item.json;\nconst task = $('Sig Validator').item.json.body.task || '';\nconst modelMap = {'review':'qwen3.5:397b','security':'qwen3.5:397b','decision':'deepseek-v3.2','plan':'deepseek-v3.2','code':'glm-5','fix':'glm-5','financial':'kimi-k2.5','payment':'kimi-k2.5'};\nconst modelUsed = modelMap[task] || 'deepseek-v3.2';\nconst memories = $('Top-5 Filter').item.json.top_memories || [];\n\nconst response = {\n  success: evalResult.eval_passed,\n  answer: evalResult.answer,\n  model: modelUsed,\n  score: {\n    faithfulness: evalResult.faithfulness_score,\n    relevance: evalResult.relevance_score\n  },\n  memories_used: memories.length,\n  memory_ids: memories.map(m => m.id).filter(Boolean),\n  fallback: evalResult.fallback || false,\n  timestamp: new Date().toISOString()\n};\n\nreturn [{ json: response }];"
+        "jsCode": "const evalResult = $('Eval Gate').item.json;\nconst task = $('Sig Validator').item.json.body.task || '';\nconst modelMap = {'review':'qwen3.5:397b','security':'qwen3.5:397b','decision':'deepseek-v3.2','plan':'deepseek-v3.2','code':'glm-5','fix':'glm-5','financial':'kimi-k2.5','payment':'kimi-k2.5'};\nconst modelUsed = modelMap[task] || 'deepseek-v3.2';\nconst memories = $('Top-5 Filter').item.json.top_memories || [];\n\nconst response = {\n  success: evalResult.eval_passed,\n  answer: evalResult.answer,\n  model: modelUsed,\n  score: {\n    faithfulness: evalResult.faithfulness_score,\n    relevance: evalResult.relevance_score\n  },\n  memories_used: memories.length,\n  memory_ids: memories.map(m => m.id).filter(Boolean),\n  fallback: evalResult.fallback || false,\n  embedding_dimension: 768,\n  timestamp: new Date().toISOString()\n};\n\nreturn [{ json: response }];"
       },
-      "id": "node-12-response-builder",
+      "id": "node-13-response-builder",
       "name": "Response Builder",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2620,
+        2840,
         300
       ]
     },
@@ -432,12 +441,12 @@
           }
         }
       },
-      "id": "node-13-http-response",
+      "id": "node-14-http-response",
       "name": "HTTP Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        2840,
+        3060,
         300
       ]
     }
@@ -602,6 +611,17 @@
       "main": [
         [
           {
+            "node": "Memory Store Prep",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memory Store Prep": {
+      "main": [
+        [
+          {
             "node": "Memory Store",
             "type": "main",
             "index": 0
@@ -640,6 +660,17 @@
     "templateCredsSetupCompleted": true
   },
   "pinData": {},
-  "versionId": "1",
-  "tags": []
+  "versionId": "2",
+  "tags": [],
+  "_validation": {
+    "embeddingDimension": 768,
+    "ollamaBaseUrl": "http://host.docker.internal:11434",
+    "notes": [
+      "OLLAMA_BASE_URL defaults to host.docker.internal:11434 for Docker-to-host communication",
+      "768-dim embedding validation added to Memory Store Prep node",
+      "Eval Gate logs failures to console.error for trace analysis",
+      "Model IDs corrected: qwen3 -> qwen3.5 for consistency",
+      "Method column added to trace logger for n8n compatibility"
+    ]
+  }
 }

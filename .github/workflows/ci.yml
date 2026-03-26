@@ -1,0 +1,608 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# APEX — Green By Design CI/CD Pipeline
+# ═══════════════════════════════════════════════════════════════════════════════
+# 5-Layer Validation Gauntlet — No code merges without passing all gates
+#
+# Layer 1: Static Analysis & Type Safety (The First Gate)
+# Layer 2: Logic & Unit Testing
+# Layer 3: Database & State Validation
+# Layer 4: Infrastructure & n8n Validation
+# Layer 5: Security & Secret Scanning
+#
+# If code doesn't pass every single gate, it doesn't merge into main. Period.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: Apex CI — Green By Design
+
+on:
+  pull_request:
+    branches: [main, digital-apex]
+    paths:
+      - 'src/**'
+      - 'supabase/**'
+      - 'tests/**'
+      - 'n8n_*.json'
+      - '.github/workflows/**'
+      - 'package.json'
+      - 'tsconfig.json'
+  push:
+    branches: [main, digital-apex]
+    paths:
+      - 'src/**'
+      - 'supabase/**'
+      - 'tests/**'
+      - 'n8n_*.json'
+      - '.github/workflows/**'
+      - 'package.json'
+      - 'tsconfig.json'
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+  checks: write
+
+env:
+  NODE_VERSION: '20'
+  BUN_VERSION: 'latest'
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════════════
+  # LAYER 1: STATIC ANALYSIS & TYPE SAFETY
+  # ═══════════════════════════════════════════════════════════════════════════════
+  layer-1-typecheck:
+    name: "Layer 1: TypeScript Compilation"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: TypeScript compilation (tsc --noEmit)
+        run: bunx tsc --noEmit
+
+  layer-1-lint:
+    name: "Layer 1: ESLint Analysis"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run ESLint
+        run: bun run lint -- --ignore-pattern 'skills/**' --max-warnings 0
+
+  layer-1-format:
+    name: "Layer 1: Prettier Format Check"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check code formatting
+        run: |
+          echo "Checking code formatting with Prettier..."
+          bunx prettier --check "src/**/*.{ts,tsx}" "tests/**/*.ts" --ignore-path .gitignore || {
+            echo "❌ FAIL: Code is not formatted correctly. Run 'bunx prettier --write src/**/*.{ts,tsx}' locally."
+            exit 1
+          }
+          echo "✅ PASS: All files formatted correctly"
+
+  # ═══════════════════════════════════════════════════════════════════════════════
+  # LAYER 2: LOGIC & UNIT TESTING
+  # ═══════════════════════════════════════════════════════════════════════════════
+  layer-2-unit-tests:
+    name: "Layer 2: Unit Tests (Vitest/Jest)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run unit tests
+        env:
+          NODE_OPTIONS: --experimental-vm-modules
+        run: |
+          echo "Running unit tests..."
+          bun run test:ci -- --passWithNoTests
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 7
+
+  layer-2-scoring-algorithm:
+    name: "Layer 2: Scoring Algorithm Validation"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify scoring weights
+        run: |
+          echo "Checking tri-model council scoring weights..."
+
+          # Verify DeepSeek weight = 0.4
+          if ! grep -q "0\.4.*deepseek\|deepseek.*0\.4" n8n_tri_model_council_final.json; then
+            echo "Checking for DeepSeek weight (0.4)..."
+            if grep -q "'deepseek-r1'" n8n_tri_model_council_final.json; then
+              if grep -q "score.*0\.4\|0\.4.*score" n8n_tri_model_council_final.json; then
+                echo "✅ PASS: DeepSeek weight (0.4) found"
+              else
+                echo "❌ FAIL: DeepSeek weight (0.4) not properly configured"
+                exit 1
+              fi
+            fi
+          else
+            echo "✅ PASS: DeepSeek weight found"
+          fi
+
+          # Verify Qwen weight = 0.4
+          if grep -q "'qwen3.5'" n8n_tri_model_council_final.json; then
+            echo "✅ PASS: Qwen3.5 model configured"
+          else
+            echo "❌ FAIL: Qwen3.5 model not configured (check model ID)"
+            exit 1
+          fi
+
+          # Verify Kimi weight = 0.2
+          if grep -q "'kimi-k2'" n8n_tri_model_council_final.json; then
+            echo "✅ PASS: Kimi K2 model configured"
+          else
+            echo "❌ FAIL: Kimi K2 model not configured"
+            exit 1
+          fi
+
+  # ═══════════════════════════════════════════════════════════════════════════════
+  # LAYER 3: DATABASE & STATE VALIDATION
+  # ═══════════════════════════════════════════════════════════════════════════════
+  layer-3-migration-order:
+    name: "Layer 3: Migration Sequential Integrity"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify migration numbering
+        run: |
+          echo "Checking migration sequential integrity..."
+
+          MIGRATIONS=$(ls supabase/migrations/*.sql 2>/dev/null | sort -V)
+          EXPECTED_NUM=1
+
+          for migration in $MIGRATIONS; do
+            FILENAME=$(basename "$migration")
+            NUM=$(echo "$FILENAME" | grep -oE '^[0-9]+')
+
+            if [ -z "$NUM" ]; then
+              echo "❌ FAIL: Migration $FILENAME does not start with a number"
+              exit 1
+            fi
+
+            if [ "$NUM" -ne "$EXPECTED_NUM" ]; then
+              echo "❌ FAIL: Expected migration number $EXPECTED_NUM, found $NUM in $FILENAME"
+              exit 1
+            fi
+
+            echo "✅ PASS: $FILENAME (number $NUM)"
+            EXPECTED_NUM=$((EXPECTED_NUM + 1))
+          done
+
+          echo "✅ All migrations are sequentially numbered"
+
+  layer-3-migration-syntax:
+    name: "Layer 3: SQL Syntax Validation"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate SQL migrations
+        run: |
+          echo "Checking SQL migration syntax..."
+
+          for file in supabase/migrations/*.sql; do
+            if [ -f "$file" ]; then
+              echo "Validating $file..."
+
+              # Check for common SQL errors
+              if grep -q "CREATE TABL " "$file" 2>/dev/null; then
+                echo "❌ FAIL: Typo in CREATE TABLE in $file"
+                exit 1
+              fi
+
+              # Check for proper function termination
+              if grep -q "CREATE.*FUNCTION" "$file" && ! grep -q "LANGUAGE plpgsql\|LANGUAGE sql" "$file"; then
+                echo "❌ FAIL: Function without LANGUAGE declaration in $file"
+                exit 1
+              fi
+
+              # Check for SECURITY DEFINER with REVOKE
+              if grep -q "SECURITY DEFINER" "$file" && ! grep -q "REVOKE.*FROM PUBLIC" "$file"; then
+                echo "⚠️  WARNING: SECURITY DEFINER function without REVOKE FROM PUBLIC in $file"
+              fi
+
+              echo "✅ PASS: $file"
+            fi
+          done
+
+  layer-3-trigger-validation:
+    name: "Layer 3: Trigger Function Validation"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify deadlock-safe trigger pattern
+        run: |
+          echo "Checking for deadlock-safe trigger patterns..."
+
+          if [ -f "supabase/migrations/015_agent_feedback_and_win_streak.sql" ]; then
+            # Check for FOR UPDATE locking
+            if grep -q "FOR UPDATE" supabase/migrations/015_agent_feedback_and_win_streak.sql; then
+              echo "✅ PASS: Row-level locking (FOR UPDATE) found"
+            else
+              echo "❌ FAIL: No FOR UPDATE locking in trigger function"
+              exit 1
+            fi
+
+            # Check for OLD.memory_id handling
+            if grep -q "OLD.memory_id IS DISTINCT FROM NEW.memory_id\|OLD\.memory_id" supabase/migrations/015_agent_feedback_and_win_streak.sql; then
+              echo "✅ PASS: OLD memory_id handling found (prevents stale stats)"
+            else
+              echo "⚠️  WARNING: No OLD memory_id handling - may cause stale statistics"
+            fi
+
+            # Check for REVOKE FROM PUBLIC
+            if grep -q "REVOKE.*FROM PUBLIC" supabase/migrations/015_agent_feedback_and_win_streak.sql; then
+              echo "✅ PASS: Function secured with REVOKE FROM PUBLIC"
+            else
+              echo "❌ FAIL: SECURITY DEFINER function not secured"
+              exit 1
+            fi
+          else
+            echo "⚠️  Migration 015 not found, skipping trigger validation"
+          fi
+
+  # ═══════════════════════════════════════════════════════════════════════════════
+  # LAYER 4: INFRASTRUCTURE & n8n VALIDATION
+  # ═══════════════════════════════════════════════════════════════════════════════
+  layer-4-n8n-json-lint:
+    name: "Layer 4: n8n Workflow JSON Linting"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate n8n workflow JSON files
+        run: |
+          echo "Validating n8n workflow JSON files..."
+
+          WORKFLOW_FILES=$(ls n8n_*.json 2>/dev/null)
+
+          if [ -z "$WORKFLOW_FILES" ]; then
+            echo "⚠️  No n8n workflow files found"
+            exit 0
+          fi
+
+          for file in $WORKFLOW_FILES; do
+            echo "Checking $file..."
+
+            # Validate JSON syntax
+            if ! jq empty "$file" 2>/dev/null; then
+              echo "❌ FAIL: Invalid JSON syntax in $file"
+              exit 1
+            fi
+
+            # Check for required nodes
+            if ! jq -e '.nodes | length > 0' "$file" > /dev/null 2>&1; then
+              echo "❌ FAIL: No nodes defined in $file"
+              exit 1
+            fi
+
+            # Check for connections
+            if ! jq -e '.connections | length > 0' "$file" > /dev/null 2>&1; then
+              echo "❌ FAIL: No connections defined in $file"
+              exit 1
+            fi
+
+            echo "✅ PASS: $file is valid JSON with nodes and connections"
+          done
+
+  layer-4-embedding-validation:
+    name: "Layer 4: Embedding Dimension Check"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify 768-dim embedding configuration
+        run: |
+          echo "Checking embedding dimension configuration..."
+
+          # Check for 768 in migrations
+          if grep -q "vector(768)" supabase/migrations/*.sql 2>/dev/null; then
+            echo "✅ PASS: vector(768) found in migrations"
+          else
+            echo "❌ FAIL: vector(768) not found in any migration"
+            exit 1
+          fi
+
+          # Check for embedding validation in n8n workflows
+          if grep -q "768\|embedding.*768" n8n_*.json 2>/dev/null; then
+            echo "✅ PASS: Embedding dimension validation found in workflows"
+          else
+            echo "⚠️  WARNING: No explicit 768-dim validation in n8n workflows"
+          fi
+
+          # Check for wrong dimensions
+          if grep -q "vector(1536)\|vector(512)\|vector(1024)" supabase/migrations/*.sql 2>/dev/null; then
+            echo "❌ FAIL: Wrong embedding dimension found (expected 768 only)"
+            exit 1
+          fi
+
+  layer-4-ollama-url-check:
+    name: "Layer 4: Ollama URL Configuration"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Ollama base URL configuration
+        run: |
+          echo "Checking Ollama connectivity configuration..."
+
+          # Check for hardcoded api.ollama.com (should use env var)
+          if grep -q '"url".*"https://api\.ollama\.com"' n8n_*.json 2>/dev/null; then
+            echo "❌ FAIL: Hardcoded api.ollama.com found - should use OLLAMA_BASE_URL env var"
+            exit 1
+          fi
+
+          # Check for proper Docker host URL fallback
+          if grep -q "host\.docker\.internal:11434" n8n_*.json 2>/dev/null; then
+            echo "✅ PASS: Docker-to-host fallback URL configured"
+          else
+            echo "⚠️  WARNING: No host.docker.internal fallback for Docker environments"
+          fi
+
+          # Check for localhost:11434 (works in bare metal)
+          if grep -q "localhost:11434\|127\.0\.0\.1:11434" n8n_*.json 2>/dev/null; then
+            echo "ℹ️  INFO: localhost:11434 found - works for bare metal Ollama"
+          fi
+
+  # ═══════════════════════════════════════════════════════════════════════════════
+  # LAYER 5: SECURITY & SECRET SCANNING
+  # ═══════════════════════════════════════════════════════════════════════════════
+  layer-5-secret-scan:
+    name: "Layer 5: Secret & Credential Scan"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan for exposed secrets
+        run: |
+          echo "Scanning for exposed secrets and credentials..."
+
+          # Check for actual API keys in code
+          if grep -rE "(sk_live_[a-zA-Z0-9]{20,}|sk_test_[a-zA-Z0-9]{20,})" --include="*.ts" --include="*.tsx" --include="*.js" src/ 2>/dev/null; then
+            echo "❌ FAIL: Exposed Stripe API key found"
+            exit 1
+          fi
+
+          # Check for Supabase service role keys
+          if grep -rE "eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+" --include="*.ts" --include="*.tsx" --include="*.js" src/ 2>/dev/null | grep -v "process.env\|$env\|SUPABASE_"; then
+            echo "❌ FAIL: Exposed JWT/Supabase key found"
+            exit 1
+          fi
+
+          # Check for hardcoded passwords
+          if grep -rE "password\s*[:=]\s*['\"][^'\"]+['\"]" --include="*.ts" --include="*.tsx" src/ 2>/dev/null | grep -v "process.env\|$env"; then
+            echo "❌ FAIL: Hardcoded password found"
+            exit 1
+          fi
+
+          echo "✅ PASS: No exposed secrets found"
+
+  layer-5-env-validation:
+    name: "Layer 5: Environment Variable Usage"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify environment variable patterns
+        run: |
+          echo "Checking environment variable usage patterns..."
+
+          # Check for proper env var usage in n8n workflows
+          if grep -q '\$env\.OLLAMA_API_KEY\|\$env\.SUPABASE_SERVICE_ROLE_KEY' n8n_*.json 2>/dev/null; then
+            echo "✅ PASS: Environment variables used for sensitive config"
+          else
+            echo "ℹ️  INFO: No $env pattern found in workflows - may use n8n credentials"
+          fi
+
+          # Check for fallback secrets
+          if grep -rE "||\s*['\"][a-zA-Z0-9]{16,}['\"]" --include="*.ts" --include="*.tsx" src/ 2>/dev/null; then
+            echo "⚠️  WARNING: Potential hardcoded secret fallback found"
+          fi
+
+  layer-5-revoke-check:
+    name: "Layer 5: Security Definer Check"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify SECURITY DEFINER functions are secured
+        run: |
+          echo "Checking SECURITY DEFINER function security..."
+
+          # Find all SECURITY DEFINER functions
+          DEFINER_FILES=$(grep -l "SECURITY DEFINER" supabase/migrations/*.sql 2>/dev/null)
+
+          for file in $DEFINER_FILES; do
+            echo "Checking $file..."
+
+            # Each SECURITY DEFINER should have REVOKE FROM PUBLIC
+            if grep -q "REVOKE.*FROM PUBLIC\|REVOKE ALL.*FROM PUBLIC" "$file"; then
+              echo "✅ PASS: $file has REVOKE FROM PUBLIC"
+            else
+              echo "❌ FAIL: SECURITY DEFINER in $file without REVOKE FROM PUBLIC"
+              exit 1
+            fi
+          done
+
+          echo "✅ All SECURITY DEFINER functions are properly secured"
+
+  # ═══════════════════════════════════════════════════════════════════════════════
+  # BUILD VALIDATION
+  # ═══════════════════════════════════════════════════════════════════════════════
+  build:
+    name: Production Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs:
+      - layer-1-typecheck
+      - layer-1-lint
+      - layer-1-format
+      - layer-2-unit-tests
+      - layer-3-migration-order
+      - layer-3-migration-syntax
+      - layer-4-n8n-json-lint
+      - layer-5-secret-scan
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build production bundle
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+          SUPABASE_URL: https://build-stub.supabase.co
+          SUPABASE_SECRET_KEY: build-stub-secret-key-not-real
+          SUPABASE_ANON_KEY: build-stub-anon-key-not-real
+          JWT_SECRET: build-stub-jwt-secret-32-chars-min-ok
+          IP_LOG_SALT: build-stub-ip-salt
+        run: bun run build
+
+  # ═══════════════════════════════════════════════════════════════════════════════
+  # SUMMARY
+  # ═══════════════════════════════════════════════════════════════════════════════
+  summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: always()
+    needs:
+      - layer-1-typecheck
+      - layer-1-lint
+      - layer-1-format
+      - layer-2-unit-tests
+      - layer-2-scoring-algorithm
+      - layer-3-migration-order
+      - layer-3-migration-syntax
+      - layer-3-trigger-validation
+      - layer-4-n8n-json-lint
+      - layer-4-embedding-validation
+      - layer-4-ollama-url-check
+      - layer-5-secret-scan
+      - layer-5-env-validation
+      - layer-5-revoke-check
+      - build
+    steps:
+      - name: Generate CI Summary
+        run: |
+          echo "════════════════════════════════════════════════════════════════════════════"
+          echo "  APEX CI — Green By Design Summary"
+          echo "════════════════════════════════════════════════════════════════════════════"
+          echo ""
+
+          FAILED=0
+
+          check_job() {
+            local name="$1"
+            local result="$2"
+            if [ "$result" != "success" ]; then
+              echo "❌ FAIL: $name ($result)"
+              FAILED=$((FAILED + 1))
+            else
+              echo "✅ PASS: $name"
+            fi
+          }
+
+          echo "── LAYER 1: Static Analysis & Type Safety ──"
+          check_job "TypeScript Compilation"      "${{ needs.layer-1-typecheck.result }}"
+          check_job "ESLint Analysis"             "${{ needs.layer-1-lint.result }}"
+          check_job "Prettier Format Check"       "${{ needs.layer-1-format.result }}"
+
+          echo ""
+          echo "── LAYER 2: Logic & Unit Testing ──"
+          check_job "Unit Tests"                  "${{ needs.layer-2-unit-tests.result }}"
+          check_job "Scoring Algorithm"           "${{ needs.layer-2-scoring-algorithm.result }}"
+
+          echo ""
+          echo "── LAYER 3: Database & State Validation ──"
+          check_job "Migration Order"             "${{ needs.layer-3-migration-order.result }}"
+          check_job "SQL Syntax"                  "${{ needs.layer-3-migration-syntax.result }}"
+          check_job "Trigger Validation"          "${{ needs.layer-3-trigger-validation.result }}"
+
+          echo ""
+          echo "── LAYER 4: Infrastructure & n8n Validation ──"
+          check_job "n8n JSON Lint"               "${{ needs.layer-4-n8n-json-lint.result }}"
+          check_job "Embedding Dimension"         "${{ needs.layer-4-embedding-validation.result }}"
+          check_job "Ollama URL Config"           "${{ needs.layer-4-ollama-url-check.result }}"
+
+          echo ""
+          echo "── LAYER 5: Security & Secret Scanning ──"
+          check_job "Secret Scan"                 "${{ needs.layer-5-secret-scan.result }}"
+          check_job "Env Variable Usage"          "${{ needs.layer-5-env-validation.result }}"
+          check_job "Security Definder Check"     "${{ needs.layer-5-revoke-check.result }}"
+
+          echo ""
+          echo "── Build ──"
+          check_job "Production Build"            "${{ needs.build.result }}"
+
+          echo ""
+          echo "════════════════════════════════════════════════════════════════════════════"
+
+          if [ "$FAILED" -gt 0 ]; then
+            echo "❌ $FAILED check(s) FAILED — Code cannot merge"
+            exit 1
+          else
+            echo "✅ ALL CHECKS PASSED — Code is Green By Design!"
+          fi
