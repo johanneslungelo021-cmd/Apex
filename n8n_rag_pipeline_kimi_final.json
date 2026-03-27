@@ -12,18 +12,24 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [200, 300],
+      "position": [
+        200,
+        300
+      ],
       "webhookId": "rag-pipeline"
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst body = input.body || input;\nconst text = JSON.stringify(body);\n\nconst patterns = [\n  { regex: /\\b\\d{13}\\b/g, label: '[REDACTED_SA_ID]' },\n  { regex: /\\b\\d{6,17}\\b(?=.*bank)/gi, label: '[REDACTED_BANK_ACCOUNT]' },\n  { regex: /[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}/g, label: '[REDACTED_EMAIL]' },\n  { regex: /(?:\\+27|0)[6-8]\\d{8}/g, label: '[REDACTED_SA_PHONE]' },\n  { regex: /\\b[A-Z]{1}\\d{7}\\b/g, label: '[REDACTED_PASSPORT]' },\n  { regex: /\\b[A-Z]{2}\\d{2}[A-Z0-9]{4,}\\d{7,}[A-Z0-9]{0,3}\\b/g, label: '[REDACTED_IBAN]' },\n  { regex: /\\b[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?\\b/g, label: '[REDACTED_SWIFT]' },\n  { regex: /\\b(?:\\d[ -]*?){13,19}\\b/g, label: '[REDACTED_CREDIT_CARD]' },\n  { regex: /\\b(0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|r[0-9a-zA-Z]{24,34}|T[A-Za-z1-9]{33})\\b/g, label: '[REDACTED_CRYPTO_WALLET]' },\n  { regex: /(?:sk[_-]live[_-][A-Za-z0-9]{20,}|Bearer\\s+[A-Za-z0-9._\\-]{20,}|api[_-]?key[=:]\\s*[A-Za-z0-9._\\-]{16,})/gi, label: '[REDACTED_API_KEY]' }\n];\n\nlet sanitized = text;\nfor (const p of patterns) {\n  sanitized = sanitized.replace(p.regex, p.label);\n}\n\nconst sanitizedBody = JSON.parse(sanitized);\nreturn [{ json: { ...input, body: sanitizedBody, _sanitized: true } }];"
+        "jsCode": "const input = $input.first().json;\nconst body = input.body || input;\nconst text = JSON.stringify(body);\n\nconst patterns = [\n  { regex: /\\b\\d{13}\\b/g, label: '[REDACTED_SA_ID]' },\n  { regex: /\\b\\d{6,17}\\b(?=.*bank)/gi, label: '[REDACTED_BANK_ACCOUNT]' },\n  { regex: /[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2}/g, label: '[REDACTED_EMAIL]' },\n  { regex: /(?:\\+27|0)[6-8]\\d{8}/g, label: '[REDACTED_SA_PHONE]' },\n  { regex: /\\b[A-Z]{1}\\d{7}\\b/g, label: '[REDACTED_PASSPORT]' },\n  { regex: /\\b[A-Z]{2}\\d{2}[A-Z0-9]{4}\\d{7}[A-Z0-9]{0,3}\\b/g, label: '[REDACTED_IBAN]' },\n  { regex: /\\b[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?\\b/g, label: '[REDACTED_SWIFT]' },\n  { regex: /\\b(?:\\d[ -]*?){13,19}\\b/g, label: '[REDACTED_CREDIT_CARD]' },\n  { regex: /\\b(0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|r[0-9a-zA-Z]{24,34}|T[A-Za-z1-9]{33})\\b/g, label: '[REDACTED_CRYPTO_WALLET]' },\n  { regex: /(?:sk[_-]live[_-][A-Za-z0-9]{20}|Bearer\\s+[A-Za-z0-9._\\-]{20}|api[_-]?key[=:]\\s*[A-Za-z0-9._\\-]{16})/gi, label: '[REDACTED_API_KEY]' }\n];\n\nlet sanitized = text;\nfor (const p of patterns) {\n  sanitized = sanitized.replace(p.regex, p.label);\n}\n\nconst sanitizedBody = JSON.parse(sanitized);\nreturn [{ json: { ...input, body: sanitizedBody, _sanitized: true } }];"
       },
       "id": "node-2-pii-filter",
       "name": "PII Filter",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [420, 300]
+      "position": [
+        420,
+        300
+      ]
     },
     {
       "parameters": {
@@ -33,7 +39,10 @@
       "name": "Sig Validator",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [640, 300]
+      "position": [
+        640,
+        300
+      ]
     },
     {
       "parameters": {
@@ -65,7 +74,10 @@
       "name": "Memory Retrieval",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [860, 300]
+      "position": [
+        860,
+        300
+      ]
     },
     {
       "parameters": {
@@ -218,7 +230,10 @@
       "name": "Model Router",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
-      "position": [1080, 300]
+      "position": [
+        1080,
+        300
+      ]
     },
     {
       "parameters": {
@@ -246,7 +261,10 @@
       "name": "Reranker",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1300, 300]
+      "position": [
+        1300,
+        300
+      ]
     },
     {
       "parameters": {
@@ -256,7 +274,10 @@
       "name": "Top-5 Filter",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1520, 300]
+      "position": [
+        1520,
+        300
+      ]
     },
     {
       "parameters": {
@@ -282,17 +303,23 @@
       "name": "LLM Call",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1740, 300]
+      "position": [
+        1740,
+        300
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst response = input.response || input;\nconst faithfulness = typeof response.faithfulness_score === 'number' ? response.faithfulness_score : (typeof input.faithfulness_score === 'number' ? input.faithfulness_score : 0.8);\nconst relevance = typeof response.relevance_score === 'number' ? response.relevance_score : (typeof input.relevance_score === 'number' ? input.relevance_score : 0.7);\n\nconst passed = faithfulness >= 0.7 && relevance >= 0.6;\n\nif (!passed) {\n  // Log for trace analysis - do not swallow errors silently\n  console.error(`Eval Gate failed: faithfulness=${faithfulness}, relevance=${relevance}`);\n  return [{ json: {\n    eval_passed: false,\n    faithfulness_score: faithfulness,\n    relevance_score: relevance,\n    answer: 'I was unable to generate a sufficiently reliable answer. Please rephrase your query or provide more context.',\n    fallback: true,\n    original_response: input\n  }}];\n}\n\nreturn [{ json: {\n  eval_passed: true,\n  faithfulness_score: faithfulness,\n  relevance_score: relevance,\n  answer: input.response || input.text || input,\n  fallback: false,\n  original_response: input\n}}];"
+        "jsCode": "const input = $input.first().json;\nconst response = input.response || input;\nconst faithfulness = typeof response.faithfulness_score === 'number' ? response.faithfulness_score : (typeof input.faithfulness_score === 'number' ? input.faithfulness_score : 0.0);\nconst relevance = typeof response.relevance_score === 'number' ? response.relevance_score : (typeof input.relevance_score === 'number' ? input.relevance_score : 0.0);\n\nconst passed = faithfulness >= 0.7 && relevance >= 0.6;\n\nif (!passed) {\n  // Log for trace analysis - do not swallow errors silently\n  console.error(`Eval Gate failed: faithfulness=${faithfulness}, relevance=${relevance}`);\n  return [{ json: {\n    eval_passed: false,\n    faithfulness_score: faithfulness,\n    relevance_score: relevance,\n    answer: 'I was unable to generate a sufficiently reliable answer. Please rephrase your query or provide more context.',\n    fallback: true,\n    original_response: input\n  }}];\n}\n\nreturn [{ json: {\n  eval_passed: true,\n  faithfulness_score: faithfulness,\n  relevance_score: relevance,\n  answer: input.response || input.text || input,\n  fallback: false,\n  original_response: input\n}}];"
       },
       "id": "node-9-eval-gate",
       "name": "Eval Gate",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1960, 300]
+      "position": [
+        1960,
+        300
+      ]
     },
     {
       "parameters": {
@@ -328,7 +355,10 @@
       "name": "Trace Logger",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2180, 300]
+      "position": [
+        2180,
+        300
+      ]
     },
     {
       "parameters": {
@@ -338,7 +368,10 @@
       "name": "Memory Store Prep",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2400, 300]
+      "position": [
+        2400,
+        300
+      ]
     },
     {
       "parameters": {
@@ -374,7 +407,10 @@
       "name": "Memory Store",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2620, 300]
+      "position": [
+        2620,
+        300
+      ]
     },
     {
       "parameters": {
@@ -384,7 +420,10 @@
       "name": "Response Builder",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2840, 300]
+      "position": [
+        2840,
+        300
+      ]
     },
     {
       "parameters": {
@@ -406,14 +445,10 @@
       "name": "HTTP Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
- apex-fix
-      "position": [3060, 300]
-
       "position": [
         3060,
         300
       ]
- main
     },
     {
       "parameters": {
@@ -443,14 +478,10 @@
       "name": "Embed Query",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
- apex-fix
-      "position": [770, 300],
-
       "position": [
         770,
         300
       ],
- main
       "continueOnFail": true,
       "notes": "Real 768-dim embedding via Ollama nomic-embed-text. continueOnFail=true so workflow proceeds with null embedding if Ollama unavailable."
     }

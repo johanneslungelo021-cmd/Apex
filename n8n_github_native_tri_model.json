@@ -14,26 +14,18 @@
           "mode": "name",
           "value": "Apex"
         },
- apex-fix
-        "events": ["pull_request"]
-
         "events": [
           "pull_request"
         ]
- main
       },
       "id": "gh-trigger-1",
       "name": "GitHub PR Trigger",
       "type": "n8n-nodes-base.githubTrigger",
       "typeVersion": 1,
- apex-fix
-      "position": [200, 400],
-
       "position": [
         200,
         400
       ],
- main
       "credentials": {
         "githubApi": {
           "id": "githubApi",
@@ -70,14 +62,10 @@
       "name": "Fetch PR Diff",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
- apex-fix
-      "position": [440, 400]
-
       "position": [
         440,
         400
       ]
- main
     },
     {
       "parameters": {
@@ -87,14 +75,10 @@
       "name": "Prepare Prompts",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
- apex-fix
-      "position": [680, 400]
-
       "position": [
         680,
         400
       ]
- main
     },
     {
       "parameters": {
@@ -124,14 +108,10 @@
       "name": "DeepSeek-R1 (Reasoning)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
- apex-fix
-      "position": [960, 180]
-
       "position": [
         960,
         180
       ]
- main
     },
     {
       "parameters": {
@@ -161,14 +141,10 @@
       "name": "Qwen3 (Analysis)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
- apex-fix
-      "position": [960, 400]
-
       "position": [
         960,
         400
       ]
- main
     },
     {
       "parameters": {
@@ -198,14 +174,10 @@
       "name": "Kimi K2 (Thinking)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
- apex-fix
-      "position": [960, 620]
-
       "position": [
         960,
         620
       ]
- main
     },
     {
       "parameters": {
@@ -215,14 +187,10 @@
       "name": "Strip Think Tags & Label",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
- apex-fix
-      "position": [1200, 400]
-
       "position": [
         1200,
         400
       ]
- main
     },
     {
       "parameters": {
@@ -232,31 +200,23 @@
       "name": "Merge Model Responses",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
- apex-fix
-      "position": [1440, 400]
-
       "position": [
         1440,
         400
       ]
- main
     },
     {
       "parameters": {
-        "jsCode": "\nconst items    = $input.all();\nconst platform = $('Prepare Prompts').item.json.target_platform || 'Moltcorp';\nconst prTitle  = $('Prepare Prompts').item.json.pr_title || '';\nconst prUrl    = $('Prepare Prompts').item.json.pr_url   || '';\nconst allOut   = items.every(i => i.json.timed_out);\n\nif (allOut) {\n  return [{ json: {\n    status: 'FALLBACK', hard_fail: false, fallback_used: true,\n    platform, pr_title: prTitle, pr_url: prUrl,\n    final_review: '\u26a0\ufe0f **Tri-Model Council** \u2014 All 3 models timed out. Manual review required.',\n    best_model: 'fallback', best_score: 0,\n    all_responses: items.map(i => ({ model: i.json.model_id, score: 0, timed_out: true })),\n    timestamp: new Date().toISOString(),\n  }}];\n}\n\n// Weights: DeepSeek\u00d70.4 + Qwen\u00d70.4 + Kimi\u00d70.2\nconst scored = items.map(item => {\n  const { model_id, response, word_count, timed_out, duration_ms } = item.json;\n  if (timed_out) return { ...item.json, score: 0, hard_fail: false };\n  const text = response.toLowerCase();\n  let score = 0, hardFail = false;\n\n  if (model_id === 'deepseek-r1') {\n    const isFail = /verdict:\\s*fail/i.test(response);\n    if (isFail) { hardFail = true; score = 80 * 0.4; }\n    else { score = (/verdict:\\s*pass/i.test(response) ? 90 : 60) * 0.4; }\n    if (text.includes('critical')) score += 5 * 0.4;\n\n  } else if (model_id === 'qwen3') {\n    const m = response.match(/CODE_QUALITY_SCORE:\\s*(\\d+)/i);\n    const q = m ? parseInt(m[1]) : Math.min(word_count / 15, 10);\n    score = q * 8 * 0.4;\n    if (text.includes('optimis')) score += 8 * 0.4;\n\n  } else if (model_id === 'kimi-k2') {\n    const impactMap = { low: 30, medium: 60, high: 90 };\n    const m = response.match(/UX_IMPACT:\\s*(low|medium|high)/i);\n    score = (m ? impactMap[m[1].toLowerCase()] : 50) * 0.2;\n    if (/BREAKING_CHANGES:\\s*no/i.test(response)) score += 10 * 0.2;\n  }\n\n  return { ...item.json, score: Math.round(score * 10) / 10, hard_fail: hardFail };\n});\n\nconst dsResult  = scored.find(s => s.model_id === 'deepseek-r1');\nconst hardFail  = dsResult?.hard_fail === true;\nconst best      = scored.reduce((a, b) => b.score > a.score ? b : a);\n\n// Build the GitHub comment\nconst verdict   = hardFail ? '\ud83d\udea8 REJECTED' : '\u2705 APPROVED';\nconst allScores = scored.map(s =>\n  `| ${s.model_label} | ${s.response.substring(0, 120).replace(/\\n/g,' ')}... | ${s.score} | ${s.duration_ms}ms |`\n).join('\\n');\n\nconst finalReview = [\n  `## ${verdict} by Tri-Model Council`,\n  `**PR:** [${prTitle}](${prUrl}) | **Platform:** ${platform}`,\n  '',\n  `### \ud83c\udfc6 Winning Model: ${best.model_label} (score: ${best.score})`,\n  '',\n  best.response,\n  '',\n  '### \ud83d\udcca All Model Scores',\n  '| Model | Summary | Score | Duration |',\n  '|-------|---------|-------|----------|',\n  allScores,\n  '',\n  '_Reviewed by Apex Tri-Model Council \u2014 DeepSeek-R1 + Qwen3 + Kimi K2_',\n].join('\\n');\n\nreturn [{ json: {\n  status: hardFail ? 'REJECTED' : 'APPROVED',\n  hard_fail: hardFail, fallback_used: false,\n  platform, pr_title: prTitle, pr_url: prUrl,\n  final_review: finalReview,\n  best_model: best.model_id, best_label: best.model_label,\n  best_response: best.response, best_score: best.score,\n  all_responses: scored.map(s => ({ model: s.model_label, score: s.score, duration_ms: s.duration_ms })),\n  timestamp: new Date().toISOString(),\n}}];\n"
+        "jsCode": "\nconst items    = $input.all();\nconst platform = $('Prepare Prompts').item.json.target_platform || 'Moltcorp';\nconst prTitle  = $('Prepare Prompts').item.json.pr_title || '';\nconst prUrl    = $('Prepare Prompts').item.json.pr_url   || '';\nconst allOut   = items.every(i => i.json.timed_out);\n\nif (allOut) {\n  return [{ json: {\n    status: 'REJECTED', hard_fail: false, fallback_used: true,\n    platform, pr_title: prTitle, pr_url: prUrl,\n    final_review: '\u26a0\ufe0f **Tri-Model Council** \u2014 All 3 models timed out. Manual review required.',\n    best_model: 'fallback', best_score: 0,\n    all_responses: items.map(i => ({ model: i.json.model_id, score: 0, timed_out: true })),\n    timestamp: new Date().toISOString(),\n  }}];\n}\n\n// Weights: DeepSeek\u00d70.4 + Qwen\u00d70.4 + Kimi\u00d70.2\nconst scored = items.map(item => {\n  const { model_id, response, word_count, timed_out, duration_ms } = item.json;\n  if (timed_out) return { ...item.json, score: 0, hard_fail: false };\n  const text = response.toLowerCase();\n  let score = 0, hardFail = false;\n\n  if (model_id === 'deepseek-r1') {\n    const isFail = /verdict:\\s*fail/i.test(response);\n    if (isFail) { hardFail = true; score = 80 * 0.4; }\n    else { score = (/verdict:\\s*pass/i.test(response) ? 90 : 60) * 0.4; }\n    if (text.includes('critical')) score += 5 * 0.4;\n\n  } else if (model_id === 'qwen3') {\n    const m = response.match(/CODE_QUALITY_SCORE:\\s*(\\d+)/i);\n    const q = m ? parseInt(m[1]) : Math.min(word_count / 15, 10);\n    score = q * 8 * 0.4;\n    if (text.includes('optimis')) score += 8 * 0.4;\n\n  } else if (model_id === 'kimi-k2') {\n    const impactMap = { low: 30, medium: 60, high: 90 };\n    const m = response.match(/UX_IMPACT:\\s*(low|medium|high)/i);\n    score = (m ? impactMap[m[1].toLowerCase()] : 50) * 0.2;\n    if (/BREAKING_CHANGES:\\s*no/i.test(response)) score += 10 * 0.2;\n  }\n\n  return { ...item.json, score: Math.round(score * 10) / 10, hard_fail: hardFail };\n});\n\nconst dsResult  = scored.find(s => s.model_id === 'deepseek-r1');\nconst hardFail  = dsResult?.hard_fail === true;\nconst best      = scored.reduce((a, b) => b.score > a.score ? b : a);\n\n// Build the GitHub comment\nconst verdict   = hardFail ? '\ud83d\udea8 REJECTED' : '\u2705 APPROVED';\nconst allScores = scored.map(s =>\n  `| ${s.model_label} | ${s.response.substring(0, 120).replace(/\\n/g,' ')}... | ${s.score} | ${s.duration_ms}ms |`\n).join('\\n');\n\nconst finalReview = [\n  `## ${verdict} by Tri-Model Council`,\n  `**PR:** [${prTitle}](${prUrl}) | **Platform:** ${platform}`,\n  '',\n  `### \ud83c\udfc6 Winning Model: ${best.model_label} (score: ${best.score})`,\n  '',\n  best.response,\n  '',\n  '### \ud83d\udcca All Model Scores',\n  '| Model | Summary | Score | Duration |',\n  '|-------|---------|-------|----------|',\n  allScores,\n  '',\n  '_Reviewed by Apex Tri-Model Council \u2014 DeepSeek-R1 + Qwen3 + Kimi K2_',\n].join('\\n');\n\nreturn [{ json: {\n  status: hardFail ? 'REJECTED' : 'APPROVED',\n  hard_fail: hardFail, fallback_used: false,\n  platform, pr_title: prTitle, pr_url: prUrl,\n  final_review: finalReview,\n  best_model: best.model_id, best_label: best.model_label,\n  best_response: best.response, best_score: best.score,\n  all_responses: scored.map(s => ({ model: s.model_label, score: s.score, duration_ms: s.duration_ms })),\n  timestamp: new Date().toISOString(),\n}}];\n"
       },
       "id": "score-7",
       "name": "Weighted Score & Hard-Fail Gate",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
- apex-fix
-      "position": [1680, 400]
-
       "position": [
         1680,
         400
       ]
- main
     },
     {
       "parameters": {
@@ -292,14 +252,10 @@
       "name": "Log to ai_traces",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
- apex-fix
-      "position": [1920, 200]
-
       "position": [
         1920,
         200
       ]
- main
     },
     {
       "parameters": {
@@ -323,14 +279,10 @@
       "name": "Post Review to GitHub",
       "type": "n8n-nodes-base.github",
       "typeVersion": 1.1,
- apex-fix
-      "position": [1920, 600],
-
       "position": [
         1920,
         600
       ],
- main
       "credentials": {
         "githubApi": {
           "id": "githubApi",
@@ -463,8 +415,4 @@
     "timezone": "Africa/Johannesburg"
   },
   "pinData": {}
- apex-fix
 }
-
-}
- main
