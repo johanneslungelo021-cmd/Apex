@@ -14,18 +14,13 @@
           "mode": "name",
           "value": "Apex"
         },
-        "events": [
-          "pull_request"
-        ]
+        "events": ["pull_request"]
       },
       "id": "gh-trigger-1",
       "name": "GitHub PR Trigger",
       "type": "n8n-nodes-base.githubTrigger",
       "typeVersion": 1,
-      "position": [
-        200,
-        400
-      ],
+      "position": [200, 400],
       "credentials": {
         "githubApi": {
           "id": "githubApi",
@@ -62,10 +57,7 @@
       "name": "Fetch PR Diff",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        440,
-        400
-      ]
+      "position": [440, 400]
     },
     {
       "parameters": {
@@ -75,10 +67,7 @@
       "name": "Prepare Prompts",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        680,
-        400
-      ]
+      "position": [680, 400]
     },
     {
       "parameters": {
@@ -108,10 +97,7 @@
       "name": "DeepSeek-R1 (Reasoning)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        960,
-        180
-      ]
+      "position": [960, 180]
     },
     {
       "parameters": {
@@ -141,10 +127,7 @@
       "name": "Qwen3 (Analysis)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        960,
-        400
-      ]
+      "position": [960, 400]
     },
     {
       "parameters": {
@@ -174,10 +157,7 @@
       "name": "Kimi K2 (Thinking)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        960,
-        620
-      ]
+      "position": [960, 620]
     },
     {
       "parameters": {
@@ -187,10 +167,7 @@
       "name": "Strip Think Tags & Label",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1200,
-        400
-      ]
+      "position": [1200, 400]
     },
     {
       "parameters": {
@@ -200,23 +177,17 @@
       "name": "Merge Model Responses",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
-      "position": [
-        1440,
-        400
-      ]
+      "position": [1440, 400]
     },
     {
       "parameters": {
-        "jsCode": "\nconst items    = $input.all();\nconst platform = $('Prepare Prompts').item.json.target_platform || 'Moltcorp';\nconst prTitle  = $('Prepare Prompts').item.json.pr_title || '';\nconst prUrl    = $('Prepare Prompts').item.json.pr_url   || '';\nconst allOut   = items.every(i => i.json.timed_out);\n\nif (allOut) {\n  return [{ json: {\n    status: 'REJECTED', hard_fail: false, fallback_used: true,\n    platform, pr_title: prTitle, pr_url: prUrl,\n    final_review: '\u26a0\ufe0f **Tri-Model Council** \u2014 All 3 models timed out. Manual review required.',\n    best_model: 'fallback', best_score: 0,\n    all_responses: items.map(i => ({ model: i.json.model_id, score: 0, timed_out: true })),\n    timestamp: new Date().toISOString(),\n  }}];\n}\n\n// Weights: DeepSeek\u00d70.4 + Qwen\u00d70.4 + Kimi\u00d70.2\nconst scored = items.map(item => {\n  const { model_id, response, word_count, timed_out, duration_ms } = item.json;\n  if (timed_out) return { ...item.json, score: 0, hard_fail: false };\n  const text = response.toLowerCase();\n  let score = 0, hardFail = false;\n\n  if (model_id === 'deepseek-r1') {\n    const isFail = /verdict:\\s*fail/i.test(response);\n    if (isFail) { hardFail = true; score = 80 * 0.4; }\n    else { score = (/verdict:\\s*pass/i.test(response) ? 90 : 60) * 0.4; }\n    if (text.includes('critical')) score += 5 * 0.4;\n\n  } else if (model_id === 'qwen3') {\n    const m = response.match(/CODE_QUALITY_SCORE:\\s*(\\d+)/i);\n    const q = m ? parseInt(m[1]) : Math.min(word_count / 15, 10);\n    score = q * 8 * 0.4;\n    if (text.includes('optimis')) score += 8 * 0.4;\n\n  } else if (model_id === 'kimi-k2') {\n    const impactMap = { low: 30, medium: 60, high: 90 };\n    const m = response.match(/UX_IMPACT:\\s*(low|medium|high)/i);\n    score = (m ? impactMap[m[1].toLowerCase()] : 50) * 0.2;\n    if (/BREAKING_CHANGES:\\s*no/i.test(response)) score += 10 * 0.2;\n  }\n\n  return { ...item.json, score: Math.round(score * 10) / 10, hard_fail: hardFail };\n});\n\nconst dsResult  = scored.find(s => s.model_id === 'deepseek-r1');\nconst hardFail  = dsResult?.hard_fail === true;\nconst best      = scored.reduce((a, b) => b.score > a.score ? b : a);\n\n// Build the GitHub comment\nconst verdict   = hardFail ? '\ud83d\udea8 REJECTED' : '\u2705 APPROVED';\nconst allScores = scored.map(s =>\n  `| ${s.model_label} | ${s.response.substring(0, 120).replace(/\\n/g,' ')}... | ${s.score} | ${s.duration_ms}ms |`\n).join('\\n');\n\nconst finalReview = [\n  `## ${verdict} by Tri-Model Council`,\n  `**PR:** [${prTitle}](${prUrl}) | **Platform:** ${platform}`,\n  '',\n  `### \ud83c\udfc6 Winning Model: ${best.model_label} (score: ${best.score})`,\n  '',\n  best.response,\n  '',\n  '### \ud83d\udcca All Model Scores',\n  '| Model | Summary | Score | Duration |',\n  '|-------|---------|-------|----------|',\n  allScores,\n  '',\n  '_Reviewed by Apex Tri-Model Council \u2014 DeepSeek-R1 + Qwen3 + Kimi K2_',\n].join('\\n');\n\nreturn [{ json: {\n  status: hardFail ? 'REJECTED' : 'APPROVED',\n  hard_fail: hardFail, fallback_used: false,\n  platform, pr_title: prTitle, pr_url: prUrl,\n  final_review: finalReview,\n  best_model: best.model_id, best_label: best.model_label,\n  best_response: best.response, best_score: best.score,\n  all_responses: scored.map(s => ({ model: s.model_label, score: s.score, duration_ms: s.duration_ms })),\n  timestamp: new Date().toISOString(),\n}}];\n"
+        "jsCode": "\nconst items    = $input.all();\nconst platform = $('Prepare Prompts').item.json.target_platform || 'Moltcorp';\nconst prTitle  = $('Prepare Prompts').item.json.pr_title || '';\nconst prUrl    = $('Prepare Prompts').item.json.pr_url   || '';\nconst prNumber = $('Prepare Prompts').item.json.pr_number || 'unknown';\nconst requiredConsensus = 2;\n\n// \u2500\u2500 Step 1: Count valid (non-timed-out) responses \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\nconst validResponses = items.filter(i =>\n  !i.json.timed_out &&\n  i.json.response &&\n  i.json.response.length > 50\n);\n\nif (validResponses.length < requiredConsensus) {\n  throw new Error(\n    `FATAL CONSENSUS FAILURE: Only ${validResponses.length}/3 models responded. ` +\n    `Workflow halted. PR #${prNumber}`\n  );\n}\n\n// \u2500\u2500 Step 2: Parse each model's explicit PASS/FAIL verdict \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\nconst verdicts = validResponses.map(item => {\n  const text = item.json.response;\n  const model = item.json.model_id || 'unknown';\n  const label = item.json.model_label || model;\n\n  const isFail = /VERDICT:\\s*FAIL|STATUS:\\s*REJECTED|SEVERITY:\\s*CRITICAL/i.test(text);\n  const isPass = /VERDICT:\\s*PASS|STATUS:\\s*APPROVED/i.test(text);\n\n  return {\n    model,\n    label,\n    verdict: isFail ? 'FAIL' : (isPass ? 'PASS' : 'UNCLEAR'),\n    response: text,\n    duration_ms: item.json.duration_ms || 0\n  };\n});\n\n// \u2500\u2500 Step 3: Count votes \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\nconst failCount    = verdicts.filter(v => v.verdict === 'FAIL').length;\nconst passCount    = verdicts.filter(v => v.verdict === 'PASS').length;\nconst unclearCount = verdicts.filter(v => v.verdict === 'UNCLEAR').length;\n\n// \u2500\u2500 Step 4: Apply true 2/3 consensus rules \u2014 no weighted bypass \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\nif (failCount >= requiredConsensus) {\n  return [{ json: {\n    status: 'REJECTED',\n    hard_fail: true,\n    consensus_reached: true,\n    fallback_used: false,\n    fail_votes: failCount,\n    pass_votes: passCount,\n    unclear_votes: unclearCount,\n    platform, pr_title: prTitle, pr_url: prUrl,\n    best_model: verdicts.find(v => v.verdict === 'FAIL')?.model || 'unknown',\n    best_score: 0,\n    all_responses: verdicts.map(v => ({ model: v.label, score: 0, verdict: v.verdict, duration_ms: v.duration_ms })),\n    final_review: [\n      `## \ud83d\udea8 REJECTED by Tri-Model Council`,\n      `**PR #${prNumber}:** [${prTitle}](${prUrl}) | **Platform:** ${platform}`,\n      '',\n      `### Consensus: ${failCount}/3 models found critical issues`,\n      '',\n      ...verdicts.filter(v => v.verdict === 'FAIL').map(v =>\n        `#### ${v.label}\\n${v.response.substring(0, 400)}...`\n      ),\n      '',\n      '_Action Required: Do not merge. Address all security findings._'\n    ].join('\\n'),\n    timestamp: new Date().toISOString()\n  }}];\n}\n\nif (passCount >= requiredConsensus) {\n  const winner = verdicts.find(v => v.verdict === 'PASS');\n  return [{ json: {\n    status: 'APPROVED',\n    hard_fail: false,\n    consensus_reached: true,\n    fallback_used: false,\n    fail_votes: failCount,\n    pass_votes: passCount,\n    unclear_votes: unclearCount,\n    platform, pr_title: prTitle, pr_url: prUrl,\n    best_model: winner.model,\n    best_score: 100,\n    all_responses: verdicts.map(v => ({ model: v.label, score: v.verdict === 'PASS' ? 100 : 0, verdict: v.verdict, duration_ms: v.duration_ms })),\n    final_review: [\n      `## \u2705 APPROVED by Tri-Model Council`,\n      `**PR #${prNumber}:** [${prTitle}](${prUrl}) | **Platform:** ${platform}`,\n      '',\n      `### Consensus: ${passCount}/3 models approved`,\n      '',\n      `#### ${winner.label}`,\n      winner.response,\n      '',\n      '_Reviewed by Apex Tri-Model Council \u2014 DeepSeek-R1 + Qwen3 + Kimi K2_'\n    ].join('\\n'),\n    timestamp: new Date().toISOString()\n  }}];\n}\n\n// No clear consensus \u2014 HARD STOP\nthrow new Error(\n  `CONSENSUS DEADLOCK: ${failCount} FAIL, ${passCount} PASS, ${unclearCount} UNCLEAR. ` +\n  `No 2/3 majority. Manual review required for PR #${prNumber}`\n);\n"
       },
       "id": "score-7",
-      "name": "Weighted Score & Hard-Fail Gate",
+      "name": "True 2/3 Consensus Gate",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1680,
-        400
-      ]
+      "position": [1680, 400]
     },
     {
       "parameters": {
@@ -227,11 +198,11 @@
           "parameters": [
             {
               "name": "apikey",
-              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
             },
             {
               "name": "Authorization",
-              "value": "Bearer ={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              "value": "Bearer ={{ $env.SUPABASE_ANON_KEY }}"
             },
             {
               "name": "Content-Type",
@@ -252,10 +223,7 @@
       "name": "Log to ai_traces",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        1920,
-        200
-      ]
+      "position": [1920, 200]
     },
     {
       "parameters": {
@@ -279,10 +247,7 @@
       "name": "Post Review to GitHub",
       "type": "n8n-nodes-base.github",
       "typeVersion": 1.1,
-      "position": [
-        1920,
-        600
-      ],
+      "position": [1920, 600],
       "credentials": {
         "githubApi": {
           "id": "githubApi",

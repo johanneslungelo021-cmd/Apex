@@ -12,10 +12,7 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [
-        200,
-        300
-      ],
+      "position": [200, 300],
       "webhookId": "rag-pipeline"
     },
     {
@@ -26,10 +23,7 @@
       "name": "PII Filter",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        420,
-        300
-      ]
+      "position": [420, 300]
     },
     {
       "parameters": {
@@ -39,10 +33,7 @@
       "name": "Sig Validator",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        640,
-        300
-      ]
+      "position": [640, 300]
     },
     {
       "parameters": {
@@ -67,17 +58,14 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ query_embedding: $('Embed Query').item.json.embedding || $json.body.embedding || null, match_count: 10, match_threshold: 0.5 }) }}",
+        "jsonBody": "={{ JSON.stringify({ query_embedding: $('Embedding Validation Gate').item.json.embedding || $json.body.embedding || null, match_count: 10, match_threshold: 0.5 }) }}",
         "options": {}
       },
       "id": "node-4-memory-retrieval",
       "name": "Memory Retrieval",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        860,
-        300
-      ]
+      "position": [860, 300]
     },
     {
       "parameters": {
@@ -230,10 +218,7 @@
       "name": "Model Router",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
-      "position": [
-        1080,
-        300
-      ]
+      "position": [1080, 300]
     },
     {
       "parameters": {
@@ -261,10 +246,7 @@
       "name": "Reranker",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        1300,
-        300
-      ]
+      "position": [1300, 300]
     },
     {
       "parameters": {
@@ -274,10 +256,7 @@
       "name": "Top-5 Filter",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1520,
-        300
-      ]
+      "position": [1520, 300]
     },
     {
       "parameters": {
@@ -303,10 +282,7 @@
       "name": "LLM Call",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        1740,
-        300
-      ]
+      "position": [1740, 300]
     },
     {
       "parameters": {
@@ -316,10 +292,7 @@
       "name": "Eval Gate",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1960,
-        300
-      ]
+      "position": [1960, 300]
     },
     {
       "parameters": {
@@ -355,10 +328,7 @@
       "name": "Trace Logger",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        2180,
-        300
-      ]
+      "position": [2180, 300]
     },
     {
       "parameters": {
@@ -368,10 +338,7 @@
       "name": "Memory Store Prep",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        2400,
-        300
-      ]
+      "position": [2400, 300]
     },
     {
       "parameters": {
@@ -407,10 +374,7 @@
       "name": "Memory Store",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        2620,
-        300
-      ]
+      "position": [2620, 300]
     },
     {
       "parameters": {
@@ -420,10 +384,7 @@
       "name": "Response Builder",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        2840,
-        300
-      ]
+      "position": [2840, 300]
     },
     {
       "parameters": {
@@ -445,10 +406,7 @@
       "name": "HTTP Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [
-        3060,
-        300
-      ]
+      "position": [3060, 300]
     },
     {
       "parameters": {
@@ -478,12 +436,17 @@
       "name": "Embed Query",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        770,
-        300
-      ],
-      "continueOnFail": true,
-      "notes": "Real 768-dim embedding via Ollama nomic-embed-text. continueOnFail=true so workflow proceeds with null embedding if Ollama unavailable."
+      "position": [770, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// EMBEDDING VALIDATION GATE \u2014 HARD STOP ON FAILURE\n// Expected: 768-dim float32 vector from nomic-embed-text\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\nconst embedding = $('Embed Query')?.item?.json?.embedding ||\n                  $('Embed Query')?.item?.json?.embeddings?.[0] ||\n                  null;\n\nif (!embedding) {\n  throw new Error('EMBEDDING CRITICAL FAILURE: No embedding vector received from Ollama. Check that nomic-embed-text is loaded.');\n}\n\nif (!Array.isArray(embedding)) {\n  throw new Error(`EMBEDDING CRITICAL FAILURE: Expected array, received ${typeof embedding}.`);\n}\n\nif (embedding.length !== 768) {\n  throw new Error(`EMBEDDING CRITICAL FAILURE: Expected 768 dimensions, received ${embedding.length}. Wrong model?`);\n}\n\nconst hasInvalid = embedding.some(v => !Number.isFinite(v));\nif (hasInvalid) {\n  throw new Error('EMBEDDING CRITICAL FAILURE: Vector contains NaN or Infinity \u2014 Ollama returned corrupt data.');\n}\n\nreturn [{ json: { embedding, validated: true, dimension: 768, timestamp: new Date().toISOString() } }];\n"
+      },
+      "id": "node-embed-validate",
+      "name": "Embedding Validation Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [990, 300]
     }
   ],
   "connections": {
@@ -687,6 +650,17 @@
       ]
     },
     "Embed Query": {
+      "main": [
+        [
+          {
+            "node": "Embedding Validation Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embedding Validation Gate": {
       "main": [
         [
           {
