@@ -12,10 +12,7 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [
-        200,
-        400
-      ],
+      "position": [200, 400],
       "webhookId": "ollama-tri-model"
     },
     {
@@ -26,10 +23,7 @@
       "name": "Prepare Prompt",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        440,
-        400
-      ]
+      "position": [440, 400]
     },
     {
       "parameters": {
@@ -59,10 +53,7 @@
       "name": "DeepSeek-R1 (Reasoning)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        720,
-        180
-      ]
+      "position": [720, 180]
     },
     {
       "parameters": {
@@ -92,10 +83,7 @@
       "name": "Qwen3 (Analysis)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        720,
-        400
-      ]
+      "position": [720, 400]
     },
     {
       "parameters": {
@@ -125,10 +113,7 @@
       "name": "Kimi K2 (Thinking)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        720,
-        620
-      ]
+      "position": [720, 620]
     },
     {
       "parameters": {
@@ -140,10 +125,7 @@
       "name": "Merge Model Responses",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
-      "position": [
-        1000,
-        400
-      ]
+      "position": [1000, 400]
     },
     {
       "parameters": {
@@ -153,10 +135,7 @@
       "name": "Score & Select Best",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1240,
-        400
-      ]
+      "position": [1240, 400]
     },
     {
       "parameters": {
@@ -192,10 +171,7 @@
       "name": "Log to ai_traces",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        1480,
-        280
-      ]
+      "position": [1480, 280]
     },
     {
       "parameters": {
@@ -209,10 +185,7 @@
       "name": "HTTP Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
-      "position": [
-        1480,
-        520
-      ]
+      "position": [1480, 520]
     }
   ],
   "connections": {

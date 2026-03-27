@@ -13,19 +13,14 @@
           "value": "Apex",
           "mode": "name"
         },
-        "events": [
-          "pull_request"
-        ],
+        "events": ["pull_request"],
         "options": {}
       },
       "id": "github-trigger-1",
       "name": "GitHub PR Trigger",
       "type": "n8n-nodes-base.githubTrigger",
       "typeVersion": 1,
-      "position": [
-        192,
-        400
-      ],
+      "position": [192, 400],
       "webhookId": "github-pr-webhook",
       "credentials": {
         "githubApi": {
@@ -60,10 +55,7 @@
       "name": "Fetch Code Diff",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        384,
-        400
-      ]
+      "position": [384, 400]
     },
     {
       "parameters": {
@@ -73,15 +65,12 @@
       "name": "Prepare Prompts",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        592,
-        400
-      ]
+      "position": [592, 400]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ ($env.OLLAMA_BASE_URL || 'https://api.ollama.ai') + '/api/generate' }}",
+        "url": "={{ $env.OLLAMA_BASE_URL + '/api/generate' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -106,10 +95,7 @@
       "name": "DeepSeek-R1 (Security)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        800,
-        208
-      ],
+      "position": [800, 208],
       "retryOnFail": {
         "active": true,
         "maxTries": 3,
@@ -119,7 +105,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ ($env.OLLAMA_BASE_URL || 'https://api.ollama.ai') + '/api/generate' }}",
+        "url": "={{ $env.OLLAMA_BASE_URL + '/api/generate' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -144,10 +130,7 @@
       "name": "Qwen3.5 (Architecture)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        800,
-        400
-      ],
+      "position": [800, 400],
       "retryOnFail": {
         "active": true,
         "maxTries": 3,
@@ -157,7 +140,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ ($env.OLLAMA_BASE_URL || 'https://api.ollama.ai') + '/api/generate' }}",
+        "url": "={{ $env.OLLAMA_BASE_URL + '/api/generate' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -182,10 +165,7 @@
       "name": "Kimi K2 (Product)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        800,
-        608
-      ],
+      "position": [800, 608],
       "retryOnFail": {
         "active": true,
         "maxTries": 3,
@@ -200,10 +180,7 @@
       "name": "Strip Think Tags",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1008,
-        400
-      ]
+      "position": [1008, 400]
     },
     {
       "parameters": {
@@ -214,10 +191,7 @@
       "name": "Merge Model Responses",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3,
-      "position": [
-        1200,
-        400
-      ],
+      "position": [1200, 400],
       "numberOfInputs": 3
     },
     {
@@ -228,10 +202,7 @@
       "name": "Score & Consensus",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1408,
-        400
-      ]
+      "position": [1408, 400]
     },
     {
       "parameters": {
@@ -267,10 +238,7 @@
       "name": "Log to Supabase",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        1600,
-        304
-      ]
+      "position": [1600, 304]
     },
     {
       "parameters": {
@@ -292,10 +260,7 @@
       "name": "Post Review to GitHub PR",
       "type": "n8n-nodes-base.github",
       "typeVersion": 1,
-      "position": [
-        1600,
-        512
-      ],
+      "position": [1600, 512],
       "credentials": {
         "githubApi": {
           "id": "githubApi",

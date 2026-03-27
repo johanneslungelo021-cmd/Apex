@@ -1,5 +1,5 @@
 {
-  "name": "RAG Pipeline – Kimi Final (Fixed)",
+  "name": "RAG Pipeline \u2013 Kimi Final (Fixed)",
   "nodes": [
     {
       "parameters": {
@@ -12,10 +12,7 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [
-        200,
-        300
-      ],
+      "position": [200, 300],
       "webhookId": "rag-pipeline"
     },
     {
@@ -26,10 +23,7 @@
       "name": "PII Filter",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        420,
-        300
-      ]
+      "position": [420, 300]
     },
     {
       "parameters": {
@@ -39,10 +33,7 @@
       "name": "Sig Validator",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        640,
-        300
-      ]
+      "position": [640, 300]
     },
     {
       "parameters": {
@@ -67,17 +58,14 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ query_embedding: $json.body.embedding || new Array(768).fill(0), match_count: 10, match_threshold: 0.5 }) }}",
+        "jsonBody": "={{ JSON.stringify({ query_embedding: $('Embed Query').item.json.embedding || $json.body.embedding || null, match_count: 10, match_threshold: 0.5 }) }}",
         "options": {}
       },
       "id": "node-4-memory-retrieval",
       "name": "Memory Retrieval",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        860,
-        300
-      ]
+      "position": [860, 300]
     },
     {
       "parameters": {
@@ -230,10 +218,7 @@
       "name": "Model Router",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
-      "position": [
-        1080,
-        300
-      ]
+      "position": [1080, 300]
     },
     {
       "parameters": {
@@ -261,10 +246,7 @@
       "name": "Reranker",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        1300,
-        300
-      ]
+      "position": [1300, 300]
     },
     {
       "parameters": {
@@ -274,10 +256,7 @@
       "name": "Top-5 Filter",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1520,
-        300
-      ]
+      "position": [1520, 300]
     },
     {
       "parameters": {
@@ -303,10 +282,7 @@
       "name": "LLM Call",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        1740,
-        300
-      ]
+      "position": [1740, 300]
     },
     {
       "parameters": {
@@ -316,10 +292,7 @@
       "name": "Eval Gate",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1960,
-        300
-      ]
+      "position": [1960, 300]
     },
     {
       "parameters": {
@@ -355,23 +328,17 @@
       "name": "Trace Logger",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        2180,
-        300
-      ]
+      "position": [2180, 300]
     },
     {
       "parameters": {
-        "jsCode": "// ═══════════════════════════════════════════════════════════════════════════\n// 768-Dim Embedding Validation (Critical Fix)\n// ═══════════════════════════════════════════════════════════════════════════\n// Before writing to Supabase, validate embedding is present and 768 dimensions\n\nconst embedding = $('Embed Response')?.item?.json?.embeddings?.[0] || null;\n\nif (!embedding || embedding.length !== 768) {\n  throw new Error(`Vector Validation Failed: Expected 768 dimensions, received ${embedding ? embedding.length : 'null'}.`);\n}\n\n// Proceed with validated embedding\nconst evalResult = $('Eval Gate').item.json;\nconst content = $('Sig Validator').item.json.body.query + ' => ' + (typeof evalResult.answer === 'string' ? evalResult.answer.substring(0, 500) : JSON.stringify(evalResult.answer).substring(0, 500));\n\nreturn [{ json: {\n  type: evalResult.eval_passed ? 'win' : 'loss',\n  content: content,\n  score: evalResult.faithfulness_score || 0,\n  embedding: embedding\n}}];"
+        "jsCode": "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// 768-Dim Embedding Validation (Critical Fix)\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// Before writing to Supabase, validate embedding is present and 768 dimensions\n\nconst embedding = $('Embed Response')?.item?.json?.embeddings?.[0] || null;\n\nif (!embedding || embedding.length !== 768) {\n  throw new Error(`Vector Validation Failed: Expected 768 dimensions, received ${embedding ? embedding.length : 'null'}.`);\n}\n\n// Proceed with validated embedding\nconst evalResult = $('Eval Gate').item.json;\nconst content = $('Sig Validator').item.json.body.query + ' => ' + (typeof evalResult.answer === 'string' ? evalResult.answer.substring(0, 500) : JSON.stringify(evalResult.answer).substring(0, 500));\n\nreturn [{ json: {\n  type: evalResult.eval_passed ? 'win' : 'loss',\n  content: content,\n  score: evalResult.faithfulness_score || 0,\n  embedding: embedding\n}}];"
       },
       "id": "node-11-memory-store-prep",
       "name": "Memory Store Prep",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        2400,
-        300
-      ]
+      "position": [2400, 300]
     },
     {
       "parameters": {
@@ -407,10 +374,7 @@
       "name": "Memory Store",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        2620,
-        300
-      ]
+      "position": [2620, 300]
     },
     {
       "parameters": {
@@ -420,10 +384,7 @@
       "name": "Response Builder",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        2840,
-        300
-      ]
+      "position": [2840, 300]
     },
     {
       "parameters": {
@@ -445,10 +406,39 @@
       "name": "HTTP Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [
-        3060,
-        300
-      ]
+      "position": [3060, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.OLLAMA_BASE_URL + '/api/embeddings' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer ={{ $env.OLLAMA_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'nomic-embed-text', prompt: $('Sig Validator').item.json.body.query || $('Sig Validator').item.json.body.text || '' }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "node-embed-query",
+      "name": "Embed Query",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [770, 300],
+      "continueOnFail": true,
+      "notes": "Real 768-dim embedding via Ollama nomic-embed-text. continueOnFail=true so workflow proceeds with null embedding if Ollama unavailable."
     }
   ],
   "connections": {
@@ -478,7 +468,7 @@
       "main": [
         [
           {
-            "node": "Memory Retrieval",
+            "node": "Embed Query",
             "type": "main",
             "index": 0
           }
@@ -645,6 +635,17 @@
         [
           {
             "node": "HTTP Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embed Query": {
+      "main": [
+        [
+          {
+            "node": "Memory Retrieval",
             "type": "main",
             "index": 0
           }

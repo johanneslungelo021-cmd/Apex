@@ -12,10 +12,7 @@
       "name": "SuperZ Moltcorp Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
-      "position": [
-        200,
-        400
-      ],
+      "position": [200, 400],
       "webhookId": "91b79ccd-44fb-40c6-8f5a-058f65f19ad3"
     },
     {
@@ -26,10 +23,7 @@
       "name": "Prepare Prompts",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        440,
-        400
-      ]
+      "position": [440, 400]
     },
     {
       "parameters": {
@@ -60,10 +54,7 @@
       "name": "DeepSeek-R1 (Reasoning)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        720,
-        180
-      ]
+      "position": [720, 180]
     },
     {
       "parameters": {
@@ -94,10 +85,7 @@
       "name": "Qwen3.5 (Analysis)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        720,
-        400
-      ]
+      "position": [720, 400]
     },
     {
       "parameters": {
@@ -128,10 +116,7 @@
       "name": "Kimi K2 (Thinking)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        720,
-        620
-      ]
+      "position": [720, 620]
     },
     {
       "parameters": {
@@ -141,10 +126,7 @@
       "name": "Strip Think Tags & Label",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        960,
-        400
-      ]
+      "position": [960, 400]
     },
     {
       "parameters": {
@@ -154,10 +136,7 @@
       "name": "Merge Model Responses",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
-      "position": [
-        1200,
-        400
-      ]
+      "position": [1200, 400]
     },
     {
       "parameters": {
@@ -167,10 +146,7 @@
       "name": "Weighted Score & Hard-Fail Gate",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1440,
-        400
-      ]
+      "position": [1440, 400]
     },
     {
       "parameters": {
@@ -206,10 +182,7 @@
       "name": "Log to ai_traces",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        1680,
-        260
-      ]
+      "position": [1680, 260]
     },
     {
       "parameters": {
@@ -223,10 +196,7 @@
       "name": "Return to SuperZ",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
-      "position": [
-        1680,
-        540
-      ]
+      "position": [1680, 540]
     }
   ],
   "connections": {
