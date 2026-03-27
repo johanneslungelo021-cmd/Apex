@@ -14,13 +14,26 @@
           "mode": "name",
           "value": "Apex"
         },
+ apex-fix
         "events": ["pull_request"]
+
+        "events": [
+          "pull_request"
+        ]
+ main
       },
       "id": "gh-trigger-1",
       "name": "GitHub PR Trigger",
       "type": "n8n-nodes-base.githubTrigger",
       "typeVersion": 1,
+ apex-fix
       "position": [200, 400],
+
+      "position": [
+        200,
+        400
+      ],
+ main
       "credentials": {
         "githubApi": {
           "id": "githubApi",
@@ -57,7 +70,14 @@
       "name": "Fetch PR Diff",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
+ apex-fix
       "position": [440, 400]
+
+      "position": [
+        440,
+        400
+      ]
+ main
     },
     {
       "parameters": {
@@ -67,7 +87,14 @@
       "name": "Prepare Prompts",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
+ apex-fix
       "position": [680, 400]
+
+      "position": [
+        680,
+        400
+      ]
+ main
     },
     {
       "parameters": {
@@ -97,7 +124,14 @@
       "name": "DeepSeek-R1 (Reasoning)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
+ apex-fix
       "position": [960, 180]
+
+      "position": [
+        960,
+        180
+      ]
+ main
     },
     {
       "parameters": {
@@ -127,7 +161,14 @@
       "name": "Qwen3 (Analysis)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
+ apex-fix
       "position": [960, 400]
+
+      "position": [
+        960,
+        400
+      ]
+ main
     },
     {
       "parameters": {
@@ -157,7 +198,14 @@
       "name": "Kimi K2 (Thinking)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
+ apex-fix
       "position": [960, 620]
+
+      "position": [
+        960,
+        620
+      ]
+ main
     },
     {
       "parameters": {
@@ -167,7 +215,14 @@
       "name": "Strip Think Tags & Label",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
+ apex-fix
       "position": [1200, 400]
+
+      "position": [
+        1200,
+        400
+      ]
+ main
     },
     {
       "parameters": {
@@ -177,7 +232,14 @@
       "name": "Merge Model Responses",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
+ apex-fix
       "position": [1440, 400]
+
+      "position": [
+        1440,
+        400
+      ]
+ main
     },
     {
       "parameters": {
@@ -187,7 +249,14 @@
       "name": "Weighted Score & Hard-Fail Gate",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
+ apex-fix
       "position": [1680, 400]
+
+      "position": [
+        1680,
+        400
+      ]
+ main
     },
     {
       "parameters": {
@@ -223,7 +292,14 @@
       "name": "Log to ai_traces",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
+ apex-fix
       "position": [1920, 200]
+
+      "position": [
+        1920,
+        200
+      ]
+ main
     },
     {
       "parameters": {
@@ -247,7 +323,14 @@
       "name": "Post Review to GitHub",
       "type": "n8n-nodes-base.github",
       "typeVersion": 1.1,
+ apex-fix
       "position": [1920, 600],
+
+      "position": [
+        1920,
+        600
+      ],
+ main
       "credentials": {
         "githubApi": {
           "id": "githubApi",
@@ -380,4 +463,8 @@
     "timezone": "Africa/Johannesburg"
   },
   "pinData": {}
+ apex-fix
 }
+
+}
+ main

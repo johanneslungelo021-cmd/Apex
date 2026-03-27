@@ -406,7 +406,14 @@
       "name": "HTTP Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
+ apex-fix
       "position": [3060, 300]
+
+      "position": [
+        3060,
+        300
+      ]
+ main
     },
     {
       "parameters": {
@@ -436,7 +443,14 @@
       "name": "Embed Query",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
+ apex-fix
       "position": [770, 300],
+
+      "position": [
+        770,
+        300
+      ],
+ main
       "continueOnFail": true,
       "notes": "Real 768-dim embedding via Ollama nomic-embed-text. continueOnFail=true so workflow proceeds with null embedding if Ollama unavailable."
     }
