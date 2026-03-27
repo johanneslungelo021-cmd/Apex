@@ -29,7 +29,7 @@ jobs:
       - name: Verify function
         run: |
           curl -s -o /tmp/reranker_test.txt -w "HTTP %{http_code}" \
-            -X POST "https://${{ secrets.SUPABASE_PROJECT_REF }}.supabase.co/functions/v1/reranker" \
+            -X POST "https://$SUPABASE_PROJECT_REF.supabase.co/functions/v1/reranker" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
             -H "Content-Type: application/json" \
             -d '{"query":"test payment","documents":[{"id":"1","content":"payment processing system"}]}'

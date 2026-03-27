@@ -1,7 +1,7 @@
 # ============================================
 # Security Regression Tests
 # ============================================
-# Runs on every push to digital-apex and main branches.
+# Runs on every push to the main branch.
 # Validates critical security patterns are present.
 # ============================================
 

@@ -240,7 +240,9 @@ jobs:
               fi
 
               # Check for proper function termination (use OR REPLACE to avoid matching CREATE TRIGGER ... EXECUTE FUNCTION)
-              if grep -q "CREATE\( OR REPLACE\)\? FUNCTION" "$file" && ! grep -q "LANGUAGE plpgsql\|LANGUAGE sql" "$file"; then
+              # Use -Eiq for extended regex + case-insensitive + quiet; [[:space:]]+ tolerates any whitespace
+              if grep -Eiq '\bCREATE([[:space:]]+OR[[:space:]]+REPLACE)?[[:space:]]+FUNCTION\b' "$file" \
+                && ! grep -Eiq '\bLANGUAGE[[:space:]]+(plpgsql|sql)\b' "$file"; then
                 echo "❌ FAIL: Function without LANGUAGE declaration in $file"
                 exit 1
               fi
@@ -462,46 +464,50 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Verify SECURITY DEFINER functions are secured
+      - name: "Layer 5: Deterministic SECURITY DEFINER Audit (Fail-Closed)"
         run: |
-          echo "Checking SECURITY DEFINER function security..."
+          echo "🔒 Commencing strict, comment-stripped security audit..."
+          FAILED=0
 
-          # Check if migration 017 exists (centralized security hardening)
-          if [ -f "supabase/migrations/017_security_revokes.sql" ]; then
-            echo "✅ Found centralized security migration 017_security_revokes.sql"
-            
-            # Verify it contains REVOKE statements
-            REVOKE_COUNT=$(grep -c "REVOKE ALL ON FUNCTION" supabase/migrations/017_security_revokes.sql 2>/dev/null || echo "0")
-            GRANT_COUNT=$(grep -c "GRANT EXECUTE ON FUNCTION" supabase/migrations/017_security_revokes.sql 2>/dev/null || echo "0")
-            
-            echo "Found $REVOKE_COUNT REVOKE statements and $GRANT_COUNT GRANT statements in migration 017"
-            
-            if [ "$REVOKE_COUNT" -ge 10 ]; then
-              echo "✅ PASS: Migration 017 contains comprehensive REVOKE statements ($REVOKE_COUNT found)"
-              echo "✅ All SECURITY DEFINER functions are properly secured via centralized migration"
-              exit 0
-            else
-              echo "❌ FAIL: Migration 017 exists but has insufficient REVOKE statements ($REVOKE_COUNT found, expected >= 10)"
-              exit 1
-            fi
+          # Step 1: Combine all migrations and strip ALL SQL comments (-- and /* */)
+          # This prevents comment-bypass attacks where REVOKE is commented out.
+          cat supabase/migrations/*.sql | \
+          perl -0777 -pe 's/--.*?\n/\n/g; s/\/\*.*?\*\///gs' > clean_migrations.tmp.sql
+
+          # Step 2: Extract exact names of EVERY function declared with SECURITY DEFINER.
+          # Perl reads across line breaks — catches SECURITY DEFINER declared lines below CREATE FUNCTION.
+          SEC_DEF_FUNCS=$(perl -0777 -ne \
+            'while (/CREATE(?:\s+OR\s+REPLACE)?\s+FUNCTION\s+([a-zA-Z0-9_.]+).*?SECURITY DEFINER/gis) { print "$1\n" }' \
+            clean_migrations.tmp.sql | sort -u)
+
+          if [ -z "$SEC_DEF_FUNCS" ]; then
+            echo "ℹ️ No SECURITY DEFINER functions detected."
+          else
+            echo "Detected elevated SECURITY DEFINER functions:"
+            echo "$SEC_DEF_FUNCS"
+            echo "---"
+
+            # Step 3: For each function, verify an uncommented REVOKE FROM PUBLIC exists.
+            for FUNC in $SEC_DEF_FUNCS; do
+              BASE_FUNC=$(echo "$FUNC" | cut -d'(' -f1)
+              if ! grep -iqP "REVOKE\s+(ALL|EXECUTE)\s+ON\s+FUNCTION\s+${BASE_FUNC}(?:\(.*?\))?\s+FROM\s+PUBLIC" \
+                clean_migrations.tmp.sql; then
+                echo "❌ FATAL: '$BASE_FUNC' is SECURITY DEFINER but missing a REVOKE FROM PUBLIC"
+                FAILED=1
+              else
+                echo "✅ SECURED: $BASE_FUNC"
+              fi
+            done
           fi
 
-          # Fallback: Check each file individually (legacy behavior)
-          DEFINER_FILES=$(grep -l "SECURITY DEFINER" supabase/migrations/*.sql 2>/dev/null)
+          rm -f clean_migrations.tmp.sql
 
-          for file in $DEFINER_FILES; do
-            echo "Checking $file..."
-
-            # Each SECURITY DEFINER should have REVOKE FROM PUBLIC
-            if grep -q "REVOKE.*FROM PUBLIC\|REVOKE ALL.*FROM PUBLIC" "$file"; then
-              echo "✅ PASS: $file has REVOKE FROM PUBLIC"
-            else
-              echo "❌ FAIL: SECURITY DEFINER in $file without REVOKE FROM PUBLIC"
-              exit 1
-            fi
-          done
-
-          echo "✅ All SECURITY DEFINER functions are properly secured"
+          # Step 4: Hard-stop — zero tolerance.
+          if [ "$FAILED" -eq 1 ]; then
+            echo "🚨 SYSTEM HALT: Open RPC vulnerability detected. Deployment blocked."
+            exit 1
+          fi
+          echo "🛡️ Zero-Trust Gate Passed: All elevated functions are definitively locked."
 
   # ═══════════════════════════════════════════════════════════════════════════════
   # BUILD VALIDATION
