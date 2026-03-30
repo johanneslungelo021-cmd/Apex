@@ -14,13 +14,18 @@
           "mode": "name",
           "value": "Apex"
         },
-        "events": ["pull_request"]
+        "events": [
+          "pull_request"
+        ]
       },
       "id": "gh-trigger-1",
       "name": "GitHub PR Trigger",
       "type": "n8n-nodes-base.githubTrigger",
       "typeVersion": 1,
-      "position": [200, 400],
+      "position": [
+        200,
+        400
+      ],
       "credentials": {
         "githubApi": {
           "id": "githubApi",
@@ -57,7 +62,10 @@
       "name": "Fetch PR Diff",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [440, 400]
+      "position": [
+        440,
+        400
+      ]
     },
     {
       "parameters": {
@@ -67,7 +75,10 @@
       "name": "Prepare Prompts",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [680, 400]
+      "position": [
+        680,
+        400
+      ]
     },
     {
       "parameters": {
@@ -97,7 +108,10 @@
       "name": "DeepSeek-R1 (Reasoning)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [960, 180]
+      "position": [
+        960,
+        180
+      ]
     },
     {
       "parameters": {
@@ -127,7 +141,10 @@
       "name": "Qwen3 (Analysis)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [960, 400]
+      "position": [
+        960,
+        400
+      ]
     },
     {
       "parameters": {
@@ -157,7 +174,10 @@
       "name": "Kimi K2 (Thinking)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [960, 620]
+      "position": [
+        960,
+        620
+      ]
     },
     {
       "parameters": {
@@ -167,7 +187,10 @@
       "name": "Strip Think Tags & Label",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1200, 400]
+      "position": [
+        1200,
+        400
+      ]
     },
     {
       "parameters": {
@@ -177,7 +200,10 @@
       "name": "Merge Model Responses",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
-      "position": [1440, 400]
+      "position": [
+        1440,
+        400
+      ]
     },
     {
       "parameters": {
@@ -187,7 +213,10 @@
       "name": "True 2/3 Consensus Gate",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1680, 400]
+      "position": [
+        1680,
+        400
+      ]
     },
     {
       "parameters": {
@@ -198,11 +227,11 @@
           "parameters": [
             {
               "name": "apikey",
-              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
             },
             {
               "name": "Authorization",
-              "value": "Bearer ={{ $env.SUPABASE_ANON_KEY }}"
+              "value": "Bearer ={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
             },
             {
               "name": "Content-Type",
@@ -216,14 +245,17 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ task: $('Prepare Prompts').item.json.task_type, query: $('Prepare Prompts').item.json.context, model: $json.best_model + ':tri-council', success: !$json.hard_fail && !$json.fallback_used, score: $json.best_score }) }}",
+        "jsonBody": "={{ JSON.stringify({ workflow_id: 'apex-sovereign-pr-review-v2', task: $('Prepare Prompts').item.json.task_type, query: $('Prepare Prompts').item.json.context, model: $json.best_model + ':tri-council', success: !$json.hard_fail && !$json.fallback_used, score: $json.best_score }) }}",
         "options": {}
       },
       "id": "log-8",
       "name": "Log to ai_traces",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1920, 200]
+      "position": [
+        1920,
+        200
+      ]
     },
     {
       "parameters": {
@@ -241,13 +273,16 @@
           "value": "={{ $('GitHub PR Trigger').item.json.repository.name }}"
         },
         "issueNumber": "={{ $('GitHub PR Trigger').item.json.pull_request.number }}",
-        "body": "={{ $('Weighted Score & Hard-Fail Gate').item.json.final_review }}"
+        "body": "={{ $('True 2/3 Consensus Gate').item.json.final_review }}"
       },
       "id": "post-gh-9",
       "name": "Post Review to GitHub",
       "type": "n8n-nodes-base.github",
       "typeVersion": 1.1,
-      "position": [1920, 600],
+      "position": [
+        1920,
+        600
+      ],
       "credentials": {
         "githubApi": {
           "id": "githubApi",
@@ -348,14 +383,14 @@
       "main": [
         [
           {
-            "node": "Weighted Score & Hard-Fail Gate",
+            "node": "True 2/3 Consensus Gate",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Weighted Score & Hard-Fail Gate": {
+    "True 2/3 Consensus Gate": {
       "main": [
         [
           {

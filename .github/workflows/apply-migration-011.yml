@@ -5,8 +5,6 @@ on:
 jobs:
   migrate:
     runs-on: ubuntu-latest
-    env:
-      SUPABASE_URL: https://${{ secrets.SUPABASE_PROJECT_REF }}.supabase.co
     steps:
       - uses: actions/checkout@v4
 

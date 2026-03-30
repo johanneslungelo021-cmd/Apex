@@ -57,7 +57,7 @@ jobs:
         run: |
           echo "Verifying tables created by migrations 010-015..."
           FAILED=0
-          for table in ai_traces agent_memory warden_consensus payment_routes audit_graph_nodes payment_routes; do
+          for table in ai_traces agent_memory warden_consensus payment_routes audit_graph_nodes; do
             STATUS=$(curl -sf -o /dev/null -w "%{http_code}" \
               "$SUPABASE_URL/rest/v1/${table}?select=*&limit=0" \
               -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \

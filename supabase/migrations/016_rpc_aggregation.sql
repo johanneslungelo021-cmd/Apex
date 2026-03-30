@@ -1,4 +1,4 @@
--- Migration 015: Server-side RPC aggregation for treasury and analytics
+-- Migration 016: Server-side RPC aggregation for treasury and analytics
 -- Fixes client-side truncation issues where limit() caps caused partial summaries
 
 -- ─────────────────────────────────────────────────────────────────────────────

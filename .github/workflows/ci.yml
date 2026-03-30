@@ -477,7 +477,7 @@ jobs:
           # Step 2: Extract exact names of EVERY function declared with SECURITY DEFINER.
           # Perl reads across line breaks — catches SECURITY DEFINER declared lines below CREATE FUNCTION.
           SEC_DEF_FUNCS=$(perl -0777 -ne \
-            'while (/CREATE(?:\s+OR\s+REPLACE)?\s+FUNCTION\s+([a-zA-Z0-9_.]+).*?SECURITY DEFINER/gis) { print "$1\n" }' \
+            'while (/CREATE(?:\s+OR\s+REPLACE)?\s+FUNCTION\s+([a-zA-Z0-9_.]+)(?:(?!CREATE\\s+(?:OR\\s+REPLACE\\s+)?FUNCTION).)*?SECURITY DEFINER/gis) { print "$1\n" }' \
             clean_migrations.tmp.sql | sort -u)
 
           if [ -z "$SEC_DEF_FUNCS" ]; then

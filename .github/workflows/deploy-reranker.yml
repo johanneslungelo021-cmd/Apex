@@ -28,9 +28,15 @@ jobs:
 
       - name: Verify function
         run: |
-          curl -s -o /tmp/reranker_test.txt -w "HTTP %{http_code}" \
+          HTTP_CODE=$(curl -s -o /tmp/reranker_test.txt -w "%{http_code}" \
             -X POST "https://$SUPABASE_PROJECT_REF.supabase.co/functions/v1/reranker" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
             -H "Content-Type: application/json" \
-            -d '{"query":"test payment","documents":[{"id":"1","content":"payment processing system"}]}'
+            -d '{"query":"test payment","documents":[{"id":"1","content":"payment processing system"}]}')
+          echo "HTTP $HTTP_CODE"
           cat /tmp/reranker_test.txt
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "::error::Reranker verification failed with HTTP $HTTP_CODE"
+            exit 1
+          fi
+          echo "✅ Reranker function verified"
