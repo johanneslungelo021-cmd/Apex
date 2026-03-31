@@ -1,4 +1,4 @@
--- Migration 015: Server-side RPC aggregation for treasury and analytics
+-- Migration 016: Server-side RPC aggregation for treasury and analytics
 -- Fixes client-side truncation issues where limit() caps caused partial summaries
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -165,7 +165,9 @@ GRANT EXECUTE ON FUNCTION public.get_recent_disbursements(INT) TO service_role;
 GRANT EXECUTE ON FUNCTION public.get_active_proposals(INT) TO service_role;
 
 -- Add comments documenting the precision requirements
-COMMENT ON FUNCTION public.get_treasury_summary() IS 
+COMMENT ON FUNCTION public.get_treasury_summary() IS
     'Returns accurate treasury totals without row limit truncation. All amounts use NUMERIC for financial precision.';
-COMMENT ON FUNCTION public.get_creator_analytics(UUID) IS 
+COMMENT ON FUNCTION public.get_creator_analytics(UUID) IS
     'Returns aggregated creator analytics without client-side processing. Callers should use NUMERIC types for amounts.';
+
+

@@ -44,7 +44,7 @@ permissions:
 
 env:
   NODE_VERSION: '20'
-  BUN_VERSION: 'latest'
+  BUN_VERSION: '1.3.10'
 
 jobs:
   # ═══════════════════════════════════════════════════════════════════════════════
@@ -239,8 +239,10 @@ jobs:
                 exit 1
               fi
 
-              # Check for proper function termination
-              if grep -q "CREATE.*FUNCTION" "$file" && ! grep -q "LANGUAGE plpgsql\|LANGUAGE sql" "$file"; then
+              # Check for proper function termination (use OR REPLACE to avoid matching CREATE TRIGGER ... EXECUTE FUNCTION)
+              # Use -Eiq for extended regex + case-insensitive + quiet; [[:space:]]+ tolerates any whitespace
+              if grep -Eiq '\bCREATE([[:space:]]+OR[[:space:]]+REPLACE)?[[:space:]]+FUNCTION\b' "$file" \
+                && ! grep -Eiq '\bLANGUAGE[[:space:]]+(plpgsql|sql)\b' "$file"; then
                 echo "❌ FAIL: Function without LANGUAGE declaration in $file"
                 exit 1
               fi
@@ -462,26 +464,50 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Verify SECURITY DEFINER functions are secured
+      - name: "Layer 5: Deterministic SECURITY DEFINER Audit (Fail-Closed)"
         run: |
-          echo "Checking SECURITY DEFINER function security..."
+          echo "🔒 Commencing strict, comment-stripped security audit..."
+          FAILED=0
 
-          # Find all SECURITY DEFINER functions
-          DEFINER_FILES=$(grep -l "SECURITY DEFINER" supabase/migrations/*.sql 2>/dev/null)
+          # Step 1: Combine all migrations and strip ALL SQL comments (-- and /* */)
+          # This prevents comment-bypass attacks where REVOKE is commented out.
+          cat supabase/migrations/*.sql | \
+          perl -0777 -pe 's/--.*?\n/\n/g; s/\/\*.*?\*\///gs' > clean_migrations.tmp.sql
 
-          for file in $DEFINER_FILES; do
-            echo "Checking $file..."
+          # Step 2: Extract exact names of EVERY function declared with SECURITY DEFINER.
+          # Perl reads across line breaks — catches SECURITY DEFINER declared lines below CREATE FUNCTION.
+          SEC_DEF_FUNCS=$(perl -0777 -ne \
+            'while (/CREATE(?:\s+OR\s+REPLACE)?\s+FUNCTION\s+([a-zA-Z0-9_.]+)(?:(?!CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION).)*?SECURITY DEFINER/gis) { print "$1\n" }' \
+            clean_migrations.tmp.sql | sort -u)
 
-            # Each SECURITY DEFINER should have REVOKE FROM PUBLIC
-            if grep -q "REVOKE.*FROM PUBLIC\|REVOKE ALL.*FROM PUBLIC" "$file"; then
-              echo "✅ PASS: $file has REVOKE FROM PUBLIC"
-            else
-              echo "❌ FAIL: SECURITY DEFINER in $file without REVOKE FROM PUBLIC"
-              exit 1
-            fi
-          done
+          if [ -z "$SEC_DEF_FUNCS" ]; then
+            echo "ℹ️ No SECURITY DEFINER functions detected."
+          else
+            echo "Detected elevated SECURITY DEFINER functions:"
+            echo "$SEC_DEF_FUNCS"
+            echo "---"
 
-          echo "✅ All SECURITY DEFINER functions are properly secured"
+            # Step 3: For each function, verify an uncommented REVOKE FROM PUBLIC exists.
+            for FUNC in $SEC_DEF_FUNCS; do
+              BASE_FUNC=$(echo "$FUNC" | cut -d'(' -f1)
+              if ! grep -iqP "REVOKE\s+(ALL|EXECUTE)\s+ON\s+FUNCTION\s+${BASE_FUNC}(?:\(.*?\))?\s+FROM\s+PUBLIC" \
+                clean_migrations.tmp.sql; then
+                echo "❌ FATAL: '$BASE_FUNC' is SECURITY DEFINER but missing a REVOKE FROM PUBLIC"
+                FAILED=1
+              else
+                echo "✅ SECURED: $BASE_FUNC"
+              fi
+            done
+          fi
+
+          rm -f clean_migrations.tmp.sql
+
+          # Step 4: Hard-stop — zero tolerance.
+          if [ "$FAILED" -eq 1 ]; then
+            echo "🚨 SYSTEM HALT: Open RPC vulnerability detected. Deployment blocked."
+            exit 1
+          fi
+          echo "🛡️ Zero-Trust Gate Passed: All elevated functions are definitively locked."
 
   # ═══════════════════════════════════════════════════════════════════════════════
   # BUILD VALIDATION

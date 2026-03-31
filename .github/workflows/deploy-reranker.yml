@@ -10,6 +10,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
     steps:
       - uses: actions/checkout@v4
 
@@ -20,15 +22,21 @@ jobs:
 
       - name: Deploy reranker function
         run: |
-          supabase functions deploy reranker --project-ref xdkojaigrjhzjkqxguxh --no-verify-jwt
+          supabase functions deploy reranker --project-ref $SUPABASE_PROJECT_REF --no-verify-jwt
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
       - name: Verify function
         run: |
-          curl -s -o /tmp/reranker_test.txt -w "HTTP %{http_code}" \
-            -X POST "https://xdkojaigrjhzjkqxguxh.supabase.co/functions/v1/reranker" \
+          HTTP_CODE=$(curl -s -o /tmp/reranker_test.txt -w "%{http_code}" \
+            -X POST "https://$SUPABASE_PROJECT_REF.supabase.co/functions/v1/reranker" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
             -H "Content-Type: application/json" \
-            -d '{"query":"test payment","documents":[{"id":"1","content":"payment processing system"}]}'
+            -d '{"query":"test payment","documents":[{"id":"1","content":"payment processing system"}]}')
+          echo "HTTP $HTTP_CODE"
           cat /tmp/reranker_test.txt
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "::error::Reranker verification failed with HTTP $HTTP_CODE"
+            exit 1
+          fi
+          echo "✅ Reranker function verified"

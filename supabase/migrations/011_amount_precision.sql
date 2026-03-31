@@ -46,3 +46,5 @@ EXCEPTION
   WHEN OTHERS                THEN RETURN jsonb_build_object('error', SQLERRM, 'code', SQLSTATE);
 END;
 $$;
+
+

@@ -20,7 +20,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst body = input.body || input;\nconst text = JSON.stringify(body);\n\nconst patterns = [\n  { regex: /\\b\\d{13}\\b/g, label: '[REDACTED_SA_ID]' },\n  { regex: /\\b\\d{6,17}\\b(?=.*bank)/gi, label: '[REDACTED_BANK_ACCOUNT]' },\n  { regex: /[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}/g, label: '[REDACTED_EMAIL]' },\n  { regex: /(?:\\+27|0)[6-8]\\d{8}/g, label: '[REDACTED_SA_PHONE]' },\n  { regex: /\\b[A-Z]{1}\\d{7}\\b/g, label: '[REDACTED_PASSPORT]' },\n  { regex: /\\b[A-Z]{2}\\d{2}[A-Z0-9]{4,}\\d{7,}[A-Z0-9]{0,3}\\b/g, label: '[REDACTED_IBAN]' },\n  { regex: /\\b[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?\\b/g, label: '[REDACTED_SWIFT]' },\n  { regex: /\\b(?:\\d[ -]*?){13,19}\\b/g, label: '[REDACTED_CREDIT_CARD]' },\n  { regex: /\\b(0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|r[0-9a-zA-Z]{24,34}|T[A-Za-z1-9]{33})\\b/g, label: '[REDACTED_CRYPTO_WALLET]' },\n  { regex: /(?:sk[_-]live[_-][A-Za-z0-9]{20,}|Bearer\\s+[A-Za-z0-9._\\-]{20,}|api[_-]?key[=:]\\s*[A-Za-z0-9._\\-]{16,})/gi, label: '[REDACTED_API_KEY]' }\n];\n\nlet sanitized = text;\nfor (const p of patterns) {\n  sanitized = sanitized.replace(p.regex, p.label);\n}\n\nconst sanitizedBody = JSON.parse(sanitized);\nreturn [{ json: { ...input, body: sanitizedBody, _sanitized: true } }];"
+        "jsCode": "const input = $input.first().json;\nconst body = input.body || input;\nconst text = JSON.stringify(body);\n\nconst patterns = [\n  { regex: /\\b\\d{13}\\b/g, label: '[REDACTED_SA_ID]' },\n  { regex: /\\b\\d{6,17}\\b(?=.*bank)/gi, label: '[REDACTED_BANK_ACCOUNT]' },\n  { regex: /[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}/g, label: '[REDACTED_EMAIL]' },\n  { regex: /(?:\\+27|0)[6-8]\\d{8}/g, label: '[REDACTED_SA_PHONE]' },\n  { regex: /\\b[A-Z]{1}\\d{7}\\b/g, label: '[REDACTED_PASSPORT]' },\n  { regex: /\\b[A-Z]{2}\\d{2}[A-Z0-9]{4}\\d{7}[A-Z0-9]{0,3}\\b/g, label: '[REDACTED_IBAN]' },\n  { regex: /\\b[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?\\b/g, label: '[REDACTED_SWIFT]' },\n  { regex: /\\b(?:\\d[ -]*?){13,19}\\b/g, label: '[REDACTED_CREDIT_CARD]' },\n  { regex: /\\b(0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|r[0-9a-zA-Z]{24,34}|T[A-Za-z1-9]{33})\\b/g, label: '[REDACTED_CRYPTO_WALLET]' },\n  { regex: /(?:sk[_-]live[_-][A-Za-z0-9]{20,}|Bearer\\s+[A-Za-z0-9._\\-]{20,}|api[_-]?key[=:]\\s*[A-Za-z0-9._\\-]{16,})/gi, label: '[REDACTED_API_KEY]' }\n];\n\nlet sanitized = text;\nfor (const p of patterns) {\n  sanitized = sanitized.replace(p.regex, p.label);\n}\n\nconst sanitizedBody = JSON.parse(sanitized);\nreturn [{ json: { ...input, body: sanitizedBody, _sanitized: true } }];"
       },
       "id": "node-2-pii-filter",
       "name": "PII Filter",
@@ -67,7 +67,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ query_embedding: $('Embed Query').item.json.embedding || $json.body.embedding || null, match_count: 10, match_threshold: 0.5 }) }}",
+        "jsonBody": "={{ JSON.stringify({ query_embedding: $('Embedding Validation Gate').item.json.embedding || $json.body.embedding || null, match_count: 10, match_threshold: 0.5 }) }}",
         "options": {}
       },
       "id": "node-4-memory-retrieval",
@@ -362,7 +362,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// 768-Dim Embedding Validation (Critical Fix)\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// Before writing to Supabase, validate embedding is present and 768 dimensions\n\nconst embedding = $('Embed Response')?.item?.json?.embeddings?.[0] || null;\n\nif (!embedding || embedding.length !== 768) {\n  throw new Error(`Vector Validation Failed: Expected 768 dimensions, received ${embedding ? embedding.length : 'null'}.`);\n}\n\n// Proceed with validated embedding\nconst evalResult = $('Eval Gate').item.json;\nconst content = $('Sig Validator').item.json.body.query + ' => ' + (typeof evalResult.answer === 'string' ? evalResult.answer.substring(0, 500) : JSON.stringify(evalResult.answer).substring(0, 500));\n\nreturn [{ json: {\n  type: evalResult.eval_passed ? 'win' : 'loss',\n  content: content,\n  score: evalResult.faithfulness_score || 0,\n  embedding: embedding\n}}];"
+        "jsCode": "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// 768-Dim Embedding Validation (Critical Fix)\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// Before writing to Supabase, validate embedding is present and 768 dimensions\n\nconst embedding = $('Embed Query')?.item?.json?.embedding || null;\n\nif (!embedding || embedding.length !== 768) {\n  throw new Error(`Vector Validation Failed: Expected 768 dimensions, received ${embedding ? embedding.length : 'null'}.`);\n}\n\n// Proceed with validated embedding\nconst evalResult = $('Eval Gate').item.json;\nconst content = $('Sig Validator').item.json.body.query + ' => ' + (typeof evalResult.answer === 'string' ? evalResult.answer.substring(0, 500) : JSON.stringify(evalResult.answer).substring(0, 500));\n\nreturn [{ json: {\n  type: evalResult.eval_passed ? 'win' : 'loss',\n  content: content,\n  score: evalResult.faithfulness_score || 0,\n  embedding: embedding\n}}];"
       },
       "id": "node-11-memory-store-prep",
       "name": "Memory Store Prep",
@@ -453,7 +453,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.OLLAMA_BASE_URL + '/api/embeddings' }}",
+        "url": "={{ ($env.OLLAMA_BASE_URL || 'http://host.docker.internal:11434') + '/api/embeddings' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -482,8 +482,20 @@
         770,
         300
       ],
-      "continueOnFail": true,
-      "notes": "Real 768-dim embedding via Ollama nomic-embed-text. continueOnFail=true so workflow proceeds with null embedding if Ollama unavailable."
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// EMBEDDING VALIDATION GATE \u2014 HARD STOP ON FAILURE\n// Expected: 768-dim float32 vector from nomic-embed-text\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\nconst embedding = $('Embed Query')?.item?.json?.embedding ||\n                  $('Embed Query')?.item?.json?.embeddings?.[0] ||\n                  null;\n\nif (!embedding) {\n  throw new Error('EMBEDDING CRITICAL FAILURE: No embedding vector received from Ollama. Check that nomic-embed-text is loaded.');\n}\n\nif (!Array.isArray(embedding)) {\n  throw new Error(`EMBEDDING CRITICAL FAILURE: Expected array, received ${typeof embedding}.`);\n}\n\nif (embedding.length !== 768) {\n  throw new Error(`EMBEDDING CRITICAL FAILURE: Expected 768 dimensions, received ${embedding.length}. Wrong model?`);\n}\n\nconst hasInvalid = embedding.some(v => !Number.isFinite(v));\nif (hasInvalid) {\n  throw new Error('EMBEDDING CRITICAL FAILURE: Vector contains NaN or Infinity \u2014 Ollama returned corrupt data.');\n}\n\nreturn [{ json: { embedding, validated: true, dimension: 768, timestamp: new Date().toISOString() } }];\n"
+      },
+      "id": "node-embed-validate",
+      "name": "Embedding Validation Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        990,
+        300
+      ]
     }
   ],
   "connections": {
@@ -687,6 +699,17 @@
       ]
     },
     "Embed Query": {
+      "main": [
+        [
+          {
+            "node": "Embedding Validation Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embedding Validation Gate": {
       "main": [
         [
           {
