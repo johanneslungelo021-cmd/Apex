@@ -43,20 +43,29 @@ export function yieldToMain(): Promise<void> {
   // This is the gold standard: the browser resumes this coroutine at the same
   // priority as the original task, avoiding starvation.
   if (
-    typeof scheduler !== 'undefined' &&
-    typeof (scheduler as { yield?: SchedulerYield }).yield === 'function'
+    typeof scheduler !== "undefined" &&
+    typeof (scheduler as { yield?: SchedulerYield }).yield === "function"
   ) {
     return (scheduler as { yield: SchedulerYield }).yield();
   }
 
   // 2. scheduler.postTask() — Chrome 94+. Explicit user-visible priority.
   if (
-    typeof scheduler !== 'undefined' &&
-    typeof (scheduler as { postTask?: (fn: () => void, opts: { priority: string }) => Promise<void> }).postTask === 'function'
+    typeof scheduler !== "undefined" &&
+    typeof (
+      scheduler as {
+        postTask?: (
+          fn: () => void,
+          opts: { priority: string },
+        ) => Promise<void>;
+      }
+    ).postTask === "function"
   ) {
-    return (scheduler as {
-      postTask: (fn: () => void, opts: { priority: string }) => Promise<void>
-    }).postTask(() => {}, { priority: 'user-visible' });
+    return (
+      scheduler as {
+        postTask: (fn: () => void, opts: { priority: string }) => Promise<void>;
+      }
+    ).postTask(() => {}, { priority: "user-visible" });
   }
 
   // 3. MessageChannel — Safari / Firefox. MessageChannel callbacks execute

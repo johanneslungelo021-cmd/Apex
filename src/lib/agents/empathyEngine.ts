@@ -18,11 +18,11 @@
  * - Hick's Law: max 3 action choices per error (fewer = faster decisions)
  */
 
-import { empathyErrorCounter } from '../observability/pillar4Metrics';
+import { empathyErrorCounter } from "../observability/pillar4Metrics";
 
 export interface ApexError {
   code: string;
-  severity: 'low' | 'medium' | 'high' | 'critical';
+  severity: "low" | "medium" | "high" | "critical";
   technicalMessage: string;
   userContext?: {
     wasTransactionInvolved: boolean;
@@ -44,7 +44,7 @@ export interface HumanizedError {
     concept: string;
     explanation: string;
   };
-  emotionContext: 'cautionary' | 'encouraging';
+  emotionContext: "cautionary" | "encouraging";
   suggestedActions: SuggestedAction[];
 }
 
@@ -54,7 +54,7 @@ export interface HumanizedError {
  */
 export function humanizeError(error: ApexError): HumanizedError {
   const ts = new Date().toISOString();
-  const recovery = error.userContext?.estimatedRecoveryTime ?? '30 seconds';
+  const recovery = error.userContext?.estimatedRecoveryTime ?? "30 seconds";
   const inputSafe = error.userContext?.userInputPreserved ?? true;
 
   const handlers: Record<string, () => HumanizedError> = {
@@ -68,17 +68,17 @@ export function humanizeError(error: ApexError): HumanizedError {
         `Timestamp: ${ts}\n` +
         `Funds status: SAFE — no debit occurred.`,
       wisdomNote: {
-        concept: 'Payment Paths',
+        concept: "Payment Paths",
         explanation:
           `XRPL transactions travel through "paths" of connected currencies, like water finding routes ` +
           `through a river delta. When one path runs dry, we wait for liquidity to shift — which usually ` +
           `happens within seconds to minutes. This is the network protecting you from a bad exchange rate.`,
       },
-      emotionContext: 'cautionary',
+      emotionContext: "cautionary",
       suggestedActions: [
-        { label: 'Retry in 30 seconds', action: 'retry_delayed' },
-        { label: 'Adjust slippage tolerance', action: 'adjust_slippage' },
-        { label: 'Alert me when the path clears', action: 'monitor_path' },
+        { label: "Retry in 30 seconds", action: "retry_delayed" },
+        { label: "Adjust slippage tolerance", action: "adjust_slippage" },
+        { label: "Alert me when the path clears", action: "monitor_path" },
       ],
     }),
 
@@ -92,16 +92,19 @@ export function humanizeError(error: ApexError): HumanizedError {
         `Timestamp: ${ts}\n` +
         `Funds status: SAFE — no debit occurred.`,
       wisdomNote: {
-        concept: 'XRP Reserve',
+        concept: "XRP Reserve",
         explanation:
           `The XRPL requires every account to hold a small XRP reserve (currently 10 XRP base reserve + ` +
           `2 XRP per additional object). This protects the network from spam. Think of it as the minimum ` +
           `balance your account needs to stay open — like a bank's minimum balance requirement, but on-chain.`,
       },
-      emotionContext: 'cautionary',
+      emotionContext: "cautionary",
       suggestedActions: [
-        { label: 'Add more XRP to your account', action: 'add_funds' },
-        { label: 'Check current reserve requirements', action: 'check_reserves' },
+        { label: "Add more XRP to your account", action: "add_funds" },
+        {
+          label: "Check current reserve requirements",
+          action: "check_reserves",
+        },
       ],
     }),
 
@@ -116,16 +119,16 @@ export function humanizeError(error: ApexError): HumanizedError {
         `Timestamp: ${ts}\n` +
         `Retry recommended: Yes`,
       wisdomNote: {
-        concept: 'Network Resilience',
+        concept: "Network Resilience",
         explanation:
           `Decentralized networks don't have a single point of failure, but they can experience congestion — ` +
           `like rush hour traffic. The system queues your request rather than dropping it. ` +
           `Patience is built into the architecture.`,
       },
-      emotionContext: 'cautionary',
+      emotionContext: "cautionary",
       suggestedActions: [
-        { label: 'Retry now', action: 'retry_immediate' },
-        { label: 'Check network status', action: 'check_status' },
+        { label: "Retry now", action: "retry_immediate" },
+        { label: "Check network status", action: "check_status" },
       ],
     }),
 
@@ -138,11 +141,11 @@ export function humanizeError(error: ApexError): HumanizedError {
         `Error: Generation failed\n` +
         `Timestamp: ${ts}\n` +
         `Fallback: Attempting alternate model route`,
-      emotionContext: 'encouraging',
+      emotionContext: "encouraging",
       suggestedActions: [
-        { label: 'Try again', action: 'retry_generation' },
-        { label: 'Rephrase my question', action: 'rephrase_prompt' },
-        { label: 'Talk to a human', action: 'escalate_human' },
+        { label: "Try again", action: "retry_generation" },
+        { label: "Rephrase my question", action: "rephrase_prompt" },
+        { label: "Talk to a human", action: "escalate_human" },
       ],
     }),
 
@@ -154,9 +157,9 @@ export function humanizeError(error: ApexError): HumanizedError {
         `Error: 429 Rate Limited\n` +
         `Details: ${error.technicalMessage}\n` +
         `Timestamp: ${ts}`,
-      emotionContext: 'encouraging',
+      emotionContext: "encouraging",
       suggestedActions: [
-        { label: `Wait ${recovery} and retry`, action: 'retry_delayed' },
+        { label: `Wait ${recovery} and retry`, action: "retry_delayed" },
       ],
     }),
 
@@ -164,15 +167,15 @@ export function humanizeError(error: ApexError): HumanizedError {
       coreMessage:
         `The Scout Agent came back empty-handed on this one. ` +
         `That's not a reflection of what's available — it means we need to refine the search.` +
-        (inputSafe ? ' Your query is saved.' : ''),
+        (inputSafe ? " Your query is saved." : ""),
       technicalDetails:
         `Error: SCOUT_EMPTY\n` +
         `Details: Scout returned 0 verified opportunities\n` +
         `Timestamp: ${ts}`,
-      emotionContext: 'encouraging',
+      emotionContext: "encouraging",
       suggestedActions: [
-        { label: 'Search with different terms', action: 'refine_search' },
-        { label: 'Browse all categories', action: 'browse_categories' },
+        { label: "Search with different terms", action: "refine_search" },
+        { label: "Browse all categories", action: "browse_categories" },
       ],
     }),
 
@@ -185,35 +188,38 @@ export function humanizeError(error: ApexError): HumanizedError {
         `Details: ${error.technicalMessage}\n` +
         `Timestamp: ${ts}\n` +
         `Fallback: Using cached data`,
-      emotionContext: 'cautionary',
+      emotionContext: "cautionary",
       suggestedActions: [
-        { label: 'Try again in a minute', action: 'retry_delayed' },
-        { label: 'Continue with cached data', action: 'use_cache' },
+        { label: "Try again in a minute", action: "retry_delayed" },
+        { label: "Continue with cached data", action: "use_cache" },
       ],
     }),
 
     DEFAULT: () => ({
       coreMessage:
         `Something unexpected happened. I'm looking into it. ` +
-        (inputSafe ? 'Your input is saved — nothing was lost.' : ''),
+        (inputSafe ? "Your input is saved — nothing was lost." : ""),
       technicalDetails:
         `Error Code: ${error.code}\n` +
         `Details: ${error.technicalMessage}\n` +
         `Severity: ${error.severity}\n` +
         `Timestamp: ${ts}`,
-      emotionContext: 'cautionary',
+      emotionContext: "cautionary",
       suggestedActions: [
-        { label: 'Try again', action: 'retry_immediate' },
-        { label: 'Report this issue', action: 'report_error' },
+        { label: "Try again", action: "retry_immediate" },
+        { label: "Report this issue", action: "report_error" },
       ],
     }),
   };
 
-  const safeCode = error.code in handlers ? error.code : 'DEFAULT';
+  const safeCode = error.code in handlers ? error.code : "DEFAULT";
   const humanized = handlers[safeCode]();
 
   // Pillar 4: emit error humanization metric
-  empathyErrorCounter.add(1, { error_code: safeCode, severity: error.severity });
+  empathyErrorCounter.add(1, {
+    error_code: safeCode,
+    severity: error.severity,
+  });
 
   return humanized;
 }
@@ -222,11 +228,11 @@ export function humanizeError(error: ApexError): HumanizedError {
  * Returns a severity-appropriate display color class string.
  * Used by UI components to visually signal error weight.
  */
-export function severityToColorClass(severity: ApexError['severity']): string {
+export function severityToColorClass(severity: ApexError["severity"]): string {
   return {
-    low:      'border-zinc-500/30 bg-zinc-500/5',
-    medium:   'border-amber-500/30 bg-amber-500/5',
-    high:     'border-orange-500/30 bg-orange-500/5',
-    critical: 'border-red-500/30 bg-red-500/5',
+    low: "border-zinc-500/30 bg-zinc-500/5",
+    medium: "border-amber-500/30 bg-amber-500/5",
+    high: "border-orange-500/30 bg-orange-500/5",
+    critical: "border-red-500/30 bg-red-500/5",
   }[severity];
 }

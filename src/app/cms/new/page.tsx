@@ -1,2 +1,2 @@
-'use client';
-export { default } from '@/app/cms/editor';
+"use client";
+export { default } from "@/app/cms/editor";

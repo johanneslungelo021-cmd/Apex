@@ -12,11 +12,11 @@
  *
  * @module components/sentient/SentientCanvasScene
  */
-'use client';
+"use client";
 
-import { Suspense } from 'react';
-import { Canvas } from '@react-three/fiber';
-import EmotionalSwarm from '@/components/sentient/EmotionalSwarm';
+import { Suspense } from "react";
+import { Canvas } from "@react-three/fiber";
+import EmotionalSwarm from "@/components/sentient/EmotionalSwarm";
 
 /**
  * useIsLowBandwidth
@@ -35,7 +35,7 @@ import EmotionalSwarm from '@/components/sentient/EmotionalSwarm';
  * error.  Falls back to false (render canvas) on browsers without the API.
  */
 function useIsLowBandwidth(): boolean {
-  if (typeof navigator === 'undefined') return false;
+  if (typeof navigator === "undefined") return false;
   const conn = (
     navigator as Navigator & {
       connection?: { saveData?: boolean; effectiveType?: string };
@@ -44,8 +44,8 @@ function useIsLowBandwidth(): boolean {
   if (!conn) return false;
   return !!(
     conn.saveData ||
-    conn.effectiveType === '2g' ||
-    conn.effectiveType === 'slow-2g'
+    conn.effectiveType === "2g" ||
+    conn.effectiveType === "slow-2g"
   );
 }
 

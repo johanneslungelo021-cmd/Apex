@@ -1,8 +1,8 @@
 // src/hooks/useMagneticCursor.ts
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useSensoryPreferences } from './useSensoryPreferences';
+import { useState, useEffect } from "react";
+import { useSensoryPreferences } from "./useSensoryPreferences";
 
 export interface MagneticCursorState {
   x: number;
@@ -16,7 +16,7 @@ export function useMagneticCursor(): MagneticCursorState {
   const [isHovering, setIsHovering] = useState(false);
 
   useEffect(() => {
-    if (isTouchDevice || !motion || typeof window === 'undefined') return;
+    if (isTouchDevice || !motion || typeof window === "undefined") return;
 
     const updatePosition = (e: MouseEvent) => {
       setPosition({ x: e.clientX, y: e.clientY });
@@ -25,17 +25,17 @@ export function useMagneticCursor(): MagneticCursorState {
     const updateHoverState = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       const isInteractive = Boolean(
-        target.closest('button, a, input, [data-magnetic]')
+        target.closest("button, a, input, [data-magnetic]"),
       );
       setIsHovering(isInteractive);
     };
 
-    window.addEventListener('mousemove', updatePosition);
-    window.addEventListener('mouseover', updateHoverState);
+    window.addEventListener("mousemove", updatePosition);
+    window.addEventListener("mouseover", updateHoverState);
 
     return () => {
-      window.removeEventListener('mousemove', updatePosition);
-      window.removeEventListener('mouseover', updateHoverState);
+      window.removeEventListener("mousemove", updatePosition);
+      window.removeEventListener("mouseover", updateHoverState);
     };
   }, [motion, isTouchDevice]);
 

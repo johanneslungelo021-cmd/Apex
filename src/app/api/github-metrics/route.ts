@@ -1,18 +1,18 @@
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 /**
  * GitHub Metrics API Route
- * 
+ *
  * Fetches repository metrics from the GitHub API with caching support.
  * Provides stars, forks, issues, watchers, and other repository statistics.
- * 
+ *
  * @module api/github-metrics
  */
 
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
 
 /** Target GitHub repository for metrics collection */
-const GITHUB_REPO = 'johanneslungelo021-cmd/Apex';
+const GITHUB_REPO = "johanneslungelo021-cmd/Apex";
 
 /** GitHub API endpoint for repository data */
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}`;
@@ -54,17 +54,17 @@ const CACHE_TTL = 5 * 60 * 1000;
 
 /**
  * Handles GET requests for GitHub repository metrics.
- * 
+ *
  * Returns cached data if still valid, otherwise fetches fresh data from
  * the GitHub API. Supports optional authentication via GITHUB_TOKEN env
  * variable for higher rate limits (5000 req/hr vs 60 req/hr unauthenticated).
- * 
+ *
  * @returns JSON response with repository metrics
- * 
+ *
  * @example
  * // Request
  * GET /api/github-metrics
- * 
+ *
  * // Success response
  * {
  *   "stars": 42,
@@ -77,7 +77,7 @@ const CACHE_TTL = 5 * 60 * 1000;
  *   "description": "Apex - Sentient Interface",
  *   "language": "TypeScript"
  * }
- * 
+ *
  * // Error response (API unavailable)
  * {
  *   "stars": 0,
@@ -89,20 +89,20 @@ export async function GET(): Promise<Response> {
   try {
     // Check cache first
     const now = Date.now();
-    if (cachedMetrics.data && (now - cachedMetrics.timestamp) < CACHE_TTL) {
+    if (cachedMetrics.data && now - cachedMetrics.timestamp < CACHE_TTL) {
       return NextResponse.json(cachedMetrics.data);
     }
 
     // Fetch from GitHub API
     const headers: HeadersInit = {
-      'Accept': 'application/vnd.github.v3+json',
-      'User-Agent': 'Apex-Sentient-Interface',
+      Accept: "application/vnd.github.v3+json",
+      "User-Agent": "Apex-Sentient-Interface",
     };
 
     // Add auth token if available (for higher rate limits)
     const githubToken = process.env.GITHUB_TOKEN;
     if (githubToken) {
-      headers['Authorization'] = `token ${githubToken}`;
+      headers["Authorization"] = `token ${githubToken}`;
     }
 
     const response = await fetch(GITHUB_API_URL, { headers });
@@ -120,9 +120,9 @@ export async function GET(): Promise<Response> {
         size: 0,
         lastUpdated: new Date().toISOString(),
         fullName: GITHUB_REPO,
-        description: 'Apex - Sentient Interface',
-        language: 'TypeScript',
-        error: 'GitHub API unavailable',
+        description: "Apex - Sentient Interface",
+        language: "TypeScript",
+        error: "GitHub API unavailable",
       });
     }
 
@@ -137,8 +137,8 @@ export async function GET(): Promise<Response> {
       size: repoData.size || 0,
       lastUpdated: repoData.updated_at || new Date().toISOString(),
       fullName: repoData.full_name || GITHUB_REPO,
-      description: repoData.description || 'Apex - Sentient Interface',
-      language: repoData.language || 'TypeScript',
+      description: repoData.description || "Apex - Sentient Interface",
+      language: repoData.language || "TypeScript",
     };
 
     // Update cache
@@ -146,8 +146,8 @@ export async function GET(): Promise<Response> {
 
     return NextResponse.json(metrics);
   } catch (error) {
-    console.error('GitHub metrics error:', error);
-    
+    console.error("GitHub metrics error:", error);
+
     // Return cached data if available
     if (cachedMetrics.data) {
       return NextResponse.json(cachedMetrics.data);
@@ -161,12 +161,12 @@ export async function GET(): Promise<Response> {
       size: 0,
       lastUpdated: new Date().toISOString(),
       fullName: GITHUB_REPO,
-      description: 'Apex - Sentient Interface',
-      language: 'TypeScript',
-      error: 'Failed to fetch GitHub metrics',
+      description: "Apex - Sentient Interface",
+      language: "TypeScript",
+      error: "Failed to fetch GitHub metrics",
     });
   }
 }
 
 /** Force dynamic rendering to ensure fresh data */
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";

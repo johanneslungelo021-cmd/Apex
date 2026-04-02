@@ -20,7 +20,7 @@
  * @module components/geo/AgentReadableChunk
  */
 
-import type { ReactNode } from 'react';
+import type { ReactNode } from "react";
 
 export interface AgentReadableChunkProps {
   /**
@@ -60,7 +60,7 @@ export interface AgentReadableChunkProps {
 export default function AgentReadableChunk({
   id,
   agentSummary,
-  summaryLabel = 'Section Summary',
+  summaryLabel = "Section Summary",
   children,
 }: AgentReadableChunkProps) {
   return (
@@ -74,19 +74,19 @@ export default function AgentReadableChunk({
         id={`${id}-summary`}
         className="geo-answer-first"
         style={{
-          clip: 'rect(0 0 0 0)',
-          clipPath: 'inset(50%)',
-          height: '1px',
-          width: '1px',
-          margin: '-1px',
-          overflow: 'hidden',
+          clip: "rect(0 0 0 0)",
+          clipPath: "inset(50%)",
+          height: "1px",
+          width: "1px",
+          margin: "-1px",
+          overflow: "hidden",
           padding: 0,
-          position: 'absolute',
-          whiteSpace: 'nowrap',
+          position: "absolute",
+          whiteSpace: "nowrap",
         }}
       >
         <span id={`${id}-summary-label`} className="font-semibold">
-          {summaryLabel}:{' '}
+          {summaryLabel}:{" "}
         </span>
         <span>{agentSummary}</span>
       </div>

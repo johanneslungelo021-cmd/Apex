@@ -16,11 +16,11 @@
  * @module components/chat/ChatSpeakButton
  */
 
-'use client';
+"use client";
 
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useSpeech } from '@/hooks/useSpeech';
+import { useEffect, useRef, useState, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useSpeech } from "@/hooks/useSpeech";
 
 interface ChatSpeakButtonProps {
   text: string;
@@ -41,16 +41,21 @@ function Waveform() {
             duration: 0.8,
             repeat: Infinity,
             delay: i * 0.1,
-            ease: 'easeInOut',
+            ease: "easeInOut",
           }}
-          style={{ height: `${h * 12}px`, transformOrigin: 'bottom' }}
+          style={{ height: `${h * 12}px`, transformOrigin: "bottom" }}
         />
-      ))}</span>
+      ))}
+    </span>
   );
 }
 
-export default function ChatSpeakButton({ text, preferHQ = false }: ChatSpeakButtonProps) {
-  const { speak, stop, isSpeaking, isLoading, error, isAvailable } = useSpeech();
+export default function ChatSpeakButton({
+  text,
+  preferHQ = false,
+}: ChatSpeakButtonProps) {
+  const { speak, stop, isSpeaking, isLoading, error, isAvailable } =
+    useSpeech();
 
   const [showError, setShowError] = useState(false);
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -98,8 +103,10 @@ export default function ChatSpeakButton({ text, preferHQ = false }: ChatSpeakBut
     <div className="relative inline-flex items-center">
       <motion.button
         onClick={handleClick}
-        title={isSpeaking ? 'Stop speaking' : 'Read aloud'}
-        aria-label={isSpeaking ? 'Stop reading aloud' : 'Read this message aloud'}
+        title={isSpeaking ? "Stop speaking" : "Read aloud"}
+        aria-label={
+          isSpeaking ? "Stop reading aloud" : "Read this message aloud"
+        }
         aria-pressed={isSpeaking}
         className="p-1 rounded-lg hover:bg-white/10 transition opacity-40 hover:opacity-100 focus:opacity-100"
         whileTap={{ scale: 0.9 }}
@@ -108,7 +115,7 @@ export default function ChatSpeakButton({ text, preferHQ = false }: ChatSpeakBut
           <motion.span
             className="block w-3.5 h-3.5 border border-zinc-400 border-t-white rounded-full"
             animate={{ rotate: 360 }}
-            transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
+            transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
           />
         ) : isSpeaking ? (
           <Waveform />

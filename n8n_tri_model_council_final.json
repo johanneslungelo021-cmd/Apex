@@ -1,5 +1,5 @@
 {
-  "name": "Apex \u2014 Tri-Model Council (DeepSeek-R1 + Qwen3 + Kimi K2)",
+  "name": "Apex — Tri-Model Council (DeepSeek-R1 + Qwen3.5 + Kimi K2)",
   "nodes": [
     {
       "parameters": {
@@ -20,7 +20,7 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst body   = $input.first().json.body || $input.first().json;\nconst platform = (body.target_platform || 'Moltcorp').trim();\nconst taskType = body.task_type   || 'general';\nconst rawData  = body.raw_data    || {};\nconst context  = body.context     || '';\nconst dataStr  = typeof rawData === 'string' ? rawData : JSON.stringify(rawData, null, 2);\n\nlet deepseekPrompt, qwenPrompt, kimiPrompt;\n\nif (platform === 'Numerai') {\n  deepseekPrompt = [\n    'You are a Quantitative Auditor for Numerai (https://numer.ai/).',\n    'Review the XGBoost/ML parameter set below for overfitting risks against the v5.0/live.parquet dataset.',\n    'Output a structured critique: risk_level (low/medium/high), mmc_impact, recommended_changes.',\n    '', `Context: ${context}`, '', `Data:`, dataStr\n  ].join('\\n');\n\n  qwenPrompt = [\n    'You are a Python Feature Engineering Agent for Numerai.',\n    'Analyze the feature importance list and suggest exactly 3 new feature engineering techniques',\n    'optimised for financial time-series obfuscation. Output as numbered list with code snippets.',\n    '', `Context: ${context}`, '', `Data:`, dataStr\n  ].join('\\n');\n\n  kimiPrompt = [\n    '<think>',\n    'You are a Deep-Context Meta-Analyst for Numerai tournament strategy.',\n    'Cross-reference this strategy with current market volatility patterns and tournament rules.',\n    'Goal: maximise NMR staking yield and Meta-Model Contribution (MMC).',\n    '', `Context: ${context}`, '', `Data:`, dataStr,\n    '</think>'\n  ].join('\\n');\n\n} else {\n  // Default: Moltcorp / Apex PR audit\n  const diff = rawData.raw_code_diff || dataStr;\n  const scan = rawData.superz_initial_scan || '';\n\n  deepseekPrompt = [\n    'You are a Security Auditor performing a hard-review of this code diff.',\n    'Check for: authentication bypasses, payment gateway friction, injection vectors, logic errors.',\n    'Output format: VERDICT: PASS or FAIL, then FINDINGS: (numbered list), SEVERITY: critical/high/medium/low.',\n    '', `Context: ${context}`, '', 'Code Diff:', diff,\n    scan ? `\\nSuperZ Scan: ${scan}` : ''\n  ].join('\\n');\n\n  qwenPrompt = [\n    'You are a Senior Software Architect reviewing this PR for the Apex fintech platform.',\n    'Check: performance bottlenecks, redundant loops, clean-code violations, TypeScript type safety.',\n    'Output: CODE_QUALITY_SCORE: X/10, ISSUES: (list), REWRITES: (show improved snippets).',\n    '', `Context: ${context}`, '', 'Code Diff:', diff,\n    scan ? `\\nSuperZ Scan: ${scan}` : ''\n  ].join('\\n');\n\n  kimiPrompt = [\n    '<think>',\n    'You are a UX/Product Designer for the Apex \"African Futurism\" platform.',\n    'Review this PR from the end-user perspective. Does it break the visual language, UTM tracking, or payment flow?',\n    'Output: UX_IMPACT: low/medium/high, BREAKING_CHANGES: yes/no, RECOMMENDATIONS: (list).',\n    '', `Context: ${context}`, '', 'Code Diff:', diff,\n    scan ? `\\nSuperZ Scan: ${scan}` : '',\n    '</think>'\n  ].join('\\n');\n}\n\nreturn [{ json: { deepseek_prompt: deepseekPrompt, qwen_prompt: qwenPrompt,\n  kimi_prompt: kimiPrompt, target_platform: platform, task_type: taskType, context } }];\n"
+        "jsCode": "\nconst body   = $input.first().json.body || $input.first().json;\nconst platform = (body.target_platform || 'Moltcorp').trim();\nconst taskType = body.task_type   || 'general';\nconst rawData  = body.raw_data    || {};\nconst context  = body.context     || '';\nconst dataStr  = typeof rawData === 'string' ? rawData : JSON.stringify(rawData, null, 2);\n\nlet deepseekPrompt, qwenPrompt, kimiPrompt;\n\nif (platform === 'Numerai') {\n  deepseekPrompt = [\n    'You are a Quantitative Auditor for Numerai (https://numer.ai/).',\n    'Review the XGBoost/ML parameter set below for overfitting risks against the v5.0/live.parquet dataset.',\n    'Output a structured critique: risk_level (low/medium/high), mmc_impact, recommended_changes.',\n    '', `Context: ${context}`, '', `Data:`, dataStr\n  ].join('\\n');\n\n  qwenPrompt = [\n    'You are a Python Feature Engineering Agent for Numerai.',\n    'Analyze the feature importance list and suggest exactly 3 new feature engineering techniques',\n    'optimised for financial time-series obfuscation. Output as numbered list with code snippets.',\n    '', `Context: ${context}`, '', `Data:`, dataStr\n  ].join('\\n');\n\n  kimiPrompt = [\n    'ORIA: You are a Deep-Context Meta-Analyst for Numerai tournament strategy.',\n    'Cross-reference this strategy with current market volatility patterns and tournament rules.',\n    'Goal: maximise NMR staking yield and Meta-Model Contribution (MMC).',\n    '', `Context: ${context}`, '', `Data:`, dataStr,\n    '/ORI'\n  ].join('\\n');\n\n} else {\n  // Default: Moltcorp / Apex PR audit\n  const diff = rawData.raw_code_diff || dataStr;\n  const scan = rawData.superz_initial_scan || '';\n\n  deepseekPrompt = [\n    'You are a Security Auditor performing a hard-review of this code diff.',\n    'Check for: authentication bypasses, payment gateway friction, injection vectors, logic errors.',\n    'Output format: VERDICT: PASS or FAIL, then FINDINGS: (numbered list), SEVERITY: critical/high/medium/low.',\n    '', `Context: ${context}`, '', 'Code Diff:', diff,\n    scan ? `\\nSuperZ Scan: ${scan}` : ''\n  ].join('\\n');\n\n  qwenPrompt = [\n    'You are a Senior Software Architect reviewing this PR for the Apex fintech platform.',\n    'Check: performance bottlenecks, redundant loops, clean-code violations, TypeScript type safety.',\n    'Output: CODE_QUALITY_SCORE: X/10, ISSUES: (list), REWRITES: (show improved snippets).',\n    '', `Context: ${context}`, '', 'Code Diff:', diff,\n    scan ? `\\nSuperZ Scan: ${scan}` : ''\n  ].join('\\n');\n\n  kimiPrompt = [\n    'ORIA: You are a UX/Product Designer for the Apex \"African Futurism\" platform.',\n    'Review this PR from the end-user perspective. Does it break the visual language, UTM tracking, or payment flow?',\n    'Output: UX_IMPACT: low/medium/high, BREAKING_CHANGES: yes/no, RECOMMENDATIONS: (list).',\n    '', `Context: ${context}`, '', 'Code Diff:', diff,\n    scan ? `\\nSuperZ Scan: ${scan}` : '',\n    '/ORI'\n  ].join('\\n');\n}\n\nreturn [{ json: { deepseek_prompt: deepseekPrompt, qwen_prompt: qwenPrompt,\n  kimi_prompt: kimiPrompt, target_platform: platform, task_type: taskType, context } }];\n"
       },
       "id": "prep-2",
       "name": "Prepare Prompts",
@@ -34,17 +34,13 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ ($env.OLLAMA_BASE_URL || 'https://api.ollama.com') + '/api/generate' }}",
+        "url": "={{ ($env.OLLAMA_BASE_URL || 'http://host.docker.internal:11434') + '/api/generate' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Content-Type",
               "value": "application/json"
-            },
-            {
-              "name": "Authorization",
-              "value": "Bearer ={{ $env.OLLAMA_API_KEY }}"
             }
           ]
         },
@@ -72,17 +68,13 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ ($env.OLLAMA_BASE_URL || 'https://api.ollama.com') + '/api/generate' }}",
+        "url": "={{ ($env.OLLAMA_BASE_URL || 'http://host.docker.internal:11434') + '/api/generate' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Content-Type",
               "value": "application/json"
-            },
-            {
-              "name": "Authorization",
-              "value": "Bearer ={{ $env.OLLAMA_API_KEY }}"
             }
           ]
         },
@@ -99,7 +91,7 @@
         }
       },
       "id": "qw-3",
-      "name": "Qwen3 (Analysis)",
+      "name": "Qwen3.5 (Analysis)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -110,17 +102,13 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ ($env.OLLAMA_BASE_URL || 'https://api.ollama.com') + '/api/generate' }}",
+        "url": "={{ ($env.OLLAMA_BASE_URL || 'http://host.docker.internal:11434') + '/api/generate' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Content-Type",
               "value": "application/json"
-            },
-            {
-              "name": "Authorization",
-              "value": "Bearer ={{ $env.OLLAMA_API_KEY }}"
             }
           ]
         },
@@ -147,7 +135,7 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst items = $input.all();\nreturn items.map((item, i) => {\n  const models = [\n    { id: 'deepseek-r1', label: 'DeepSeek-R1 (Reasoning)', inputPort: 0 },\n    { id: 'qwen3',       label: 'Qwen3 (Analysis)',         inputPort: 1 },\n    { id: 'kimi-k2',     label: 'Kimi K2 (Thinking)',       inputPort: 2 },\n  ];\n  const raw = item.json.response || item.json.message?.content || '[no response]';\n  const cleaned = raw.replace(/<think>[\\s\\S]*?<\\/think>/gi, '').trim();\n  const timedOut = raw === '[no response]' || cleaned.length < 10;\n  return { json: {\n    model_id:       models[i]?.id    || `model_${i}`,\n    model_label:    models[i]?.label || `Model ${i}`,\n    raw_response:   raw,\n    response:       cleaned,\n    word_count:     cleaned.split(/\\s+/).length,\n    timed_out:      timedOut,\n    eval_count:     item.json.eval_count     || 0,\n    duration_ms:    Math.round((item.json.total_duration || 0) / 1e6),\n  }};\n});\n"
+        "jsCode": "\nconst items = $input.all();\nreturn items.map((item, i) => {\n  const models = [\n    { id: 'deepseek-r1', label: 'DeepSeek-R1 (Reasoning)', inputPort: 0 },\n    { id: 'qwen3.5',     label: 'Qwen3.5 (Analysis)',       inputPort: 1 },\n    { id: 'kimi-k2',     label: 'Kimi K2 (Thinking)',       inputPort: 2 },\n  ];\n  const raw = item.json.response || item.json.message?.content || '[no response]';\n  const cleaned = raw.replace(/ORIA[\\s\\S]*?<\\/ORI>/gi, '').trim();\n  const timedOut = raw === '[no response]' || cleaned.length < 10;\n  return { json: {\n    model_id:       models[i]?.id    || `model_${i}`,\n    model_label:    models[i]?.label || `Model ${i}`,\n    raw_response:   raw,\n    response:       cleaned,\n    word_count:     cleaned.split(/\\s+/).length,\n    timed_out:      timedOut,\n    eval_count:     item.json.eval_count     || 0,\n    duration_ms:    Math.round((item.json.total_duration || 0) / 1e6),\n  }};\n});\n"
       },
       "id": "strip-4",
       "name": "Strip Think Tags & Label",
@@ -173,7 +161,7 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst items       = $input.all();\nconst platform    = $('Prepare Prompts').item.json.target_platform || 'Moltcorp';\nconst allTimedOut = items.every(i => i.json.timed_out);\n\n// \u2500\u2500 Fallback: all models failed \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\nif (allTimedOut) {\n  return [{ json: {\n    best_model:    'fallback',\n    best_label:    'Fallback (Safe Default)',\n    best_response: 'All 3 models timed out. Manual review required before proceeding.',\n    best_score:    0,\n    hard_fail:     false,\n    fallback_used: true,\n    all_responses: items.map(i => ({ model: i.json.model_id, score: 0, timed_out: true })),\n    timestamp:     new Date().toISOString(),\n  }}];\n}\n\n// \u2500\u2500 Scoring weights (per spec) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n// Synthesis: (Qwen_Code * 0.4) + (DeepSeek_Logic * 0.4) + (Kimi_UX * 0.2)\nconst scored = items.map(item => {\n  const { model_id, response, word_count, timed_out } = item.json;\n  if (timed_out) return { ...item.json, score: 0, hard_fail: false };\n\n  const text = response.toLowerCase();\n  let score = 0;\n  let hardFail = false;\n\n  if (model_id === 'deepseek-r1') {\n    // Logic/security weight: 0.4\n    const hasFail = text.includes('fail') || text.includes('verdict: fail');\n    if (hasFail) { hardFail = true; score = 100 * 0.4; } // Hard fail is definitive\n    else { score = (text.includes('pass') ? 80 : 60) * 0.4; }\n    if (text.includes('critical')) score += 10 * 0.4;\n    if (text.includes('vulnerability')) score += 10 * 0.4;\n\n  } else if (model_id === 'qwen3') {\n    // Code quality weight: 0.4\n    const match = text.match(/code_quality_score[:\\s]+(\\d+)/);\n    const qualityScore = match ? parseInt(match[1]) : Math.min(word_count / 20, 10);\n    score = qualityScore * 8 * 0.4;\n    if (text.includes('optimization') || text.includes('optimise')) score += 10 * 0.4;\n\n  } else if (model_id === 'kimi-k2') {\n    // UX impact weight: 0.2\n    const impactMap = { low: 30, medium: 60, high: 90 };\n    const match = text.match(/ux_impact[:\\s]+(low|medium|high)/);\n    const impact = match ? impactMap[match[1]] : 50;\n    score = impact * 0.2;\n    if (text.includes('breaking_changes: no') || text.includes('no breaking')) score += 10 * 0.2;\n  }\n\n  return { ...item.json, score: Math.round(score * 10) / 10, hard_fail: hardFail };\n});\n\n// \u2500\u2500 Hard fail gate: DeepSeek said FAIL \u2192 reject immediately \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\nconst deepseekResult = scored.find(s => s.model_id === 'deepseek-r1');\nconst hardFail = deepseekResult?.hard_fail === true;\n\n// \u2500\u2500 Pick winner \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\nconst best = scored.reduce((prev, curr) => curr.score > prev.score ? curr : prev);\n\nreturn [{ json: {\n  best_model:    best.model_id,\n  best_label:    best.model_label,\n  best_response: best.response,\n  best_score:    best.score,\n  hard_fail,\n  fallback_used: false,\n  platform,\n  all_responses: scored.map(s => ({\n    model: s.model_label, score: s.score, words: s.word_count,\n    duration_ms: s.duration_ms, timed_out: s.timed_out\n  })),\n  timestamp: new Date().toISOString(),\n}}];\n"
+        "jsCode": "\nconst items       = $input.all();\nconst platform    = $('Prepare Prompts').item.json.target_platform || 'Moltcorp';\nconst allTimedOut = items.every(i => i.json.timed_out);\n\n// ── Fallback: all models failed ─────────────────────────────────────────────\nif (allTimedOut) {\n  // Log the error for trace analysis\n  console.error('All 3 models timed out. Falling back to safe default.');\n  return [{ json: {\n    best_model:    'fallback',\n    best_label:    'Fallback (Safe Default)',\n    best_response: 'All 3 models timed out. Manual review required before proceeding.',\n    best_score:    0,\n    hard_fail:     false,\n    fallback_used: true,\n    all_responses: items.map(i => ({ model: i.json.model_id, score: 0, timed_out: true })),\n    timestamp:     new Date().toISOString(),\n  }}];\n}\n\n// ── Scoring weights (per spec) ───────────────────────────────────────────────\n// Synthesis: (Qwen_Code * 0.4) + (DeepSeek_Logic * 0.4) + (Kimi_UX * 0.2)\nconst scored = items.map(item => {\n  const { model_id, response, word_count, timed_out } = item.json;\n  if (timed_out) return { ...item.json, score: 0, hard_fail: false };\n\n  const text = response.toLowerCase();\n  let score = 0;\n  let hardFail = false;\n\n  if (model_id === 'deepseek-r1') {\n    // Logic/security weight: 0.4\n    const hasFail = text.includes('fail') || text.includes('verdict: fail');\n    if (hasFail) { hardFail = true; score = 100 * 0.4; } // Hard fail is definitive\n    else { score = (text.includes('pass') ? 80 : 60) * 0.4; }\n    if (text.includes('critical')) score += 10 * 0.4;\n    if (text.includes('vulnerability')) score += 10 * 0.4;\n\n  } else if (model_id === 'qwen3.5') {\n    // Code quality weight: 0.4\n    const match = text.match(/code_quality_score[:\\s]+(\\d+)/);\n    const qualityScore = match ? parseInt(match[1]) : Math.min(word_count / 20, 10);\n    score = qualityScore * 8 * 0.4;\n    if (text.includes('optimization') || text.includes('optimise')) score += 10 * 0.4;\n\n  } else if (model_id === 'kimi-k2') {\n    // UX impact weight: 0.2\n    const impactMap = { low: 30, medium: 60, high: 90 };\n    const match = text.match(/ux_impact[:\\s]+(low|medium|high)/);\n    const impact = match ? impactMap[match[1]] : 50;\n    score = impact * 0.2;\n    if (text.includes('breaking_changes: no') || text.includes('no breaking')) score += 10 * 0.2;\n  }\n\n  return { ...item.json, score: Math.round(score * 10) / 10, hard_fail: hardFail };\n});\n\n// ── Hard fail gate: DeepSeek said FAIL → reject immediately ─────────────────\nconst deepseekResult = scored.find(s => s.model_id === 'deepseek-r1');\nconst hardFail = deepseekResult?.hard_fail === true;\n\n// ── Pick winner ─────────────────────────────────────────────────────────────\nconst best = scored.reduce((prev, curr) => curr.score > prev.score ? curr : prev);\n\nreturn [{ json: {\n  best_model:    best.model_id,\n  best_label:    best.model_label,\n  best_response: best.response,\n  best_score:    best.score,\n  hard_fail,\n  fallback_used: false,\n  platform,\n  all_responses: scored.map(s => ({\n    model: s.model_label, score: s.score, words: s.word_count,\n    duration_ms: s.duration_ms, timed_out: s.timed_out\n  })),\n  timestamp: new Date().toISOString(),\n}}];\n"
       },
       "id": "score-6",
       "name": "Weighted Score & Hard-Fail Gate",
@@ -262,7 +250,7 @@
             "index": 0
           },
           {
-            "node": "Qwen3 (Analysis)",
+            "node": "Qwen3.5 (Analysis)",
             "type": "main",
             "index": 0
           },
@@ -285,7 +273,7 @@
         ]
       ]
     },
-    "Qwen3 (Analysis)": {
+    "Qwen3.5 (Analysis)": {
       "main": [
         [
           {
@@ -353,5 +341,15 @@
     "availableInMCP": true,
     "timezone": "Africa/Johannesburg"
   },
-  "pinData": {}
+  "pinData": {},
+  "_validation": {
+    "embeddingDimension": 768,
+    "ollamaBaseUrl": "http://host.docker.internal:11434",
+    "notes": [
+      "OLLAMA_BASE_URL defaults to host.docker.internal:11434 for Docker-to-host communication",
+      "If Ollama runs on bare metal, set OLLAMA_HOST=0.0.0.0 and OLLAMA_BASE_URL=http://localhost:11434",
+      "Fallback cascade logs errors to console.error for trace analysis",
+      "Model IDs corrected: qwen3 -> qwen3.5 for consistency with actual model names"
+    ]
+  }
 }

@@ -45,9 +45,9 @@
  *
  * @module components/sentient/ReducedMotionGate
  */
-'use client';
+"use client";
 
-import { useSyncExternalStore, type ReactNode } from 'react';
+import { useSyncExternalStore, type ReactNode } from "react";
 
 interface ReducedMotionGateProps {
   /**
@@ -67,9 +67,9 @@ interface ReducedMotionGateProps {
  * re-renders whenever the OS setting changes while the page is open.
  */
 function subscribe(onStoreChange: () => void): () => void {
-  const mql = window.matchMedia('(prefers-reduced-motion: reduce)');
-  mql.addEventListener('change', onStoreChange);
-  return () => mql.removeEventListener('change', onStoreChange);
+  const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
+  mql.addEventListener("change", onStoreChange);
+  return () => mql.removeEventListener("change", onStoreChange);
 }
 
 /**
@@ -77,7 +77,7 @@ function subscribe(onStoreChange: () => void): () => void {
  * Returns the current value of the media query synchronously.
  */
 function getSnapshot(): boolean {
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
 /**
@@ -90,12 +90,19 @@ function getServerSnapshot(): boolean {
   return false;
 }
 
-export function ReducedMotionGate({ children, fallback }: ReducedMotionGateProps) {
+export function ReducedMotionGate({
+  children,
+  fallback,
+}: ReducedMotionGateProps) {
   /**
    * useSyncExternalStore gives us the correct value synchronously on the
    * first client render — no double-render, no blank flash, no stale state.
    */
-  const prefersReduced = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const prefersReduced = useSyncExternalStore(
+    subscribe,
+    getSnapshot,
+    getServerSnapshot,
+  );
 
   if (prefersReduced) {
     return (

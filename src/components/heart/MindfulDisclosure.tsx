@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 /**
  * MindfulDisclosure — Progressive Cognitive Load Management
@@ -19,10 +19,10 @@
  * TTS: every layer is independently speakable.
  */
 
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Heart, ChevronDown, Terminal } from 'lucide-react';
-import { SpeakButton } from './SpeakButton';
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Heart, ChevronDown, Terminal } from "lucide-react";
+import { SpeakButton } from "./SpeakButton";
 
 interface WisdomNote {
   concept: string;
@@ -33,22 +33,22 @@ interface MindfulDisclosureProps {
   coreMessage: string;
   technicalDetails?: string;
   wisdomNote?: WisdomNote;
-  emotionContext?: 'neutral' | 'encouraging' | 'cautionary' | 'celebratory';
+  emotionContext?: "neutral" | "encouraging" | "cautionary" | "celebratory";
   enableTTS?: boolean;
 }
 
 const ACCENT_COLORS: Record<string, string> = {
-  neutral:     'text-emerald-400 border-emerald-500/20',
-  encouraging: 'text-sky-400 border-sky-500/20',
-  cautionary:  'text-amber-400 border-amber-500/20',
-  celebratory: 'text-violet-400 border-violet-500/20',
+  neutral: "text-emerald-400 border-emerald-500/20",
+  encouraging: "text-sky-400 border-sky-500/20",
+  cautionary: "text-amber-400 border-amber-500/20",
+  celebratory: "text-violet-400 border-violet-500/20",
 };
 
 const HEART_COLORS: Record<string, string> = {
-  neutral:     'text-emerald-400',
-  encouraging: 'text-sky-400',
-  cautionary:  'text-amber-400',
-  celebratory: 'text-violet-400',
+  neutral: "text-emerald-400",
+  encouraging: "text-sky-400",
+  cautionary: "text-amber-400",
+  celebratory: "text-violet-400",
 };
 
 /**
@@ -85,14 +85,14 @@ export default function MindfulDisclosure({
   coreMessage,
   technicalDetails,
   wisdomNote,
-  emotionContext = 'neutral',
+  emotionContext = "neutral",
   enableTTS = true,
 }: MindfulDisclosureProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showWisdom, setShowWisdom] = useState(false);
 
-  const accentClass = ACCENT_COLORS[emotionContext] ?? ACCENT_COLORS['neutral'];
-  const heartClass = HEART_COLORS[emotionContext] ?? HEART_COLORS['neutral'];
+  const accentClass = ACCENT_COLORS[emotionContext] ?? ACCENT_COLORS["neutral"];
+  const heartClass = HEART_COLORS[emotionContext] ?? HEART_COLORS["neutral"];
 
   return (
     <div
@@ -114,10 +114,7 @@ export default function MindfulDisclosure({
           </p>
           {enableTTS && (
             <div className="mt-2">
-              <SpeakButton
-                text={coreMessage}
-                emotionContext={emotionContext}
-              />
+              <SpeakButton text={coreMessage} emotionContext={emotionContext} />
             </div>
           )}
         </div>
@@ -128,13 +125,16 @@ export default function MindfulDisclosure({
         <div className="flex gap-4 ml-10 text-xs font-mono flex-wrap">
           {technicalDetails && (
             <button
-              onClick={() => { setIsExpanded((v) => !v); setShowWisdom(false); }}
+              onClick={() => {
+                setIsExpanded((v) => !v);
+                setShowWisdom(false);
+              }}
               className="flex items-center gap-1.5 text-zinc-500 hover:text-zinc-300 transition-colors"
               aria-expanded={isExpanded}
               aria-controls="technical-details"
             >
               <Terminal size={12} />
-              <span>{isExpanded ? 'Fold details' : 'Technical logs'}</span>
+              <span>{isExpanded ? "Fold details" : "Technical logs"}</span>
               <motion.div
                 animate={{ rotate: isExpanded ? 180 : 0 }}
                 transition={{ duration: 0.2 }}
@@ -145,12 +145,15 @@ export default function MindfulDisclosure({
           )}
           {wisdomNote && (
             <button
-              onClick={() => { setShowWisdom((v) => !v); setIsExpanded(false); }}
+              onClick={() => {
+                setShowWisdom((v) => !v);
+                setIsExpanded(false);
+              }}
               className="text-zinc-500 hover:text-emerald-400 transition-colors"
               aria-expanded={showWisdom}
               aria-controls="wisdom-note"
             >
-              {showWisdom ? '← Back to message' : '💡 Why this matters'}
+              {showWisdom ? "← Back to message" : "💡 Why this matters"}
             </button>
           )}
         </div>
@@ -164,9 +167,9 @@ export default function MindfulDisclosure({
             key="technical"
             id="technical-details"
             initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
+            animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
             className="overflow-hidden ml-10"
           >
             <pre className="p-4 bg-black/50 text-zinc-400 text-xs rounded-md mt-2 border border-zinc-800 whitespace-pre-wrap font-mono max-h-64 overflow-y-auto">

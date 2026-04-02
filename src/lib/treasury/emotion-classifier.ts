@@ -14,15 +14,19 @@
  * to reduce Kimi API calls by ~80% on repeated post content.
  */
 
-import crypto from 'crypto';
-import { getSupabaseClient } from '@/lib/supabase';
+import crypto from "crypto";
+import { getSupabaseClient } from "@/lib/supabase";
 
-export type TreasuryEmotionState = 'ecstatic' | 'bullish' | 'neutral' | 'panicked';
+export type TreasuryEmotionState =
+  | "ecstatic"
+  | "bullish"
+  | "neutral"
+  | "panicked";
 
 export const EMOTION_MULTIPLIERS: Record<TreasuryEmotionState, number> = {
-  ecstatic: 1.20,
-  bullish:  1.10,
-  neutral:  1.00,
+  ecstatic: 1.2,
+  bullish: 1.1,
+  neutral: 1.0,
   panicked: 0.85,
 };
 
@@ -59,18 +63,18 @@ Respond with ONLY valid JSON:
 
 /** SHA-256 of lowercased, whitespace-normalised text — platform agnostic */
 function buildContentHash(text: string): string {
-  const normalised = text.toLowerCase().replace(/\s+/g, ' ').trim();
-  return crypto.createHash('sha256').update(normalised).digest('hex');
+  const normalised = text.toLowerCase().replace(/\s+/g, " ").trim();
+  return crypto.createHash("sha256").update(normalised).digest("hex");
 }
 
 async function lookupCache(hash: string): Promise<ClassificationResult | null> {
   try {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
-      .from('emotion_classification_cache')
-      .select('emotion_state,fee_multiplier,confidence,kimi_model')
-      .eq('content_hash', hash)
-      .gt('expires_at', new Date().toISOString())
+      .from("emotion_classification_cache")
+      .select("emotion_state,fee_multiplier,confidence,kimi_model")
+      .eq("content_hash", hash)
+      .gt("expires_at", new Date().toISOString())
       .maybeSingle();
 
     if (error || !data) return null;
@@ -94,13 +98,13 @@ async function writeCache(
 ): Promise<void> {
   try {
     const supabase = getSupabaseClient();
-    await supabase.rpc('upsert_emotion_cache', {
-      p_hash:          hash,
-      p_platform:      platform,
+    await supabase.rpc("upsert_emotion_cache", {
+      p_hash: hash,
+      p_platform: platform,
       p_emotion_state: result.emotion_state,
       p_fee_multiplier: result.fee_multiplier,
-      p_confidence:    result.confidence,
-      p_model:         result.model,
+      p_confidence: result.confidence,
+      p_model: result.model,
     });
   } catch {
     // Cache write failure is non-fatal — Kimi result is still valid
@@ -114,10 +118,10 @@ export async function classifyEmotionState(
   kimiApiKey: string,
 ): Promise<ClassificationResult> {
   const FALLBACK: ClassificationResult = {
-    emotion_state: 'neutral',
+    emotion_state: "neutral",
     fee_multiplier: EMOTION_MULTIPLIERS.neutral,
     confidence: 0,
-    model: 'fallback',
+    model: "fallback",
     cache_hit: false,
   };
 
@@ -131,32 +135,36 @@ export async function classifyEmotionState(
 
   // 2. Call Kimi K2.5
   const engagementContext = [
-    post.likes    ? `${post.likes} likes`    : '',
-    post.shares   ? `${post.shares} shares`  : '',
-    post.comments ? `${post.comments} comments` : '',
-  ].filter(Boolean).join(', ');
+    post.likes ? `${post.likes} likes` : "",
+    post.shares ? `${post.shares} shares` : "",
+    post.comments ? `${post.comments} comments` : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
 
   const userMessage = [
     `Platform: ${post.platform}`,
     `Post text: "${post.text}"`,
-    engagementContext ? `Engagement: ${engagementContext}` : '',
-  ].filter(Boolean).join('\n');
+    engagementContext ? `Engagement: ${engagementContext}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   let res: Response;
   try {
-    res = await fetch('https://api.moonshot.cn/v1/chat/completions', {
-      method: 'POST',
+    res = await fetch("https://api.moonshot.cn/v1/chat/completions", {
+      method: "POST",
       headers: {
         Authorization: `Bearer ${kimiApiKey}`,
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: 'kimi-k2-0711-preview',
+        model: "kimi-k2-0711-preview",
         messages: [
-          { role: 'system', content: KIMI_SYSTEM_PROMPT },
-          { role: 'user',   content: userMessage },
+          { role: "system", content: KIMI_SYSTEM_PROMPT },
+          { role: "user", content: userMessage },
         ],
-        max_tokens:  100,
+        max_tokens: 100,
         temperature: 0.1,
         stream: false,
       }),
@@ -174,8 +182,9 @@ export async function classifyEmotionState(
     return FALLBACK;
   }
 
-  const raw = (data as { choices?: { message?: { content?: string } }[] })
-    ?.choices?.[0]?.message?.content ?? '{}';
+  const raw =
+    (data as { choices?: { message?: { content?: string } }[] })?.choices?.[0]
+      ?.message?.content ?? "{}";
 
   let parsed: { emotion_state?: string; confidence?: number } = {};
   try {
@@ -185,16 +194,23 @@ export async function classifyEmotionState(
     parsed = {};
   }
 
-  const validStates: TreasuryEmotionState[] = ['ecstatic', 'bullish', 'neutral', 'panicked'];
-  const state: TreasuryEmotionState = validStates.includes(parsed.emotion_state as TreasuryEmotionState)
+  const validStates: TreasuryEmotionState[] = [
+    "ecstatic",
+    "bullish",
+    "neutral",
+    "panicked",
+  ];
+  const state: TreasuryEmotionState = validStates.includes(
+    parsed.emotion_state as TreasuryEmotionState,
+  )
     ? (parsed.emotion_state as TreasuryEmotionState)
-    : 'neutral';
+    : "neutral";
 
   const result: ClassificationResult = {
     emotion_state: state,
     fee_multiplier: EMOTION_MULTIPLIERS[state],
-    confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.80,
-    model: 'kimi-k2-0711-preview',
+    confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0.8,
+    model: "kimi-k2-0711-preview",
     cache_hit: false,
   };
 

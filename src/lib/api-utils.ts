@@ -22,7 +22,7 @@
  * log({ level: 'info', service: 'my-service', message: 'Request started', requestId });
  */
 
-import crypto from 'crypto';
+import crypto from "crypto";
 
 // ─── Request ID ───────────────────────────────────────────────────────────────
 
@@ -48,7 +48,7 @@ import crypto from 'crypto';
  * });
  */
 export function generateRequestId(): string {
-  return crypto.randomBytes(6).toString('hex');
+  return crypto.randomBytes(6).toString("hex");
 }
 
 // ─── Structured Logger ────────────────────────────────────────────────────────
@@ -57,7 +57,7 @@ export function generateRequestId(): string {
  * Log level type for structured logging.
  * Maps to standard syslog severity levels.
  */
-type LogLevel = 'info' | 'warn' | 'error' | 'debug';
+type LogLevel = "info" | "warn" | "error" | "debug";
 
 /**
  * Structured log entry interface for JSON-formatted output.
@@ -109,7 +109,7 @@ interface LogEntry {
  */
 export function log(entry: LogEntry): void {
   const line = JSON.stringify({ ts: new Date().toISOString(), ...entry });
-  if (entry.level === 'error' || entry.level === 'warn') {
+  if (entry.level === "error" || entry.level === "warn") {
     console.error(line);
   } else {
     console.log(line);
@@ -213,8 +213,11 @@ export function safeJsonParse<T = unknown>(raw: string): T | null {
  * const timeout = envTimeoutMs(process.env.MISSING_VAR, 10000);
  * // Returns 10000 (the default)
  */
-export function envTimeoutMs(raw: string | undefined, defaultMs: number): number {
-  const parsed = parseInt(raw ?? '', 10);
+export function envTimeoutMs(
+  raw: string | undefined,
+  defaultMs: number,
+): number {
+  const parsed = parseInt(raw ?? "", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : defaultMs;
 }
 
@@ -239,7 +242,7 @@ export function envTimeoutMs(raw: string | undefined, defaultMs: number): number
 export function isValidHttpUrl(raw: string): boolean {
   try {
     const url = new URL(raw);
-    return url.protocol === 'http:' || url.protocol === 'https:';
+    return url.protocol === "http:" || url.protocol === "https:";
   } catch {
     return false;
   }
@@ -262,7 +265,7 @@ export function isValidHttpUrl(raw: string): boolean {
  */
 export function isValidHttpsUrl(raw: string): boolean {
   try {
-    return new URL(raw).protocol === 'https:';
+    return new URL(raw).protocol === "https:";
   } catch {
     return false;
   }
@@ -315,7 +318,11 @@ const rateLimitStore = new Map<string, RateLimitEntry>();
  *   return { error: 'Too many login attempts' };
  * }
  */
-export function checkRateLimit(key: string, limit: number, windowMs: number): boolean {
+export function checkRateLimit(
+  key: string,
+  limit: number,
+  windowMs: number,
+): boolean {
   const now = Date.now();
   const entry = rateLimitStore.get(key);
 

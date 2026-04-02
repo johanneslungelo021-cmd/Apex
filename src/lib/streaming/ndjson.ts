@@ -1,5 +1,5 @@
 // src/lib/streaming/ndjson.ts
-export type StreamEventType = 'opportunities' | 'chunk' | 'done' | 'error';
+export type StreamEventType = "opportunities" | "chunk" | "done" | "error";
 
 export interface StreamEvent<T = unknown> {
   type: StreamEventType;
@@ -8,11 +8,11 @@ export interface StreamEvent<T = unknown> {
 
 export function parseNdjsonBuffer(
   remainder: string,
-  incoming: string
+  incoming: string,
 ): { events: StreamEvent[]; remainder: string } {
   const text = remainder + incoming;
-  const lines = text.split('\n');
-  const nextRemainder = lines.pop() ?? '';
+  const lines = text.split("\n");
+  const nextRemainder = lines.pop() ?? "";
 
   const events: StreamEvent[] = [];
 
@@ -24,9 +24,9 @@ export function parseNdjsonBuffer(
       const parsed = JSON.parse(trimmed);
       if (
         parsed &&
-        typeof parsed === 'object' &&
-        typeof (parsed as { type?: unknown }).type === 'string' &&
-        'data' in parsed
+        typeof parsed === "object" &&
+        typeof (parsed as { type?: unknown }).type === "string" &&
+        "data" in parsed
       ) {
         events.push(parsed as StreamEvent);
       }

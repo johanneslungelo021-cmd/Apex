@@ -1,4 +1,4 @@
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 /**
  * AI Agent API Endpoint — Phase 2 · Streaming + Tiered Model Routing
@@ -14,34 +14,37 @@ export const runtime = 'nodejs';
  * @module app/api/ai-agent
  */
 
-import { NextResponse } from 'next/server';
-import crypto from 'crypto';
-import { runScoutAgent } from '@/lib/agents/scout-agent';
+import { NextResponse } from "next/server";
+import crypto from "crypto";
+import { runScoutAgent } from "@/lib/agents/scout-agent";
 import {
   generateRequestId,
   log,
   envTimeoutMs,
   checkRateLimit,
-} from '@/lib/api-utils';
+} from "@/lib/api-utils";
 import {
   agentQueryCounter,
   inferenceLatencyHistogram,
   costAccumulator,
   rateLimitCounter,
   payloadRejectCounter,
-} from '@/lib/metrics';
-import { enrichMessages, validateTone } from '@/lib/ai/apexIdentityMiddleware';
+} from "@/lib/metrics";
+import { enrichMessages, validateTone } from "@/lib/ai/apexIdentityMiddleware";
 import {
   buildScoutContextMessage,
   encodeNdjsonEvent,
   estimateOutputTokensFromText,
   type ServerMessage,
-} from '@/lib/ai-agent/contracts';
-import { APP_VERSION } from '@/lib/version';
+} from "@/lib/ai-agent/contracts";
+import { APP_VERSION } from "@/lib/version";
 
-const SERVICE = 'ai-agent';
+const SERVICE = "ai-agent";
 const GROQ_TIMEOUT_MS = envTimeoutMs(process.env.GROQ_TIMEOUT_MS, 15_000);
-const PERPLEXITY_TIMEOUT_MS = envTimeoutMs(process.env.PERPLEXITY_TIMEOUT_MS, 14_000);
+const PERPLEXITY_TIMEOUT_MS = envTimeoutMs(
+  process.env.PERPLEXITY_TIMEOUT_MS,
+  14_000,
+);
 const KIMI_TIMEOUT_MS = envTimeoutMs(process.env.KIMI_TIMEOUT_MS, 20_000);
 const RATE_LIMIT = 20;
 const RATE_WINDOW_MS = 60_000;
@@ -53,45 +56,74 @@ const MAX_TOTAL_PAYLOAD_BYTES = 50_000;
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ValidatedMessage {
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   content: string;
 }
 
-const VALID_ROLES = new Set(['user', 'assistant']);
+const VALID_ROLES = new Set(["user", "assistant"]);
 
 // ─── Tiered Model Router ──────────────────────────────────────────────────────
 
-type QueryTier = 'simple' | 'complex' | 'research';
+type QueryTier = "simple" | "complex" | "research";
 
 interface TierConfig {
   tier: QueryTier;
-  provider: 'groq' | 'perplexity' | 'kimi';
+  provider: "groq" | "perplexity" | "kimi";
   model: string;
   maxTokens: number;
   temperature: number;
 }
 
 const RESEARCH_KEYWORDS = [
-  'research', 'latest', 'recent', 'current', 'news', 'today', '2025', '2026',
-  'search for', 'find out', 'look up', 'what happened', 'breaking',
-  'stock price', 'exchange rate', 'rand', 'zar', 'load shedding',
-  'eskom', 'south africa news',
+  "research",
+  "latest",
+  "recent",
+  "current",
+  "news",
+  "today",
+  "2025",
+  "2026",
+  "search for",
+  "find out",
+  "look up",
+  "what happened",
+  "breaking",
+  "stock price",
+  "exchange rate",
+  "rand",
+  "zar",
+  "load shedding",
+  "eskom",
+  "south africa news",
 ];
 
 const COMPLEX_KEYWORDS = [
-  'explain in detail', 'analyze', 'compare', 'write code', 'implement',
-  'debug', 'refactor', 'comprehensive', 'step by step', 'pros and cons',
-  'architecture', 'business plan', 'financial plan', 'investment',
-  'strategy', 'calculate', 'how much would',
+  "explain in detail",
+  "analyze",
+  "compare",
+  "write code",
+  "implement",
+  "debug",
+  "refactor",
+  "comprehensive",
+  "step by step",
+  "pros and cons",
+  "architecture",
+  "business plan",
+  "financial plan",
+  "investment",
+  "strategy",
+  "calculate",
+  "how much would",
 ];
 
 function classifyQuery(messages: ValidatedMessage[]): TierConfig {
-  const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user');
+  const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
   if (!lastUserMsg) {
     return {
-      tier: 'simple',
-      provider: 'groq',
-      model: 'llama-3.1-8b-instant',
+      tier: "simple",
+      provider: "groq",
+      model: "llama-3.1-8b-instant",
       maxTokens: 512,
       temperature: 0.7,
     };
@@ -103,29 +135,30 @@ function classifyQuery(messages: ValidatedMessage[]): TierConfig {
   const isResearch = RESEARCH_KEYWORDS.some((kw) => text.includes(kw));
   if (isResearch) {
     return {
-      tier: 'research',
-      provider: 'perplexity',
-      model: 'sonar',
+      tier: "research",
+      provider: "perplexity",
+      model: "sonar",
       maxTokens: 1024,
       temperature: 0.3,
     };
   }
 
-  const isComplex = COMPLEX_KEYWORDS.some((kw) => text.includes(kw)) || wordCount > 80;
+  const isComplex =
+    COMPLEX_KEYWORDS.some((kw) => text.includes(kw)) || wordCount > 80;
   if (isComplex) {
     return {
-      tier: 'complex',
-      provider: 'kimi',
-      model: 'kimi-k2-0711-preview',
+      tier: "complex",
+      provider: "kimi",
+      model: "kimi-k2-0711-preview",
       maxTokens: 2048,
       temperature: 0.6,
     };
   }
 
   return {
-    tier: 'simple',
-    provider: 'groq',
-    model: 'llama-3.1-8b-instant',
+    tier: "simple",
+    provider: "groq",
+    model: "llama-3.1-8b-instant",
     maxTokens: 512,
     temperature: 0.7,
   };
@@ -134,18 +167,21 @@ function classifyQuery(messages: ValidatedMessage[]): TierConfig {
 // ─── Payload Protection ───────────────────────────────────────────────────────
 
 class PayloadTooLargeError extends Error {
-  constructor(message: string = 'Request body exceeds size limit') {
+  constructor(message: string = "Request body exceeds size limit") {
     super(message);
-    this.name = 'PayloadTooLargeError';
+    this.name = "PayloadTooLargeError";
   }
 }
 
-async function readJsonBodyWithinLimit(req: Request, maxBytes: number): Promise<unknown> {
-  const contentLength = req.headers.get('content-length');
+async function readJsonBodyWithinLimit(
+  req: Request,
+  maxBytes: number,
+): Promise<unknown> {
+  const contentLength = req.headers.get("content-length");
   if (contentLength) {
     const declaredLength = parseInt(contentLength, 10);
     if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
-      throw new PayloadTooLargeError('Request body exceeds 5 MB limit.');
+      throw new PayloadTooLargeError("Request body exceeds 5 MB limit.");
     }
   }
 
@@ -163,7 +199,7 @@ async function readJsonBodyWithinLimit(req: Request, maxBytes: number): Promise<
     totalBytes += value.byteLength;
     if (totalBytes > maxBytes) {
       await reader.cancel().catch(() => {});
-      throw new PayloadTooLargeError('Request body exceeds 5 MB limit.');
+      throw new PayloadTooLargeError("Request body exceeds 5 MB limit.");
     }
 
     chunks.push(value);
@@ -184,28 +220,30 @@ async function readJsonBodyWithinLimit(req: Request, maxBytes: number): Promise<
 // ─── Validation ───────────────────────────────────────────────────────────────
 
 function validateMessages(raw: unknown): ValidatedMessage[] | string {
-  if (!Array.isArray(raw)) return 'messages must be a non-empty array.';
-  if (raw.length === 0) return 'messages array must not be empty.';
-  if (raw.length > MAX_MESSAGES) return `messages array must not exceed ${MAX_MESSAGES} items.`;
+  if (!Array.isArray(raw)) return "messages must be a non-empty array.";
+  if (raw.length === 0) return "messages array must not be empty.";
+  if (raw.length > MAX_MESSAGES)
+    return `messages array must not exceed ${MAX_MESSAGES} items.`;
 
   let totalBytes = 0;
 
   for (let i = 0; i < raw.length; i++) {
     const item = raw[i];
-    if (!item || typeof item !== 'object') return `messages[${i}] must be an object.`;
+    if (!item || typeof item !== "object")
+      return `messages[${i}] must be an object.`;
     const { role, content } = item as Record<string, unknown>;
 
-    if (typeof role !== 'string' || !VALID_ROLES.has(role)) {
+    if (typeof role !== "string" || !VALID_ROLES.has(role)) {
       return `messages[${i}].role must be "user" or "assistant".`;
     }
-    if (typeof content !== 'string' || !content.trim()) {
+    if (typeof content !== "string" || !content.trim()) {
       return `messages[${i}].content must be a non-empty string.`;
     }
     if (content.length > MAX_CONTENT_LENGTH) {
       return `messages[${i}].content must be under ${MAX_CONTENT_LENGTH} characters.`;
     }
 
-    totalBytes += Buffer.byteLength(content, 'utf8');
+    totalBytes += Buffer.byteLength(content, "utf8");
   }
 
   if (totalBytes > MAX_TOTAL_PAYLOAD_BYTES) {
@@ -220,15 +258,19 @@ function validateMessages(raw: unknown): ValidatedMessage[] | string {
 function hashIp(ip: string): string | undefined {
   const ipLogSalt = process.env.IP_LOG_SALT;
   if (!ipLogSalt) return undefined;
-  return crypto.createHmac('sha256', ipLogSalt).update(ip).digest('hex').slice(0, 16);
+  return crypto
+    .createHmac("sha256", ipLogSalt)
+    .update(ip)
+    .digest("hex")
+    .slice(0, 16);
 }
 
 // ─── Cost Estimation ──────────────────────────────────────────────────────────
 
 function estimateInputTokensFromMessages(messages: ServerMessage[]): number {
   const combined = messages
-    .map((m) => (typeof m.content === 'string' ? m.content : ''))
-    .join('\n');
+    .map((m) => (typeof m.content === "string" ? m.content : ""))
+    .join("\n");
 
   return estimateOutputTokensFromText(combined);
 }
@@ -236,11 +278,11 @@ function estimateInputTokensFromMessages(messages: ServerMessage[]): number {
 function estimateCost(
   tier: TierConfig,
   inputTokens: number,
-  outputTokens: number
+  outputTokens: number,
 ): string {
   const pricing: Record<string, { input: number; output: number }> = {
-    'llama-3.1-8b-instant': { input: 0.05, output: 0.08 },
-    'kimi-k2-0711-preview': { input: 0.15, output: 0.60 },
+    "llama-3.1-8b-instant": { input: 0.05, output: 0.08 },
+    "kimi-k2-0711-preview": { input: 0.15, output: 0.6 },
     sonar: { input: 1.0, output: 1.0 },
   };
 
@@ -256,21 +298,21 @@ function extractContentChunk(dataLine: string): string {
   try {
     const parsed = JSON.parse(dataLine);
     const deltaContent = parsed?.choices?.[0]?.delta?.content;
-    if (typeof deltaContent === 'string') return deltaContent;
+    if (typeof deltaContent === "string") return deltaContent;
 
     const messageContent = parsed?.choices?.[0]?.message?.content;
-    if (typeof messageContent === 'string') return messageContent;
+    if (typeof messageContent === "string") return messageContent;
   } catch {
-    return '';
+    return "";
   }
-  return '';
+  return "";
 }
 
 function parseSseBuffer(buffer: string): { events: string[]; rest: string } {
-  const events = buffer.split('\n\n');
+  const events = buffer.split("\n\n");
   return {
     events: events.slice(0, -1),
-    rest: events.at(-1) ?? '',
+    rest: events.at(-1) ?? "",
   };
 }
 
@@ -278,58 +320,64 @@ function parseSseBuffer(buffer: string): { events: string[]; rest: string } {
 
 export async function GET(): Promise<Response> {
   const manifest = {
-    name: 'Apex Intelligent Engine',
+    name: "Apex Intelligent Engine",
     version: APP_VERSION,
     description:
-      'Tiered AI assistant with streaming responses, cost-optimized model routing, and live web research for South African digital income opportunities.',
+      "Tiered AI assistant with streaming responses, cost-optimized model routing, and live web research for South African digital income opportunities.",
     models: {
-      simple: 'llama-3.1-8b-instant (Groq, $0.05/$0.08 per M tokens)',
-      complex: 'kimi-k2-0711-preview (Moonshot AI, $0.15/$0.60 per M tokens)',
-      research: 'sonar (Perplexity, $1/$1 per M tokens + $0.005/request)',
+      simple: "llama-3.1-8b-instant (Groq, $0.05/$0.08 per M tokens)",
+      complex: "kimi-k2-0711-preview (Moonshot AI, $0.15/$0.60 per M tokens)",
+      research: "sonar (Perplexity, $1/$1 per M tokens + $0.005/request)",
     },
     streaming: true,
-    stream: 'application/x-ndjson — one JSON object per line: { "type": "...", "data": ... }',
+    stream:
+      'application/x-ndjson — one JSON object per line: { "type": "...", "data": ... }',
     rateLimit: { requests: RATE_LIMIT, windowMs: RATE_WINDOW_MS },
     inputSchema: {
-      type: 'object',
+      type: "object",
       properties: {
         messages: {
-          type: 'array',
+          type: "array",
           maxItems: MAX_MESSAGES,
           maxTotalBytes: MAX_TOTAL_PAYLOAD_BYTES,
           items: {
-            type: 'object',
+            type: "object",
             properties: {
-              role: { type: 'string', enum: ['user', 'assistant'] },
-              content: { type: 'string', maxLength: MAX_CONTENT_LENGTH },
+              role: { type: "string", enum: ["user", "assistant"] },
+              content: { type: "string", maxLength: MAX_CONTENT_LENGTH },
             },
-            required: ['role', 'content'],
+            required: ["role", "content"],
           },
         },
       },
-      required: ['messages'],
+      required: ["messages"],
     },
     output: {
-      stream: 'application/x-ndjson — events of type opportunities, chunk, done, error',
-      requestId: 'string — Use for log correlation',
-      durationMs: 'number — End-to-end latency',
+      stream:
+        "application/x-ndjson — events of type opportunities, chunk, done, error",
+      requestId: "string — Use for log correlation",
+      durationMs: "number — End-to-end latency",
     },
     exampleQuery: {
       messages: [
-        { role: 'user', content: 'Find me a digital income opportunity in Gauteng under R2000' },
+        {
+          role: "user",
+          content:
+            "Find me a digital income opportunity in Gauteng under R2000",
+        },
       ],
     },
     schema: {
-      '@context': 'https://schema.org',
-      '@type': 'WebAPI',
-      name: 'Apex Intelligent Engine API',
-      description: 'AI agent for South African digital income opportunities',
-      url: 'https://apex-coral-zeta.vercel.app/api/ai-agent',
+      "@context": "https://schema.org",
+      "@type": "WebAPI",
+      name: "Apex Intelligent Engine API",
+      description: "AI agent for South African digital income opportunities",
+      url: "https://apex-coral-zeta.vercel.app/api/ai-agent",
     },
   };
 
   return NextResponse.json(manifest, {
-    headers: { 'Cache-Control': 'public, max-age=3600' },
+    headers: { "Cache-Control": "public, max-age=3600" },
   });
 }
 
@@ -340,28 +388,32 @@ export async function POST(req: Request): Promise<Response> {
   const startMs = Date.now();
 
   const ip =
-    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-    req.headers.get('x-real-ip') ??
-    'unknown';
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    req.headers.get("x-real-ip") ??
+    "unknown";
 
   const hashedIp = hashIp(ip);
 
   if (!checkRateLimit(ip, RATE_LIMIT, RATE_WINDOW_MS)) {
-    rateLimitCounter.add(1, { route: 'ai-agent' });
+    rateLimitCounter.add(1, { route: "ai-agent" });
     log({
-      level: 'warn',
+      level: "warn",
       service: SERVICE,
-      message: 'Rate limit exceeded',
+      message: "Rate limit exceeded",
       requestId,
       ...(hashedIp !== undefined ? { hashedIp } : {}),
     });
     return NextResponse.json(
-      { error: 'RATE_LIMITED', message: 'Too many requests. Please wait before retrying.', requestId },
+      {
+        error: "RATE_LIMITED",
+        message: "Too many requests. Please wait before retrying.",
+        requestId,
+      },
       {
         status: 429,
         headers: {
-          'X-Request-Id': requestId,
-          'Retry-After': String(Math.ceil(RATE_WINDOW_MS / 1000)),
+          "X-Request-Id": requestId,
+          "Retry-After": String(Math.ceil(RATE_WINDOW_MS / 1000)),
         },
       },
     );
@@ -372,32 +424,36 @@ export async function POST(req: Request): Promise<Response> {
     body = await readJsonBodyWithinLimit(req, MAX_REQUEST_BODY_BYTES);
   } catch (err: unknown) {
     if (err instanceof PayloadTooLargeError) {
-      payloadRejectCounter.add(1, { route: 'ai-agent' });
+      payloadRejectCounter.add(1, { route: "ai-agent" });
       return NextResponse.json(
-        { error: 'PAYLOAD_TOO_LARGE', message: err.message, requestId },
-        { status: 413, headers: { 'X-Request-Id': requestId } },
+        { error: "PAYLOAD_TOO_LARGE", message: err.message, requestId },
+        { status: 413, headers: { "X-Request-Id": requestId } },
       );
     }
 
     return NextResponse.json(
-      { error: 'VALIDATION_ERROR', message: 'Invalid JSON body.', requestId },
-      { status: 400, headers: { 'X-Request-Id': requestId } },
+      { error: "VALIDATION_ERROR", message: "Invalid JSON body.", requestId },
+      { status: 400, headers: { "X-Request-Id": requestId } },
     );
   }
 
-  if (!body || typeof body !== 'object') {
+  if (!body || typeof body !== "object") {
     return NextResponse.json(
-      { error: 'VALIDATION_ERROR', message: 'Request body must be a JSON object.', requestId },
-      { status: 400, headers: { 'X-Request-Id': requestId } },
+      {
+        error: "VALIDATION_ERROR",
+        message: "Request body must be a JSON object.",
+        requestId,
+      },
+      { status: 400, headers: { "X-Request-Id": requestId } },
     );
   }
 
   const { messages: rawMessages } = body as Record<string, unknown>;
   const validated = validateMessages(rawMessages);
-  if (typeof validated === 'string') {
+  if (typeof validated === "string") {
     return NextResponse.json(
-      { error: 'VALIDATION_ERROR', message: validated, requestId },
-      { status: 400, headers: { 'X-Request-Id': requestId } },
+      { error: "VALIDATION_ERROR", message: validated, requestId },
+      { status: 400, headers: { "X-Request-Id": requestId } },
     );
   }
   const messages = validated;
@@ -405,9 +461,9 @@ export async function POST(req: Request): Promise<Response> {
   let tierConfig = classifyQuery(messages);
 
   log({
-    level: 'info',
+    level: "info",
     service: SERVICE,
-    message: 'Agent query received',
+    message: "Agent query received",
     requestId,
     messageCount: messages.length,
     tier: tierConfig.tier,
@@ -420,9 +476,9 @@ export async function POST(req: Request): Promise<Response> {
     const opportunitySummary = opportunities
       .map(
         (o) =>
-          `${o.title} (${o.category}, R${o.cost}, ${o.province}) — ${o.link}`
+          `${o.title} (${o.category}, R${o.cost}, ${o.province}) — ${o.link}`,
       )
-      .join('\n');
+      .join("\n");
 
     // Apex Identity Matrix: enriches messages with multi-layer identity context,
     // adaptive emotional state detection, and language-mirroring instructions.
@@ -433,56 +489,108 @@ export async function POST(req: Request): Promise<Response> {
       ...messages,
     ];
 
-    const upstreamMessages: ServerMessage[] = await enrichMessages(baseMessages, {
-      userContext: {
-        isFirstInteraction: messages.length === 1,
+    const upstreamMessages: ServerMessage[] = await enrichMessages(
+      baseMessages,
+      {
+        userContext: {
+          isFirstInteraction: messages.length === 1,
+        },
       },
-    });
+    );
 
-    const estimatedInputTokens = estimateInputTokensFromMessages(upstreamMessages);
+    const estimatedInputTokens =
+      estimateInputTokensFromMessages(upstreamMessages);
 
-    const apiKey = tierConfig.provider === 'perplexity'
-      ? process.env.PERPLEXITY_API_KEY
-      : tierConfig.provider === 'kimi'
-        ? (process.env.KIMI_API_KEY ?? process.env.MPC_APEX)
-        : process.env.GROQ_API_KEY;
+    const apiKey =
+      tierConfig.provider === "perplexity"
+        ? process.env.PERPLEXITY_API_KEY
+        : tierConfig.provider === "kimi"
+          ? (process.env.KIMI_API_KEY ?? process.env.MPC_APEX)
+          : process.env.GROQ_API_KEY;
 
     if (!apiKey) {
       // Graceful degradation: Kimi missing → fall back to Groq simple
-      if (tierConfig.provider === 'kimi') {
+      if (tierConfig.provider === "kimi") {
         const groqKey = process.env.GROQ_API_KEY;
         if (groqKey) {
-          log({ level: 'warn', service: SERVICE, message: 'KIMI_API_KEY missing — falling back to Groq simple', requestId });
-          tierConfig = { tier: 'simple', provider: 'groq', model: 'llama-3.1-8b-instant', maxTokens: 512, temperature: 0.7 };
+          log({
+            level: "warn",
+            service: SERVICE,
+            message: "KIMI_API_KEY missing — falling back to Groq simple",
+            requestId,
+          });
+          tierConfig = {
+            tier: "simple",
+            provider: "groq",
+            model: "llama-3.1-8b-instant",
+            maxTokens: 512,
+            temperature: 0.7,
+          };
         } else {
-          log({ level: 'error', service: SERVICE, message: 'No AI keys configured', requestId });
+          log({
+            level: "error",
+            service: SERVICE,
+            message: "No AI keys configured",
+            requestId,
+          });
           return NextResponse.json(
-            { error: 'SERVICE_UNAVAILABLE', message: 'AI engine not configured.', requestId },
-            { status: 503, headers: { 'X-Request-Id': requestId } },
+            {
+              error: "SERVICE_UNAVAILABLE",
+              message: "AI engine not configured.",
+              requestId,
+            },
+            { status: 503, headers: { "X-Request-Id": requestId } },
           );
         }
-      } else if (tierConfig.provider === 'perplexity') {
+      } else if (tierConfig.provider === "perplexity") {
         const groqKey = process.env.GROQ_API_KEY;
         if (groqKey) {
-          log({ level: 'warn', service: SERVICE, message: 'PERPLEXITY_API_KEY missing — falling back to Groq simple', requestId });
-          tierConfig = { tier: 'simple', provider: 'groq', model: 'llama-3.1-8b-instant', maxTokens: 512, temperature: 0.7 };
+          log({
+            level: "warn",
+            service: SERVICE,
+            message: "PERPLEXITY_API_KEY missing — falling back to Groq simple",
+            requestId,
+          });
+          tierConfig = {
+            tier: "simple",
+            provider: "groq",
+            model: "llama-3.1-8b-instant",
+            maxTokens: 512,
+            temperature: 0.7,
+          };
         } else {
-          log({ level: 'error', service: SERVICE, message: 'GROQ_API_KEY not configured', requestId });
+          log({
+            level: "error",
+            service: SERVICE,
+            message: "GROQ_API_KEY not configured",
+            requestId,
+          });
           return NextResponse.json(
-            { error: 'SERVICE_UNAVAILABLE', message: 'AI engine not configured.', requestId },
-            { status: 503, headers: { 'X-Request-Id': requestId } },
+            {
+              error: "SERVICE_UNAVAILABLE",
+              message: "AI engine not configured.",
+              requestId,
+            },
+            { status: 503, headers: { "X-Request-Id": requestId } },
           );
         }
       } else {
-        log({ level: 'error', service: SERVICE, message: 'GROQ_API_KEY not configured', requestId });
+        log({
+          level: "error",
+          service: SERVICE,
+          message: "GROQ_API_KEY not configured",
+          requestId,
+        });
         return NextResponse.json(
-          { error: 'SERVICE_UNAVAILABLE', message: 'AI engine not configured.', requestId },
-          { status: 503, headers: { 'X-Request-Id': requestId } },
+          {
+            error: "SERVICE_UNAVAILABLE",
+            message: "AI engine not configured.",
+            requestId,
+          },
+          { status: 503, headers: { "X-Request-Id": requestId } },
         );
       }
     }
-
-
 
     // ── Upstream fetch with Groq 429 retry + model fallback ───────────────────
     //
@@ -500,23 +608,30 @@ export async function POST(req: Request): Promise<Response> {
     // MAX total added latency: ~2 s (Retry-After cap) + 1 retry fetch — acceptable
     // inside a serverless timeout budget of 15 s.
 
-    const GROQ_FALLBACK_MODEL = 'llama-3.3-70b-versatile';
+    const GROQ_FALLBACK_MODEL = "llama-3.3-70b-versatile";
     const MAX_RETRY_DELAY_MS = 2_000; // never block the serverless fn >2 s
-    const MAX_GROQ_RETRIES = 2;       // 1 same-model retry + 1 fallback-model attempt
+    const MAX_GROQ_RETRIES = 2; // 1 same-model retry + 1 fallback-model attempt
 
     /**
      * Fire one upstream request with its own AbortController + timeout.
      * Returns the raw Response (may be non-ok — caller checks status).
      */
-    async function callUpstream(cfg: typeof tierConfig, ac: AbortController): Promise<Response> {
-      const endpoint = cfg.provider === 'perplexity'
-        ? 'https://api.perplexity.ai/chat/completions'
-        : cfg.provider === 'kimi'
-          ? 'https://api.moonshot.cn/v1/chat/completions'
-          : 'https://api.groq.com/openai/v1/chat/completions';
+    async function callUpstream(
+      cfg: typeof tierConfig,
+      ac: AbortController,
+    ): Promise<Response> {
+      const endpoint =
+        cfg.provider === "perplexity"
+          ? "https://api.perplexity.ai/chat/completions"
+          : cfg.provider === "kimi"
+            ? "https://api.moonshot.cn/v1/chat/completions"
+            : "https://api.groq.com/openai/v1/chat/completions";
       return fetch(endpoint, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           model: cfg.model,
           messages: upstreamMessages,
@@ -528,11 +643,12 @@ export async function POST(req: Request): Promise<Response> {
       });
     }
 
-    const timeoutMs = tierConfig.provider === 'perplexity'
-      ? PERPLEXITY_TIMEOUT_MS
-      : tierConfig.provider === 'kimi'
-        ? KIMI_TIMEOUT_MS
-        : GROQ_TIMEOUT_MS;
+    const timeoutMs =
+      tierConfig.provider === "perplexity"
+        ? PERPLEXITY_TIMEOUT_MS
+        : tierConfig.provider === "kimi"
+          ? KIMI_TIMEOUT_MS
+          : GROQ_TIMEOUT_MS;
 
     let response: Response;
     let groqRetries = 0;
@@ -541,23 +657,38 @@ export async function POST(req: Request): Promise<Response> {
 
     while (true) {
       abortController = new AbortController();
-      const timeoutId = setTimeout(() => abortController.abort('timeout'), timeoutMs);
+      const timeoutId = setTimeout(
+        () => abortController.abort("timeout"),
+        timeoutMs,
+      );
 
       try {
         response = await callUpstream(tierConfig, abortController);
       } catch (err) {
         clearTimeout(timeoutId);
-        const isTimeout = err instanceof Error && (err.name === 'AbortError' || err.message.includes('timeout'));
+        const isTimeout =
+          err instanceof Error &&
+          (err.name === "AbortError" || err.message.includes("timeout"));
         log({
-          level: 'warn', service: SERVICE, requestId,
-          message: isTimeout ? 'Upstream timeout' : 'Upstream fetch failed',
+          level: "warn",
+          service: SERVICE,
+          requestId,
+          message: isTimeout ? "Upstream timeout" : "Upstream fetch failed",
           durationMs: Date.now() - startMs,
-          tier: tierConfig.tier, provider: tierConfig.provider,
+          tier: tierConfig.tier,
+          provider: tierConfig.provider,
         });
-        agentQueryCounter.add(1, { status: isTimeout ? 'timeout' : 'error', tier: tierConfig.tier });
+        agentQueryCounter.add(1, {
+          status: isTimeout ? "timeout" : "error",
+          tier: tierConfig.tier,
+        });
         return NextResponse.json(
-          { error: 'UPSTREAM_ERROR', message: 'The AI engine took too long. Please try again.', requestId },
-          { status: 504, headers: { 'X-Request-Id': requestId } },
+          {
+            error: "UPSTREAM_ERROR",
+            message: "The AI engine took too long. Please try again.",
+            requestId,
+          },
+          { status: 504, headers: { "X-Request-Id": requestId } },
         );
       }
 
@@ -567,11 +698,13 @@ export async function POST(req: Request): Promise<Response> {
       if (response.ok) break;
 
       // ── Groq 429 — rate limited ─────────────────────────────────────────────
-      if (response.status === 429 && tierConfig.provider === 'groq') {
+      if (response.status === 429 && tierConfig.provider === "groq") {
         groqRetries += 1;
 
         // Parse Retry-After (Groq sends seconds as a float string or integer)
-        const retryAfterRaw = response.headers.get('retry-after') ?? response.headers.get('x-ratelimit-reset-requests');
+        const retryAfterRaw =
+          response.headers.get("retry-after") ??
+          response.headers.get("x-ratelimit-reset-requests");
         const retryAfterMs = Math.min(
           retryAfterRaw ? Math.ceil(parseFloat(retryAfterRaw) * 1000) : 1_000,
           MAX_RETRY_DELAY_MS,
@@ -580,57 +713,98 @@ export async function POST(req: Request): Promise<Response> {
         if (groqRetries === 1) {
           // First 429: wait briefly and retry the same model
           log({
-            level: 'warn', service: SERVICE, requestId,
+            level: "warn",
+            service: SERVICE,
+            requestId,
             message: `groq returned HTTP 429 — retrying ${tierConfig.model} after ${retryAfterMs}ms`,
-            tier: tierConfig.tier, model: tierConfig.model, retryAfterMs,
+            tier: tierConfig.tier,
+            model: tierConfig.model,
+            retryAfterMs,
           });
           await new Promise<void>((r) => setTimeout(r, retryAfterMs));
           continue; // retry same model
         }
 
-        if (groqRetries === MAX_GROQ_RETRIES && tierConfig.model !== GROQ_FALLBACK_MODEL) {
+        if (
+          groqRetries === MAX_GROQ_RETRIES &&
+          tierConfig.model !== GROQ_FALLBACK_MODEL
+        ) {
           // Second 429: promote to fallback model (separate rate-limit bucket)
           log({
-            level: 'warn', service: SERVICE, requestId,
+            level: "warn",
+            service: SERVICE,
+            requestId,
             message: `groq still 429 after retry — escalating to fallback model ${GROQ_FALLBACK_MODEL}`,
-            tier: tierConfig.tier, originalModel: tierConfig.model,
+            tier: tierConfig.tier,
+            originalModel: tierConfig.model,
           });
-          tierConfig = { ...tierConfig, model: GROQ_FALLBACK_MODEL, maxTokens: 512 };
+          tierConfig = {
+            ...tierConfig,
+            model: GROQ_FALLBACK_MODEL,
+            maxTokens: 512,
+          };
           continue; // retry with fallback model
         }
 
         // All retries exhausted — return a proper 429, not a misleading 502
         log({
-          level: 'warn', service: SERVICE, requestId,
-          message: 'groq 429 exhausted all retries — returning 429 to client',
+          level: "warn",
+          service: SERVICE,
+          requestId,
+          message: "groq 429 exhausted all retries — returning 429 to client",
           tier: tierConfig.tier,
         });
-        agentQueryCounter.add(1, { status: 'rate_limited', tier: tierConfig.tier });
+        agentQueryCounter.add(1, {
+          status: "rate_limited",
+          tier: tierConfig.tier,
+        });
         return NextResponse.json(
-          { error: 'RATE_LIMITED', message: 'AI engine is busy — please try again in a moment.', requestId },
-          { status: 429, headers: { 'X-Request-Id': requestId, 'Retry-After': '5' } },
+          {
+            error: "RATE_LIMITED",
+            message: "AI engine is busy — please try again in a moment.",
+            requestId,
+          },
+          {
+            status: 429,
+            headers: { "X-Request-Id": requestId, "Retry-After": "5" },
+          },
         );
       }
 
       // ── Any other non-ok status ─────────────────────────────────────────────
       log({
-        level: 'warn', service: SERVICE,
+        level: "warn",
+        service: SERVICE,
         message: `${tierConfig.provider} returned HTTP ${response.status}`,
-        requestId, tier: tierConfig.tier,
+        requestId,
+        tier: tierConfig.tier,
       });
-      agentQueryCounter.add(1, { status: 'error', tier: tierConfig.tier });
+      agentQueryCounter.add(1, { status: "error", tier: tierConfig.tier });
       return NextResponse.json(
-        { error: 'UPSTREAM_ERROR', message: 'AI engine temporarily unavailable.', requestId },
-        { status: 502, headers: { 'X-Request-Id': requestId } },
+        {
+          error: "UPSTREAM_ERROR",
+          message: "AI engine temporarily unavailable.",
+          requestId,
+        },
+        { status: 502, headers: { "X-Request-Id": requestId } },
       );
     }
 
     if (!response.body) {
-      log({ level: 'warn', service: SERVICE, message: 'No response body from upstream', requestId });
-      agentQueryCounter.add(1, { status: 'error', tier: tierConfig.tier });
+      log({
+        level: "warn",
+        service: SERVICE,
+        message: "No response body from upstream",
+        requestId,
+      });
+      agentQueryCounter.add(1, { status: "error", tier: tierConfig.tier });
       return NextResponse.json(
-        { error: 'UPSTREAM_ERROR', message: 'AI engine returned no stream.', requestId },
-        { status: 502, headers: { 'X-Request-Id': requestId } },
+        {
+          error: "UPSTREAM_ERROR",
+          message: "AI engine returned no stream.",
+          requestId,
+        },
+        { status: 502, headers: { "X-Request-Id": requestId } },
       );
     }
 
@@ -640,13 +814,13 @@ export async function POST(req: Request): Promise<Response> {
 
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
-        let buffer = '';
-        let reply = '';
+        let buffer = "";
+        let reply = "";
         // Track actual text length for token estimation
-        let outputText = '';
+        let outputText = "";
 
         // Send opportunities as first event using NDJSON format
-        controller.enqueue(encodeNdjsonEvent('opportunities', opportunities));
+        controller.enqueue(encodeNdjsonEvent("opportunities", opportunities));
 
         try {
           while (true) {
@@ -659,19 +833,19 @@ export async function POST(req: Request): Promise<Response> {
             buffer = parsed.rest;
 
             for (const eventBlock of parsed.events) {
-              for (const line of eventBlock.split('\n')) {
+              for (const line of eventBlock.split("\n")) {
                 const trimmed = line.trim();
-                if (!trimmed.startsWith('data:')) continue;
+                if (!trimmed.startsWith("data:")) continue;
 
                 const dataLine = trimmed.slice(5).trim();
-                if (!dataLine || dataLine === '[DONE]') continue;
+                if (!dataLine || dataLine === "[DONE]") continue;
 
                 const chunk = extractContentChunk(dataLine);
                 if (!chunk) continue;
 
                 reply += chunk;
                 outputText += chunk;
-                controller.enqueue(encodeNdjsonEvent('chunk', chunk));
+                controller.enqueue(encodeNdjsonEvent("chunk", chunk));
               }
             }
           }
@@ -679,19 +853,19 @@ export async function POST(req: Request): Promise<Response> {
           buffer += decoder.decode();
           const trailing = parseSseBuffer(`${buffer}\n\n`).events;
           for (const eventBlock of trailing) {
-            for (const line of eventBlock.split('\n')) {
+            for (const line of eventBlock.split("\n")) {
               const trimmed = line.trim();
-              if (!trimmed.startsWith('data:')) continue;
+              if (!trimmed.startsWith("data:")) continue;
 
               const dataLine = trimmed.slice(5).trim();
-              if (!dataLine || dataLine === '[DONE]') continue;
+              if (!dataLine || dataLine === "[DONE]") continue;
 
               const chunk = extractContentChunk(dataLine);
               if (!chunk) continue;
 
               reply += chunk;
               outputText += chunk;
-              controller.enqueue(encodeNdjsonEvent('chunk', chunk));
+              controller.enqueue(encodeNdjsonEvent("chunk", chunk));
             }
           }
 
@@ -699,11 +873,12 @@ export async function POST(req: Request): Promise<Response> {
           const durationMs = Date.now() - startMs;
 
           // Estimate tokens from actual text length (~4 chars per token for English)
-          const estimatedOutputTokens = estimateOutputTokensFromText(outputText);
+          const estimatedOutputTokens =
+            estimateOutputTokensFromText(outputText);
           const costEst = estimateCost(
             tierConfig,
             estimatedInputTokens,
-            estimatedOutputTokens
+            estimatedOutputTokens,
           );
 
           // Record histogram
@@ -724,26 +899,35 @@ export async function POST(req: Request): Promise<Response> {
 
           if (!reply.trim()) {
             log({
-              level: 'warn',
+              level: "warn",
               service: SERVICE,
-              message: 'Empty content from upstream',
+              message: "Empty content from upstream",
               requestId,
             });
 
-            agentQueryCounter.add(1, { status: 'error', tier: tierConfig.tier });
+            agentQueryCounter.add(1, {
+              status: "error",
+              tier: tierConfig.tier,
+            });
             controller.enqueue(
-              encodeNdjsonEvent('error', 'AI engine returned an empty response.')
+              encodeNdjsonEvent(
+                "error",
+                "AI engine returned an empty response.",
+              ),
             );
           } else {
-            agentQueryCounter.add(1, { status: 'success', tier: tierConfig.tier });
+            agentQueryCounter.add(1, {
+              status: "success",
+              tier: tierConfig.tier,
+            });
 
             // Apex Identity: validate tone — flag drift in logs
             const toneClean = validateTone(reply);
 
             log({
-              level: 'info',
+              level: "info",
               service: SERVICE,
-              message: 'Agent query completed',
+              message: "Agent query completed",
               requestId,
               durationMs,
               tier: tierConfig.tier,
@@ -757,47 +941,52 @@ export async function POST(req: Request): Promise<Response> {
 
           // Send done event with metadata
           controller.enqueue(
-            encodeNdjsonEvent('done', {
+            encodeNdjsonEvent("done", {
               requestId,
               durationMs,
               tier: tierConfig.tier,
               model: tierConfig.model,
               estimatedOutputTokens,
               estimatedCostUsd: costEst,
-            })
+            }),
           );
         } catch (err: unknown) {
           const errMsg = err instanceof Error ? err.message : String(err);
-          const isClientDisconnect = err instanceof Error && err.message.includes('cancel');
-          const isTimeout = err instanceof Error && err.name === 'AbortError';
+          const isClientDisconnect =
+            err instanceof Error && err.message.includes("cancel");
+          const isTimeout = err instanceof Error && err.name === "AbortError";
 
           if (!isClientDisconnect) {
             log({
-              level: 'warn',
+              level: "warn",
               service: SERVICE,
               requestId,
-              message: 'Stream interrupted',
+              message: "Stream interrupted",
               durationMs: Date.now() - startMs,
               error: errMsg,
             });
           }
 
           agentQueryCounter.add(1, {
-            status: isClientDisconnect ? 'client_disconnect' : isTimeout ? 'timeout' : 'error',
+            status: isClientDisconnect
+              ? "client_disconnect"
+              : isTimeout
+                ? "timeout"
+                : "error",
             tier: tierConfig.tier,
           });
 
           controller.enqueue(
-            encodeNdjsonEvent('error', 'Stream interrupted. Please try again.')
+            encodeNdjsonEvent("error", "Stream interrupted. Please try again."),
           );
           controller.enqueue(
-            encodeNdjsonEvent('done', {
+            encodeNdjsonEvent("done", {
               requestId,
               durationMs: Date.now() - startMs,
               tier: tierConfig.tier,
               model: tierConfig.model,
               error: true,
-            })
+            }),
           );
         } finally {
           controller.close();
@@ -807,30 +996,33 @@ export async function POST(req: Request): Promise<Response> {
 
       // Abort upstream when client disconnects
       cancel() {
-        abortController.abort('client_disconnect');
+        abortController.abort("client_disconnect");
         upstreamReader.cancel().catch(() => {});
       },
     });
 
     return new Response(stream, {
       headers: {
-        'Content-Type': 'application/x-ndjson; charset=utf-8',
-        'Cache-Control': 'no-store',
-        'X-Request-Id': requestId,
-        'X-Model-Tier': tierConfig.tier,
-        'X-Model': tierConfig.model,
+        "Content-Type": "application/x-ndjson; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Request-Id": requestId,
+        "X-Model-Tier": tierConfig.tier,
+        "X-Model": tierConfig.model,
       },
     });
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
-    const isTimeout = err instanceof Error && err.name === 'AbortError';
+    const isTimeout = err instanceof Error && err.name === "AbortError";
 
-    agentQueryCounter.add(1, { status: isTimeout ? 'timeout' : 'error', tier: 'unknown' });
+    agentQueryCounter.add(1, {
+      status: isTimeout ? "timeout" : "error",
+      tier: "unknown",
+    });
 
     log({
-      level: 'error',
+      level: "error",
       service: SERVICE,
-      message: isTimeout ? 'Request timed out' : 'Agent query failed',
+      message: isTimeout ? "Request timed out" : "Agent query failed",
       requestId,
       error: errMsg,
       durationMs: Date.now() - startMs,
@@ -838,13 +1030,15 @@ export async function POST(req: Request): Promise<Response> {
 
     return NextResponse.json(
       {
-        error: isTimeout ? 'TIMEOUT' : 'INTERNAL_ERROR',
-        message: isTimeout ? 'Request timed out. Please try again.' : 'An unexpected error occurred.',
+        error: isTimeout ? "TIMEOUT" : "INTERNAL_ERROR",
+        message: isTimeout
+          ? "Request timed out. Please try again."
+          : "An unexpected error occurred.",
         requestId,
       },
       {
         status: isTimeout ? 504 : 500,
-        headers: { 'X-Request-Id': requestId },
+        headers: { "X-Request-Id": requestId },
       },
     );
   }

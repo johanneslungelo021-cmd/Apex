@@ -1,16 +1,27 @@
 // src/components/sentient/MagneticReticle.tsx
-'use client';
+"use client";
 
-import { motion } from 'framer-motion';
-import { useMagneticCursor } from '@/hooks/useMagneticCursor';
-import { useEmotionEngine, type EmotionState } from '@/hooks/useEmotionEngine';
-import { useSensoryPreferences } from '@/hooks/useSensoryPreferences';
+import { motion } from "framer-motion";
+import { useMagneticCursor } from "@/hooks/useMagneticCursor";
+import { useEmotionEngine, type EmotionState } from "@/hooks/useEmotionEngine";
+import { useSensoryPreferences } from "@/hooks/useSensoryPreferences";
 
-const RETICLE_VARS: Record<EmotionState, { scale: number; border: string; bg: string }> = {
-  dormant:    { scale: 1,   border: 'rgba(255,255,255,0.2)', bg: 'transparent' },
-  awakened:   { scale: 1.2, border: 'rgba(16,185,129,0.5)',  bg: 'rgba(16,185,129,0.1)' },
-  processing: { scale: 0.8, border: 'rgba(139,92,246,0.8)',  bg: 'rgba(139,92,246,0.2)' },
-  resolved:   { scale: 1.5, border: 'rgba(59,130,246,0.6)',  bg: 'transparent' },
+const RETICLE_VARS: Record<
+  EmotionState,
+  { scale: number; border: string; bg: string }
+> = {
+  dormant: { scale: 1, border: "rgba(255,255,255,0.2)", bg: "transparent" },
+  awakened: {
+    scale: 1.2,
+    border: "rgba(16,185,129,0.5)",
+    bg: "rgba(16,185,129,0.1)",
+  },
+  processing: {
+    scale: 0.8,
+    border: "rgba(139,92,246,0.8)",
+    bg: "rgba(139,92,246,0.2)",
+  },
+  resolved: { scale: 1.5, border: "rgba(59,130,246,0.6)", bg: "transparent" },
 };
 
 export default function MagneticReticle() {
@@ -31,10 +42,10 @@ export default function MagneticReticle() {
         scale: isHovering ? style.scale * 1.5 : style.scale,
         borderColor: style.border,
         backgroundColor: style.bg,
-        borderWidth: isHovering ? '1px' : '2px',
+        borderWidth: isHovering ? "1px" : "2px",
       }}
       transition={{
-        type: 'spring',
+        type: "spring",
         stiffness: 400,
         damping: 28,
         mass: 0.5,

@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 /**
  * ErrorExperience — Ubuntu-Grounded Error UI Component
@@ -17,10 +17,20 @@
  * via the onAction callback.
  */
 
-import { motion } from 'framer-motion';
-import { RefreshCw, MessageCircle, Bell, Shield, AlertTriangle } from 'lucide-react';
-import MindfulDisclosure from './MindfulDisclosure';
-import { humanizeError, severityToColorClass, type ApexError } from '@/lib/agents/empathyEngine';
+import { motion } from "framer-motion";
+import {
+  RefreshCw,
+  MessageCircle,
+  Bell,
+  Shield,
+  AlertTriangle,
+} from "lucide-react";
+import MindfulDisclosure from "./MindfulDisclosure";
+import {
+  humanizeError,
+  severityToColorClass,
+  type ApexError,
+} from "@/lib/agents/empathyEngine";
 
 interface ErrorExperienceProps {
   error: ApexError;
@@ -30,26 +40,26 @@ interface ErrorExperienceProps {
 
 // Icon mapping for action types
 const ACTION_ICONS: Record<string, typeof RefreshCw> = {
-  retry_delayed:     RefreshCw,
-  retry_immediate:   RefreshCw,
-  retry_generation:  RefreshCw,
-  adjust_slippage:   MessageCircle,
-  monitor_path:      Bell,
-  check_status:      Shield,
-  check_reserves:    Shield,
-  rephrase_prompt:   MessageCircle,
-  escalate_human:    MessageCircle,
-  report_error:      AlertTriangle,
-  refine_search:     MessageCircle,
+  retry_delayed: RefreshCw,
+  retry_immediate: RefreshCw,
+  retry_generation: RefreshCw,
+  adjust_slippage: MessageCircle,
+  monitor_path: Bell,
+  check_status: Shield,
+  check_reserves: Shield,
+  rephrase_prompt: MessageCircle,
+  escalate_human: MessageCircle,
+  report_error: AlertTriangle,
+  refine_search: MessageCircle,
   browse_categories: MessageCircle,
-  add_funds:         AlertTriangle,
-  use_cache:         RefreshCw,
+  add_funds: AlertTriangle,
+  use_cache: RefreshCw,
 };
 
 export default function ErrorExperience({
   error,
   onAction,
-  className = '',
+  className = "",
 }: ErrorExperienceProps) {
   const humanized = humanizeError(error);
   const borderClass = severityToColorClass(error.severity);
@@ -58,18 +68,20 @@ export default function ErrorExperience({
     <motion.div
       initial={{ opacity: 0, scale: 0.98 }}
       animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.4, ease: 'easeOut' }}
+      transition={{ duration: 0.4, ease: "easeOut" }}
       className={`space-y-4 ${className}`}
     >
       {/* Severity indicator strip */}
-      {error.severity === 'critical' && (
+      {error.severity === "critical" && (
         <motion.div
           initial={{ opacity: 0, x: -8 }}
           animate={{ opacity: 1, x: 0 }}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium border ${borderClass}`}
         >
           <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
-          <span className="text-red-400">Critical issue — your attention is needed</span>
+          <span className="text-red-400">
+            Critical issue — your attention is needed
+          </span>
         </motion.div>
       )}
 
@@ -97,9 +109,10 @@ export default function ErrorExperience({
               onClick={() => onAction(action.action)}
               className={`
                 flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200
-                ${isPrimary
-                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30'
-                  : 'bg-zinc-800/50 text-zinc-400 border border-zinc-700 hover:text-zinc-200 hover:bg-zinc-700/50'
+                ${
+                  isPrimary
+                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30"
+                    : "bg-zinc-800/50 text-zinc-400 border border-zinc-700 hover:text-zinc-200 hover:bg-zinc-700/50"
                 }
               `}
             >

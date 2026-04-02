@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 /**
  * ProvinceEconomicPanel
@@ -23,16 +23,19 @@
  * - Renders nothing until provinces are available (handles SSR gracefully)
  */
 
-import { useCallback } from 'react';
-import { SA_PROVINCES, type ProvinceProfile } from '@/lib/sa-context/provinces';
+import { useCallback } from "react";
+import { SA_PROVINCES, type ProvinceProfile } from "@/lib/sa-context/provinces";
 
 // ─── Unemployment → colour band ──────────────────────────────────────────────
 
 function urgencyColour(unemploymentPercent: number): string {
-  if (unemploymentPercent >= 40) return 'text-red-400 border-red-500/40 bg-red-500/10';
-  if (unemploymentPercent >= 35) return 'text-orange-400 border-orange-500/40 bg-orange-500/10';
-  if (unemploymentPercent >= 30) return 'text-yellow-400 border-yellow-500/40 bg-yellow-500/10';
-  return 'text-emerald-400 border-emerald-500/40 bg-emerald-500/10';
+  if (unemploymentPercent >= 40)
+    return "text-red-400 border-red-500/40 bg-red-500/10";
+  if (unemploymentPercent >= 35)
+    return "text-orange-400 border-orange-500/40 bg-orange-500/10";
+  if (unemploymentPercent >= 30)
+    return "text-yellow-400 border-yellow-500/40 bg-yellow-500/10";
+  return "text-emerald-400 border-emerald-500/40 bg-emerald-500/10";
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -75,12 +78,12 @@ export default function ProvinceEconomicPanel({
               aria-label={`${province.name} — unemployment ${province.unemploymentPercent}%, digital access ${province.digitalAccessPercent}%`}
               onClick={() => handleSelect(province)}
               className={[
-                'flex-shrink-0 px-2.5 py-1 rounded-lg border text-xs font-mono font-semibold transition-all',
-                'focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50',
+                "flex-shrink-0 px-2.5 py-1 rounded-lg border text-xs font-mono font-semibold transition-all",
+                "focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50",
                 isSelected
-                  ? 'bg-white/20 border-white/60 text-white scale-105 shadow-lg'
+                  ? "bg-white/20 border-white/60 text-white scale-105 shadow-lg"
                   : `${colour} hover:scale-105 hover:border-white/30`,
-              ].join(' ')}
+              ].join(" ")}
             >
               {province.code}
             </button>
@@ -109,12 +112,12 @@ export default function ProvinceEconomicPanel({
             aria-label={`${province.name} — unemployment ${province.unemploymentPercent}%, digital access ${province.digitalAccessPercent}%`}
             onClick={() => handleSelect(province)}
             className={[
-              'flex flex-col items-start gap-0.5 rounded-xl border p-2.5 text-left transition-all',
-              'focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50',
+              "flex flex-col items-start gap-0.5 rounded-xl border p-2.5 text-left transition-all",
+              "focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50",
               isSelected
-                ? 'bg-white/20 border-white/60 shadow-lg scale-[1.02]'
+                ? "bg-white/20 border-white/60 shadow-lg scale-[1.02]"
                 : `${colour} hover:scale-[1.02] hover:border-white/30 hover:bg-white/5`,
-            ].join(' ')}
+            ].join(" ")}
           >
             {/* Province code + name */}
             <span className="font-mono text-xs font-bold leading-none">
@@ -128,13 +131,13 @@ export default function ProvinceEconomicPanel({
             <div className="mt-1 flex flex-col gap-0.5 w-full">
               <div className="flex items-center justify-between text-[9px]">
                 <span className="text-zinc-500">Unemp</span>
-                <span className={isSelected ? 'text-white' : ''}>
+                <span className={isSelected ? "text-white" : ""}>
                   {province.unemploymentPercent}%
                 </span>
               </div>
               <div className="flex items-center justify-between text-[9px]">
                 <span className="text-zinc-500">Digital</span>
-                <span className={isSelected ? 'text-white' : ''}>
+                <span className={isSelected ? "text-white" : ""}>
                   {province.digitalAccessPercent}%
                 </span>
               </div>

@@ -16,18 +16,25 @@
  * via enrichMessages() and validateTone().
  */
 
-import { buildApexIdentity, buildAdaptiveContext, type AdaptiveContextInput } from '../agents/identityMatrix';
-import { detectUserLanguageStyle, buildLanguageMirrorInstruction } from '../agents/codeSwitch';
-import { analyzeSentiment, analyzeSentimentLocal } from './sentimentAnalysis';
+import {
+  buildApexIdentity,
+  buildAdaptiveContext,
+  type AdaptiveContextInput,
+} from "../agents/identityMatrix";
+import {
+  detectUserLanguageStyle,
+  buildLanguageMirrorInstruction,
+} from "../agents/codeSwitch";
+import { analyzeSentiment, analyzeSentimentLocal } from "./sentimentAnalysis";
 import {
   enrichmentCounter,
   enrichmentLatencyHistogram,
   toneViolationCounter,
   toneValidationCounter,
-} from '../observability/pillar4Metrics';
+} from "../observability/pillar4Metrics";
 
 export type ServerMessage = {
-  role: 'system' | 'user' | 'assistant';
+  role: "system" | "user" | "assistant";
   content: string;
 };
 
@@ -40,12 +47,18 @@ interface ToneViolation {
 }
 
 const TONE_VIOLATION_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
-  { pattern: /as an ai language model/i,         label: 'AI self-reference' },
-  { pattern: /i don't have (feelings|emotions|opinions)/i, label: 'Emotion denial' },
-  { pattern: /\b(synergy|leverage|utilize|facilitate)\b/i, label: 'Corporate jargon' },
-  { pattern: /i cannot assist with/i,             label: 'Robotic refusal' },
-  { pattern: /^(sure!|certainly!|absolutely!)/i,  label: 'Generic opener' },
-  { pattern: /as a helpful assistant/i,           label: 'Assistant self-reference' },
+  { pattern: /as an ai language model/i, label: "AI self-reference" },
+  {
+    pattern: /i don't have (feelings|emotions|opinions)/i,
+    label: "Emotion denial",
+  },
+  {
+    pattern: /\b(synergy|leverage|utilize|facilitate)\b/i,
+    label: "Corporate jargon",
+  },
+  { pattern: /i cannot assist with/i, label: "Robotic refusal" },
+  { pattern: /^(sure!|certainly!|absolutely!)/i, label: "Generic opener" },
+  { pattern: /as a helpful assistant/i, label: "Assistant self-reference" },
 ];
 
 /**
@@ -70,7 +83,7 @@ export function detectToneViolations(text: string): ToneViolation[] {
  */
 function getLastUserText(messages: ServerMessage[]): string | null {
   for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].role === 'user') {
+    if (messages[i].role === "user") {
       return messages[i].content;
     }
   }
@@ -82,16 +95,19 @@ function getLastUserText(messages: ServerMessage[]): string | null {
  * Puts longform identity data at the top — Anthropic research shows
  * queries at the end improve response quality by up to 30%.
  */
-function injectSystemMessage(messages: ServerMessage[], systemContent: string): ServerMessage[] {
-  const hasSystem = messages.some((m) => m.role === 'system');
+function injectSystemMessage(
+  messages: ServerMessage[],
+  systemContent: string,
+): ServerMessage[] {
+  const hasSystem = messages.some((m) => m.role === "system");
   if (hasSystem) {
     return messages.map((m) =>
-      m.role === 'system'
-        ? { ...m, content: systemContent + '\n\n---\n\n' + m.content }
-        : m
+      m.role === "system"
+        ? { ...m, content: systemContent + "\n\n---\n\n" + m.content }
+        : m,
     );
   }
-  return [{ role: 'system', content: systemContent }, ...messages];
+  return [{ role: "system", content: systemContent }, ...messages];
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -114,7 +130,7 @@ export interface IdentityEnrichmentOptions {
  */
 export async function enrichMessages(
   messages: ServerMessage[],
-  options: IdentityEnrichmentOptions
+  options: IdentityEnrichmentOptions,
 ): Promise<ServerMessage[]> {
   const lastUserText = getLastUserText(messages);
 
@@ -128,14 +144,18 @@ export async function enrichMessages(
   //    Default (false) = HF API with local fallback on failure.
   const emotionalState = lastUserText
     ? options.useLocalSentiment
-      ? analyzeSentimentLocal(lastUserText)          // Instant — zero latency, zero quota
-      : await analyzeSentiment(lastUserText)          // HF zero-shot, falls back locally on error
-    : 'neutral';
+      ? analyzeSentimentLocal(lastUserText) // Instant — zero latency, zero quota
+      : await analyzeSentiment(lastUserText) // HF zero-shot, falls back locally on error
+    : "neutral";
 
   // 2. Detect code-switching
   const languageStyle = lastUserText
     ? detectUserLanguageStyle(lastUserText)
-    : { hasVernacular: false, detectedLanguages: [], formality: 'mixed' as const };
+    : {
+        hasVernacular: false,
+        detectedLanguages: [],
+        formality: "mixed" as const,
+      };
 
   // 3. Build adaptive context with all signals
   const adaptiveContext = buildAdaptiveContext({
@@ -154,8 +174,13 @@ export async function enrichMessages(
 
   // Pillar 4: emit enrichment metrics
   const enrichMs = Date.now() - enrichStart;
-  enrichmentLatencyHistogram.record(enrichMs, { tier: options.useLocalSentiment ? 'sync' : 'async' });
-  enrichmentCounter.add(1, { tier: options.useLocalSentiment ? 'sync' : 'async', outcome: 'success' });
+  enrichmentLatencyHistogram.record(enrichMs, {
+    tier: options.useLocalSentiment ? "sync" : "async",
+  });
+  enrichmentCounter.add(1, {
+    tier: options.useLocalSentiment ? "sync" : "async",
+    outcome: "success",
+  });
 
   return result;
 }
@@ -166,18 +191,22 @@ export async function enrichMessages(
  */
 export function enrichMessagesSync(
   messages: ServerMessage[],
-  options: IdentityEnrichmentOptions
+  options: IdentityEnrichmentOptions,
 ): ServerMessage[] {
   const syncStart = Date.now();
   const lastUserText = getLastUserText(messages);
 
   const emotionalState = lastUserText
     ? analyzeSentimentLocal(lastUserText)
-    : 'neutral';
+    : "neutral";
 
   const languageStyle = lastUserText
     ? detectUserLanguageStyle(lastUserText)
-    : { hasVernacular: false, detectedLanguages: [], formality: 'mixed' as const };
+    : {
+        hasVernacular: false,
+        detectedLanguages: [],
+        formality: "mixed" as const,
+      };
 
   const adaptiveContext = buildAdaptiveContext({
     ...options.userContext,
@@ -190,8 +219,8 @@ export function enrichMessagesSync(
 
   // Pillar 4: emit enrichment metrics for sync path
   const syncMs = Date.now() - syncStart;
-  enrichmentLatencyHistogram.record(syncMs, { tier: 'sync' });
-  enrichmentCounter.add(1, { tier: 'sync', outcome: 'success' });
+  enrichmentLatencyHistogram.record(syncMs, { tier: "sync" });
+  enrichmentCounter.add(1, { tier: "sync", outcome: "success" });
 
   return syncResult;
 }
@@ -207,14 +236,15 @@ export function validateTone(responseText: string): boolean {
   for (const violation of violations) {
     toneViolationCounter.add(1, { violation_type: violation.label });
   }
-  toneValidationCounter.add(1, { outcome: violations.length === 0 ? 'clean' : 'violated' });
+  toneValidationCounter.add(1, {
+    outcome: violations.length === 0 ? "clean" : "violated",
+  });
 
-  if (violations.length > 0 && process.env.NODE_ENV === 'development') {
+  if (violations.length > 0 && process.env.NODE_ENV === "development") {
     console.warn(
       `[Apex Identity] Tone violations detected (${violations.length}):`,
-      violations.map((v) => `${v.label}: "${v.match}"`).join(', ')
+      violations.map((v) => `${v.label}: "${v.match}"`).join(", "),
     );
   }
   return violations.length === 0;
 }
-

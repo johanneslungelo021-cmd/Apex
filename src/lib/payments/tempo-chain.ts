@@ -17,34 +17,42 @@
  *   Testnet: 0xe1c4d3dce17bc111181ddf716f75bae49e61a336
  */
 
-import { createPublicClient, defineChain, http } from 'viem';
+import { createPublicClient, defineChain, http } from "viem";
 
 // ─── Chain definitions ─────────────────────────────────────────────────────────
 
 export const tempoMainnet = defineChain({
-  id:   4217,
-  name: 'Tempo',
+  id: 4217,
+  name: "Tempo",
   nativeCurrency: {
     // Tempo has no real native token; this placeholder keeps EVM wallets happy.
-    name: 'Tempo', symbol: 'TEMPO', decimals: 18,
+    name: "Tempo",
+    symbol: "TEMPO",
+    decimals: 18,
   },
   rpcUrls: {
-    default: { http: ['https://rpc.tempo.xyz'] },
+    default: { http: ["https://rpc.tempo.xyz"] },
   },
   blockExplorers: {
-    default: { name: 'Tempo Explorer', url: 'https://explore.mainnet.tempo.xyz' },
+    default: {
+      name: "Tempo Explorer",
+      url: "https://explore.mainnet.tempo.xyz",
+    },
   },
 });
 
 export const tempoTestnet = defineChain({
-  id:   42431,
-  name: 'Tempo Testnet (Moderato)',
-  nativeCurrency: { name: 'Tempo', symbol: 'TEMPO', decimals: 18 },
+  id: 42431,
+  name: "Tempo Testnet (Moderato)",
+  nativeCurrency: { name: "Tempo", symbol: "TEMPO", decimals: 18 },
   rpcUrls: {
-    default: { http: ['https://rpc.moderato.tempo.xyz'] },
+    default: { http: ["https://rpc.moderato.tempo.xyz"] },
   },
   blockExplorers: {
-    default: { name: 'Tempo Testnet Explorer', url: 'https://explore.testnet.tempo.xyz' },
+    default: {
+      name: "Tempo Testnet Explorer",
+      url: "https://explore.testnet.tempo.xyz",
+    },
   },
   testnet: true,
 });
@@ -63,25 +71,26 @@ export const tempoTestnet = defineChain({
  */
 const tempoNetwork = process.env.TEMPO_NETWORK;
 
-if (tempoNetwork && tempoNetwork !== 'mainnet' && tempoNetwork !== 'testnet') {
+if (tempoNetwork && tempoNetwork !== "mainnet" && tempoNetwork !== "testnet") {
   throw new Error(
-    `Invalid TEMPO_NETWORK value: "${tempoNetwork}". Must be "mainnet" or "testnet".`
+    `Invalid TEMPO_NETWORK value: "${tempoNetwork}". Must be "mainnet" or "testnet".`,
   );
 }
 
-const isMainnet = tempoNetwork === 'mainnet'
-  || (tempoNetwork === undefined && process.env.NODE_ENV === 'production');
+const isMainnet =
+  tempoNetwork === "mainnet" ||
+  (tempoNetwork === undefined && process.env.NODE_ENV === "production");
 
-export const tempoChain   = isMainnet ? tempoMainnet : tempoTestnet;
+export const tempoChain = isMainnet ? tempoMainnet : tempoTestnet;
 export const tempoChainId = isMainnet ? 4217 : 42431;
 
 // ─── TIP-20 token addresses (6 decimals) ─────────────────────────────────────
 
 export const TIP20 = {
   /** USDC.e — mainnet default payment token for MPP */
-  USDC:    '0x20C000000000000000000000b9537d11c60E8b50' as `0x${string}`,
+  USDC: "0x20C000000000000000000000b9537d11c60E8b50" as `0x${string}`,
   /** pathUSD — testnet default payment token */
-  pathUSD: '0x20c0000000000000000000000000000000000000' as `0x${string}`,
+  pathUSD: "0x20c0000000000000000000000000000000000000" as `0x${string}`,
 } as const;
 
 /** Returns the correct default token for the current environment */
@@ -92,10 +101,12 @@ export const defaultToken = isMainnet ? TIP20.USDC : TIP20.pathUSD;
 export const TEMPO_CONTRACTS = {
   mainnet: {
     /** TempoStreamChannel — payment channel escrow for MPP sessions */
-    streamChannel: '0x33b901018174DDabE4841042ab76ba85D4e24f25' as `0x${string}`,
+    streamChannel:
+      "0x33b901018174DDabE4841042ab76ba85D4e24f25" as `0x${string}`,
   },
   testnet: {
-    streamChannel: '0xe1c4d3dce17bc111181ddf716f75bae49e61a336' as `0x${string}`,
+    streamChannel:
+      "0xe1c4d3dce17bc111181ddf716f75bae49e61a336" as `0x${string}`,
   },
 } as const;
 
@@ -106,7 +117,7 @@ export const streamChannelAddress = isMainnet
 // ─── viem public client ───────────────────────────────────────────────────────
 
 export const tempoClient = createPublicClient({
-  chain:     tempoChain,
+  chain: tempoChain,
   transport: http(tempoChain.rpcUrls.default.http[0]),
 });
 
@@ -114,22 +125,25 @@ export const tempoClient = createPublicClient({
 
 export const TIP20_ABI = [
   {
-    name: 'balanceOf', type: 'function' as const,
-    inputs: [{ name: 'account', type: 'address' as const }],
-    outputs: [{ name: '', type: 'uint256' as const }],
-    stateMutability: 'view' as const,
+    name: "balanceOf",
+    type: "function" as const,
+    inputs: [{ name: "account", type: "address" as const }],
+    outputs: [{ name: "", type: "uint256" as const }],
+    stateMutability: "view" as const,
   },
   {
-    name: 'decimals', type: 'function' as const,
+    name: "decimals",
+    type: "function" as const,
     inputs: [],
-    outputs: [{ name: '', type: 'uint8' as const }],
-    stateMutability: 'view' as const,
+    outputs: [{ name: "", type: "uint8" as const }],
+    stateMutability: "view" as const,
   },
   {
-    name: 'symbol', type: 'function' as const,
+    name: "symbol",
+    type: "function" as const,
     inputs: [],
-    outputs: [{ name: '', type: 'string' as const }],
-    stateMutability: 'view' as const,
+    outputs: [{ name: "", type: "string" as const }],
+    stateMutability: "view" as const,
   },
 ] as const;
 
@@ -142,16 +156,16 @@ export async function getTip20Balance(
   const [raw] = await Promise.all([
     tempoClient.readContract({
       address: tokenAddress,
-      abi:     TIP20_ABI,
-      functionName: 'balanceOf',
-      args:    [walletAddress],
+      abi: TIP20_ABI,
+      functionName: "balanceOf",
+      args: [walletAddress],
     }),
   ]);
   // TIP-20 always uses 6 decimals on Tempo
-  const divisor = BigInt(1_000_000);  // 10^6
-  const whole   = raw / divisor;
-  const frac    = raw % divisor;
-  return { raw, formatted: `${whole}.${frac.toString().padStart(6, '0')}` };
+  const divisor = BigInt(1_000_000); // 10^6
+  const whole = raw / divisor;
+  const frac = raw % divisor;
+  return { raw, formatted: `${whole}.${frac.toString().padStart(6, "0")}` };
 }
 
 // ─── Utility: Tempo node liveness check ──────────────────────────────────────

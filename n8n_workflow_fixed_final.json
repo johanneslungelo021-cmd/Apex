@@ -81,7 +81,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ ($env.OLLAMA_BASE_URL || 'https://api.ollama.ai') + '/api/generate' }}",
+        "url": "={{ $env.OLLAMA_BASE_URL + '/api/generate' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -119,7 +119,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ ($env.OLLAMA_BASE_URL || 'https://api.ollama.ai') + '/api/generate' }}",
+        "url": "={{ $env.OLLAMA_BASE_URL + '/api/generate' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -157,7 +157,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ ($env.OLLAMA_BASE_URL || 'https://api.ollama.ai') + '/api/generate' }}",
+        "url": "={{ $env.OLLAMA_BASE_URL + '/api/generate' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

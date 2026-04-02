@@ -32,14 +32,14 @@
  *   const rounded = Math.round(fee * 100) / 100;  // Further precision loss
  */
 
-import { privateKeyToAccount } from 'viem/accounts';
-import { defaultToken, tempoChainId } from './tempo-chain';
-import { getSupabaseClient } from '@/lib/supabase';
-import { log } from '@/lib/api-utils';
-import { convertToZar } from '@/lib/treasury/fx';
+import { privateKeyToAccount } from "viem/accounts";
+import { defaultToken, tempoChainId } from "./tempo-chain";
+import { getSupabaseClient } from "@/lib/supabase";
+import { log } from "@/lib/api-utils";
+import { convertToZar } from "@/lib/treasury/fx";
 
 // ─── System creator UUID — used for treasury/system-level MPP payments ──────
-export const SYSTEM_CREATOR_ID = '00000000-0000-0000-0000-000000000001';
+export const SYSTEM_CREATOR_ID = "00000000-0000-0000-0000-000000000001";
 
 // ─── Env-driven config ────────────────────────────────────────────────────────
 
@@ -47,7 +47,9 @@ export const SYSTEM_CREATOR_ID = '00000000-0000-0000-0000-000000000001';
 export function getRecipient(): `0x${string}` {
   const addr = process.env.APEX_TEMPO_RECIPIENT;
   if (!addr || !/^0x[0-9a-fA-F]{40}$/.test(addr)) {
-    throw new Error(`APEX_TEMPO_RECIPIENT must be a valid Ethereum address (0x + 40 hex chars), got: ${addr ?? 'undefined'}`);
+    throw new Error(
+      `APEX_TEMPO_RECIPIENT must be a valid Ethereum address (0x + 40 hex chars), got: ${addr ?? "undefined"}`,
+    );
   }
   return addr as `0x${string}`;
 }
@@ -65,19 +67,19 @@ export function getFeePayer() {
 // ─── Pricing (human-readable USD strings, TIP-20 has 6 decimals) ─────────────
 
 export const MPP_PRICING = {
-  analyticsQuery:  '0.001',   // $0.001 per creator analytics query  — charge intent
-  creatorReport:   '0.010',   // $0.01  per full creator report       — charge intent
-  treasuryQuery:   '0.0001',  // $0.0001 per treasury pool query      — session intent
-  emotionAnalysis: '0.005',   // $0.005 per Kimi emotion analysis     — charge intent
+  analyticsQuery: "0.001", // $0.001 per creator analytics query  — charge intent
+  creatorReport: "0.010", // $0.01  per full creator report       — charge intent
+  treasuryQuery: "0.0001", // $0.0001 per treasury pool query      — session intent
+  emotionAnalysis: "0.005", // $0.005 per Kimi emotion analysis     — charge intent
 } as const;
 
 // ─── Record verified MPP payment to Supabase ─────────────────────────────────
 
 export interface MppPaymentRecord {
-  creatorId:         string;
-  amountUsd:         string;
-  mppIntent:         'charge' | 'session';
-  receiptReference:  string;
+  creatorId: string;
+  amountUsd: string;
+  mppIntent: "charge" | "session";
+  receiptReference: string;
   sessionChannelId?: string;
 }
 
@@ -90,60 +92,75 @@ export async function recordMppPayment(
   requestId: string,
 ): Promise<void> {
   try {
-    const supabase  = getSupabaseClient();
+    const supabase = getSupabaseClient();
     const amountUsdNum = parseFloat(record.amountUsd);
 
     // USD→ZAR via live FX before DB insertion
-    const fx = await convertToZar(amountUsdNum, 'USD');
+    const fx = await convertToZar(amountUsdNum, "USD");
     const amountZar = fx.amount_zar;
     const platformFeeZar = parseFloat((amountZar * 0.05).toFixed(6)); // 5% fee — full precision for micro-payments
 
-    const { error: rpcError } = await supabase.rpc('insert_transaction_serializable', {
-      p_creator_id:              record.creatorId,
-      p_customer_id:             null,
-      p_amount_zar:              amountZar,
-      p_platform_fee_zar:        platformFeeZar,
-      p_gateway:                 'tempo_mpp',
-      p_gateway_ref:             record.receiptReference,
-      p_external_id:             record.receiptReference,
-      p_status:                  'success',
-      p_type:                    'one_time',
-      p_source_type:             `mpp_${record.mppIntent}`,
-      p_community_impact:        false,
-      p_emotion_state:           'neutral',
-      p_is_cross_border:         true,
-      p_source_currency:         'USD',
-      p_destination_currency:    'ZAR',
-      p_source_country:          null,
-      p_destination_country:     'ZA',
-      p_metadata: {
-        mpp_intent:              record.mppIntent,
-        amount_usd:              record.amountUsd,
-        amount_usd_exact:        record.amountUsd,
-        amount_zar:              amountZar,
-        fx_rate:                 fx.rate_used,
-        fx_source:               fx.rate_source,
-        settlement_pathway:      'tempo_mpp',
-        receipt_reference:       record.receiptReference,
-        session_channel_id:      record.sessionChannelId ?? null,
-        tempo_chain_id:          tempoChainId,
-        tip20_token_address:     defaultToken,
-        tip20_amount:            parseFloat(record.amountUsd),
+    const { error: rpcError } = await supabase.rpc(
+      "insert_transaction_serializable",
+      {
+        p_creator_id: record.creatorId,
+        p_customer_id: null,
+        p_amount_zar: amountZar,
+        p_platform_fee_zar: platformFeeZar,
+        p_gateway: "tempo_mpp",
+        p_gateway_ref: record.receiptReference,
+        p_external_id: record.receiptReference,
+        p_status: "success",
+        p_type: "one_time",
+        p_source_type: `mpp_${record.mppIntent}`,
+        p_community_impact: false,
+        p_emotion_state: "neutral",
+        p_is_cross_border: true,
+        p_source_currency: "USD",
+        p_destination_currency: "ZAR",
+        p_source_country: null,
+        p_destination_country: "ZA",
+        p_metadata: {
+          mpp_intent: record.mppIntent,
+          amount_usd: record.amountUsd,
+          amount_usd_exact: record.amountUsd,
+          amount_zar: amountZar,
+          fx_rate: fx.rate_used,
+          fx_source: fx.rate_source,
+          settlement_pathway: "tempo_mpp",
+          receipt_reference: record.receiptReference,
+          session_channel_id: record.sessionChannelId ?? null,
+          tempo_chain_id: tempoChainId,
+          tip20_token_address: defaultToken,
+          tip20_amount: parseFloat(record.amountUsd),
+        },
       },
-    });
+    );
 
     if (rpcError) {
-      log({ level: 'warn', service: 'mpp', requestId,
-        message: `[mpp-server] recordMppPayment RPC error: ${JSON.stringify(rpcError)}` });
+      log({
+        level: "warn",
+        service: "mpp",
+        requestId,
+        message: `[mpp-server] recordMppPayment RPC error: ${JSON.stringify(rpcError)}`,
+      });
       return;
     }
 
-    log({ level: 'info', service: 'mpp', requestId,
+    log({
+      level: "info",
+      service: "mpp",
+      requestId,
       message: `MPP ${record.mppIntent} recorded — $${record.amountUsd}`,
-      receipt: record.receiptReference });
+      receipt: record.receiptReference,
+    });
   } catch (err) {
-    log({ level: 'warn', service: 'mpp', requestId,
-      message: `recordMppPayment failed (non-fatal): ${String(err)}` });
+    log({
+      level: "warn",
+      service: "mpp",
+      requestId,
+      message: `recordMppPayment failed (non-fatal): ${String(err)}`,
+    });
   }
 }
 

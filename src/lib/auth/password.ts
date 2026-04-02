@@ -1,14 +1,14 @@
 /**
  * Password Hashing — bcryptjs (pure JS, Vercel-compatible)
- * 
+ *
  * Cost factor 12 = ~250ms per hash on Vercel Serverless.
  * Matches the security level of the timingSafeEqual pattern
  * already used in /api/health.
- * 
+ *
  * @module lib/auth/password
  */
 
-import bcrypt from 'bcryptjs';
+import bcrypt from "bcryptjs";
 
 const SALT_ROUNDS = 12;
 
@@ -28,6 +28,9 @@ export async function hashPassword(password: string): Promise<string> {
  * @param hash - Stored bcrypt hash
  * @returns Promise resolving to true if password matches
  */
-export async function verifyPassword(password: string, hash: string): Promise<boolean> {
+export async function verifyPassword(
+  password: string,
+  hash: string,
+): Promise<boolean> {
   return bcrypt.compare(password, hash);
 }

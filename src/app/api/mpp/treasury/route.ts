@@ -1,4 +1,4 @@
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 /**
  * MPP Treasury Endpoint — session intent
  *
@@ -12,18 +12,30 @@ export const runtime = 'nodejs';
  * https://mpp.dev/payment-methods/tempo/session
  */
 
-import { NextResponse }             from 'next/server';
-import { Mppx, tempo }              from 'mppx/nextjs';
-import { getRecipient, getFeePayer, MPP_PRICING, recordMppPayment, defaultToken, SYSTEM_CREATOR_ID }
-  from '@/lib/payments/mpp-server';
-import { streamChannelAddress }     from '@/lib/payments/tempo-chain';
-import { getSupabaseClient }        from '@/lib/supabase';
-import { log, generateRequestId }   from '@/lib/api-utils';
+import { NextResponse } from "next/server";
+import { Mppx, tempo } from "mppx/nextjs";
+import {
+  getRecipient,
+  getFeePayer,
+  MPP_PRICING,
+  recordMppPayment,
+  defaultToken,
+  SYSTEM_CREATOR_ID,
+} from "@/lib/payments/mpp-server";
+import { streamChannelAddress } from "@/lib/payments/tempo-chain";
+import { getSupabaseClient } from "@/lib/supabase";
+import { log, generateRequestId } from "@/lib/api-utils";
 
 // Lazy initializer — avoids crashing the module on cold start if env vars are missing.
 function createMppx() {
   return Mppx.create({
-    methods: [tempo({ currency: defaultToken, recipient: getRecipient(), feePayer: getFeePayer() })],
+    methods: [
+      tempo({
+        currency: defaultToken,
+        recipient: getRecipient(),
+        feePayer: getFeePayer(),
+      }),
+    ],
   });
 }
 
@@ -40,81 +52,111 @@ export const GET = async (_request: Request) => {
   try {
     mppx = getMppx();
   } catch {
-    return NextResponse.json({ error: 'MPP not configured' }, { status: 500 });
+    return NextResponse.json({ error: "MPP not configured" }, { status: 500 });
   }
 
-  const handler = mppx.tempo.session({ amount: MPP_PRICING.treasuryQuery, unitType: 'query' })(
-    async (request: Request) => {
-      const requestId = generateRequestId();
-      const supabase  = getSupabaseClient();
+  const handler = mppx.tempo.session({
+    amount: MPP_PRICING.treasuryQuery,
+    unitType: "query",
+  })(async (_request: Request) => {
+    const requestId = generateRequestId();
+    const supabase = getSupabaseClient();
 
-      // Use RPC aggregation for accurate totals without truncation
-      const [summaryResult, poolResult, disbResult, proposalResult] = await Promise.all([
-        supabase.rpc('get_treasury_summary'),
-        supabase.rpc('get_treasury_pool_entries', { p_limit: 100 }),
-        supabase.rpc('get_recent_disbursements', { p_limit: 20 }),
-        supabase.rpc('get_active_proposals', { p_limit: 10 }),
+    // Use RPC aggregation for accurate totals without truncation
+    const [summaryResult, poolResult, disbResult, proposalResult] =
+      await Promise.all([
+        supabase.rpc("get_treasury_summary"),
+        supabase.rpc("get_treasury_pool_entries", { p_limit: 100 }),
+        supabase.rpc("get_recent_disbursements", { p_limit: 20 }),
+        supabase.rpc("get_active_proposals", { p_limit: 10 }),
       ]);
 
-      if (summaryResult.error) {
-        console.error('Treasury summary RPC failed:', summaryResult.error);
-        return NextResponse.json({ error: 'Treasury data unavailable' }, { status: 500 });
-      }
-      if (poolResult.error) {
-        console.error('Treasury pool query failed:', poolResult.error);
-        return NextResponse.json({ error: 'Treasury data unavailable' }, { status: 500 });
-      }
-      if (disbResult.error) {
-        console.error('Treasury disbursement query failed:', disbResult.error);
-        return NextResponse.json({ error: 'Treasury data unavailable' }, { status: 500 });
-      }
-      if (proposalResult.error) {
-        console.error('Treasury proposal query failed:', proposalResult.error);
-        return NextResponse.json({ error: 'Treasury data unavailable' }, { status: 500 });
-      }
+    if (summaryResult.error) {
+      console.error("Treasury summary RPC failed:", summaryResult.error);
+      return NextResponse.json(
+        { error: "Treasury data unavailable" },
+        { status: 500 },
+      );
+    }
+    if (poolResult.error) {
+      console.error("Treasury pool query failed:", poolResult.error);
+      return NextResponse.json(
+        { error: "Treasury data unavailable" },
+        { status: 500 },
+      );
+    }
+    if (disbResult.error) {
+      console.error("Treasury disbursement query failed:", disbResult.error);
+      return NextResponse.json(
+        { error: "Treasury data unavailable" },
+        { status: 500 },
+      );
+    }
+    if (proposalResult.error) {
+      console.error("Treasury proposal query failed:", proposalResult.error);
+      return NextResponse.json(
+        { error: "Treasury data unavailable" },
+        { status: 500 },
+      );
+    }
 
-      const summary   = summaryResult.data;
-      const pool      = poolResult.data ?? [];
-      const disbLog   = disbResult.data ?? [];
-      const proposals = proposalResult.data ?? [];
+    const summary = summaryResult.data;
+    const _pool = poolResult.data ?? [];
+    const disbLog = disbResult.data ?? [];
+    const proposals = proposalResult.data ?? [];
 
-      const treasury = {
-        pool_summary: {
-          total_pool_zar:   Number(summary.total_pool_zar) || 0,
-          approved_zar:     Number(summary.approved_zar) || 0,
-          disbursed_zar:    Number(summary.disbursed_zar) || 0,
-          entries:          Number(summary.pool_entry_count) || 0,
-        },
-        active_proposals: proposals.map((p: { id: string; title: string; status: string; vote_count_for: number; vote_count_against: number; approved_at: string | null }) => ({
-          id:            p.id,
-          title:         p.title,
-          status:        p.status,
-          votes_for:     p.vote_count_for,
+    const treasury = {
+      pool_summary: {
+        total_pool_zar: Number(summary.total_pool_zar) || 0,
+        approved_zar: Number(summary.approved_zar) || 0,
+        disbursed_zar: Number(summary.disbursed_zar) || 0,
+        entries: Number(summary.pool_entry_count) || 0,
+      },
+      active_proposals: proposals.map(
+        (p: {
+          id: string;
+          title: string;
+          status: string;
+          vote_count_for: number;
+          vote_count_against: number;
+          approved_at: string | null;
+        }) => ({
+          id: p.id,
+          title: p.title,
+          status: p.status,
+          votes_for: p.vote_count_for,
           votes_against: p.vote_count_against,
-          approved_at:   p.approved_at,
-        })),
-        recent_disbursements: disbLog.slice(0, 5),
-        generated_at: new Date().toISOString(),
-        payment: {
-          method:      'mpp/session',
-          amount:      `${MPP_PRICING.treasuryQuery} USDC per query`,
-          escrow:      streamChannelAddress,
-          note:        'Receipt.reference is a TempoStreamChannel channelId, not a tx hash',
-        },
-      };
+          approved_at: p.approved_at,
+        }),
+      ),
+      recent_disbursements: disbLog.slice(0, 5),
+      generated_at: new Date().toISOString(),
+      payment: {
+        method: "mpp/session",
+        amount: `${MPP_PRICING.treasuryQuery} USDC per query`,
+        escrow: streamChannelAddress,
+        note: "Receipt.reference is a TempoStreamChannel channelId, not a tx hash",
+      },
+    };
 
-      await recordMppPayment({
-        creatorId:        SYSTEM_CREATOR_ID,
-        amountUsd:        MPP_PRICING.treasuryQuery,
-        mppIntent:        'session',
+    await recordMppPayment(
+      {
+        creatorId: SYSTEM_CREATOR_ID,
+        amountUsd: MPP_PRICING.treasuryQuery,
+        mppIntent: "session",
         receiptReference: requestId,
-      }, requestId);
+      },
+      requestId,
+    );
 
-      log({ level: 'info', service: 'mpp-treasury', requestId,
-        message: 'Treasury data delivered via MPP session' });
+    log({
+      level: "info",
+      service: "mpp-treasury",
+      requestId,
+      message: "Treasury data delivered via MPP session",
+    });
 
-      return NextResponse.json(treasury);
-    },
-  );
+    return NextResponse.json(treasury);
+  });
   return handler(_request);
 };

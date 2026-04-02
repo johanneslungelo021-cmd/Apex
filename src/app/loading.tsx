@@ -36,13 +36,19 @@ export default function Loading() {
       </div>
 
       {/* Background gradient — matches real page */}
-      <div className="fixed inset-0 -z-10 bg-gradient-to-b from-neutral-950 via-neutral-900/80 to-neutral-950" aria-hidden="true" />
+      <div
+        className="fixed inset-0 -z-10 bg-gradient-to-b from-neutral-950 via-neutral-900/80 to-neutral-950"
+        aria-hidden="true"
+      />
 
       <main className="relative pt-16 px-4 sm:px-6 pb-24">
         {/* Hero card skeleton — max-w-5xl, mt-16, min-height 300px */}
         <div className="mx-auto max-w-5xl mt-16 rounded-3xl p-16 min-h-[300px] border border-white/10 bg-white/[0.03] relative overflow-hidden">
           {/* Shimmer overlay */}
-          <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.8s_infinite] bg-gradient-to-r from-transparent via-white/5 to-transparent" aria-hidden="true" />
+          <div
+            className="absolute inset-0 -translate-x-full animate-[shimmer_1.8s_infinite] bg-gradient-to-r from-transparent via-white/5 to-transparent"
+            aria-hidden="true"
+          />
 
           {/* Title skeleton: "Sentient Interface" h1 */}
           <div className="w-48 h-6 rounded-full bg-white/10 animate-pulse mb-6" />
@@ -54,7 +60,11 @@ export default function Loading() {
           {/* GitHub metrics strip skeleton — 4 badges */}
           <div className="flex items-center gap-3 flex-wrap">
             {[72, 56, 64, 88, 96].map((w) => (
-              <div key={w} className="h-8 rounded-full bg-white/10 animate-pulse" style={{ width: `${w}px` }} />
+              <div
+                key={w}
+                className="h-8 rounded-full bg-white/10 animate-pulse"
+                style={{ width: `${w}px` }}
+              />
             ))}
           </div>
         </div>
@@ -62,7 +72,10 @@ export default function Loading() {
         {/* Department nav skeleton */}
         <div className="mx-auto max-w-5xl mt-8 grid grid-cols-2 md:grid-cols-4 gap-4">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-28 rounded-2xl bg-white/5 border border-white/8 animate-pulse" />
+            <div
+              key={i}
+              className="h-28 rounded-2xl bg-white/5 border border-white/8 animate-pulse"
+            />
           ))}
         </div>
 
@@ -71,7 +84,10 @@ export default function Loading() {
           <div className="w-48 h-6 rounded-full bg-white/10 animate-pulse mb-6" />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[0, 1, 2].map((i) => (
-              <div key={i} className="h-40 rounded-3xl bg-white/5 border border-white/8 animate-pulse" />
+              <div
+                key={i}
+                className="h-40 rounded-3xl bg-white/5 border border-white/8 animate-pulse"
+              />
             ))}
           </div>
         </div>

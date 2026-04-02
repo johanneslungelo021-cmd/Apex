@@ -1,10 +1,10 @@
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 // src/app/api/health/route.ts
-import { NextResponse } from 'next/server';
-import crypto from 'crypto';
-import { APP_VERSION } from '@/lib/version';
-import { SKILLS_STATUS } from '@/lib/skills';
+import { NextResponse } from "next/server";
+import crypto from "crypto";
+import { APP_VERSION } from "@/lib/version";
+import { SKILLS_STATUS } from "@/lib/skills";
 
 function timingSafeEqual(a: string, b: string): boolean {
   // Pad both buffers to the same length to avoid leaking expected token length
@@ -19,8 +19,8 @@ function timingSafeEqual(a: string, b: string): boolean {
 }
 
 export async function GET(req: Request) {
-  const providedToken = req.headers.get('x-health-token') || '';
-  const expectedToken = process.env.HEALTH_DETAILS_TOKEN || '';
+  const providedToken = req.headers.get("x-health-token") || "";
+  const expectedToken = process.env.HEALTH_DETAILS_TOKEN || "";
 
   const isInternal =
     providedToken.length > 0 &&
@@ -29,20 +29,19 @@ export async function GET(req: Request) {
 
   const otelConfigured = Boolean(
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT &&
-      process.env.OTEL_EXPORTER_OTLP_HEADERS
+    process.env.OTEL_EXPORTER_OTLP_HEADERS,
   );
 
   const grafanaSourceConfigured = Boolean(
     process.env.GRAFANA_API_KEY &&
-      process.env.GRAFANA_INSTANCE_ID &&
-      process.env.GRAFANA_OTLP_ENDPOINT
+    process.env.GRAFANA_INSTANCE_ID &&
+    process.env.GRAFANA_OTLP_ENDPOINT,
   );
 
   const payload = {
-    status: 'ok',
+    status: "ok",
     timestamp: new Date().toISOString(),
-    environment:
-      process.env.VERCEL_ENV || process.env.NODE_ENV || 'unknown',
+    environment: process.env.VERCEL_ENV || process.env.NODE_ENV || "unknown",
     version: APP_VERSION,
   } as Record<string, unknown>;
 
@@ -53,11 +52,15 @@ export async function GET(req: Request) {
         perplexityConfigured: Boolean(process.env.PERPLEXITY_API_KEY),
         aiGatewayConfigured: Boolean(process.env.AI_GATEWAY_API_KEY),
         // Pillar 3: Kimi K2 for complex queries
-        kimiConfigured: Boolean(process.env.KIMI_API_KEY || process.env.MPC_APEX),
+        kimiConfigured: Boolean(
+          process.env.KIMI_API_KEY || process.env.MPC_APEX,
+        ),
       },
       observability: {
         otelConfigured,
-        otelEndpointConfigured: Boolean(process.env.OTEL_EXPORTER_OTLP_ENDPOINT),
+        otelEndpointConfigured: Boolean(
+          process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+        ),
         otelHeadersConfigured: Boolean(process.env.OTEL_EXPORTER_OTLP_HEADERS),
         grafanaSourceConfigured,
         // Pillar 4: new department route metrics wired to Grafana
@@ -91,7 +94,7 @@ export async function GET(req: Request) {
 
   return NextResponse.json(payload, {
     headers: {
-      'Cache-Control': 'no-store',
+      "Cache-Control": "no-store",
     },
   });
 }

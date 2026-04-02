@@ -212,8 +212,13 @@ export interface AdaptiveContextInput {
   provinceName?: string;
   unemploymentRate?: number;
   educationLevel?: string;
-  emotionalState?: 'neutral' | 'frustrated' | 'excited' | 'confused' | 'anxious';
-  connectivityTier?: 'high' | 'medium' | 'low';
+  emotionalState?:
+    | "neutral"
+    | "frustrated"
+    | "excited"
+    | "confused"
+    | "anxious";
+  connectivityTier?: "high" | "medium" | "low";
   isFirstInteraction?: boolean;
   preferredLanguage?: string;
 }
@@ -224,61 +229,66 @@ export function buildAdaptiveContext(context: AdaptiveContextInput): string {
   if (context.isFirstInteraction) {
     parts.push(
       `This is the user's FIRST interaction with Apex Central. Welcome them warmly. ` +
-      `Use "Sawubona" or "Siyakwamukela" naturally. Do not overwhelm them. ` +
-      `Keep your first response under 150 words.`
+        `Use "Sawubona" or "Siyakwamukela" naturally. Do not overwhelm them. ` +
+        `Keep your first response under 150 words.`,
     );
   }
 
   if (context.province && context.provinceName) {
-    const highUnemployment = typeof context.unemploymentRate === 'number' && context.unemploymentRate > 35;
+    const highUnemployment =
+      typeof context.unemploymentRate === "number" &&
+      context.unemploymentRate > 35;
     parts.push(
       `The user is in ${context.provinceName} province.` +
-      (highUnemployment
-        ? ` Unemployment there is ${context.unemploymentRate}% — be especially sensitive about ` +
-          `job-related topics. Ground advice in local reality, not abstract possibility.`
-        : '')
+        (highUnemployment
+          ? ` Unemployment there is ${context.unemploymentRate}% — be especially sensitive about ` +
+            `job-related topics. Ground advice in local reality, not abstract possibility.`
+          : ""),
     );
   }
 
-  if (context.emotionalState === 'frustrated') {
+  if (context.emotionalState === "frustrated") {
     parts.push(
       `The user's recent messages indicate frustration. Lead with acknowledgment before solutions. ` +
-      `Use shorter sentences. Do not be overly cheerful — meet them where they are.`
+        `Use shorter sentences. Do not be overly cheerful — meet them where they are.`,
     );
-  } else if (context.emotionalState === 'confused') {
+  } else if (context.emotionalState === "confused") {
     parts.push(
       `The user appears confused. Reduce complexity. Use analogies. Ask if they want you to go ` +
-      `deeper rather than assuming. Offer one concept at a time.`
+        `deeper rather than assuming. Offer one concept at a time.`,
     );
-  } else if (context.emotionalState === 'excited') {
+  } else if (context.emotionalState === "excited") {
     parts.push(
       `The user is energized. Match their energy. Celebrate specifics, not generalities. ` +
-      `Build momentum by suggesting the next step.`
+        `Build momentum by suggesting the next step.`,
     );
-  } else if (context.emotionalState === 'anxious') {
+  } else if (context.emotionalState === "anxious") {
     parts.push(
       `The user appears anxious or worried. Lead with safety and reassurance. ` +
-      `Be calm and specific. Confirm what is safe before explaining what to do.`
+        `Be calm and specific. Confirm what is safe before explaining what to do.`,
     );
   }
 
-  if (context.connectivityTier === 'low') {
+  if (context.connectivityTier === "low") {
     parts.push(
       `The user is on a low-bandwidth connection. Keep responses concise. ` +
-      `Avoid suggesting video content or large downloads. Prefer text-based resources.`
+        `Avoid suggesting video content or large downloads. Prefer text-based resources.`,
     );
   }
 
-  if (context.educationLevel === 'none' || context.educationLevel === 'matric') {
+  if (
+    context.educationLevel === "none" ||
+    context.educationLevel === "matric"
+  ) {
     parts.push(
       `Adjust vocabulary to be accessible without being patronizing. Avoid jargon. ` +
-      `When a technical term is necessary, define it inline in plain language.`
+        `When a technical term is necessary, define it inline in plain language.`,
     );
   }
 
   return parts.length > 0
-    ? `\n<adaptive_context>\n${parts.join('\n')}\n</adaptive_context>`
-    : '';
+    ? `\n<adaptive_context>\n${parts.join("\n")}\n</adaptive_context>`
+    : "";
 }
 
 // ═══════════════════════════════════════════
@@ -291,11 +301,16 @@ export function buildApexIdentity(adaptiveContext?: string): string {
     CULTURAL_GROUNDING,
     BEHAVIORAL_CONSTRAINTS,
     DIALOGUE_EXAMPLES,
-    adaptiveContext ?? '',
+    adaptiveContext ?? "",
   ]
     .filter(Boolean)
-    .join('\n\n');
+    .join("\n\n");
 }
 
 // Export individual layers for testing and composition
-export { CORE_IDENTITY, CULTURAL_GROUNDING, BEHAVIORAL_CONSTRAINTS, DIALOGUE_EXAMPLES };
+export {
+  CORE_IDENTITY,
+  CULTURAL_GROUNDING,
+  BEHAVIORAL_CONSTRAINTS,
+  DIALOGUE_EXAMPLES,
+};

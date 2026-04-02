@@ -17,13 +17,13 @@
  * @module hooks/useSpeech
  */
 
-'use client';
+"use client";
 
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { useSensoryPreferences } from './useSensoryPreferences';
-import { useEmotionEngine } from './useEmotionEngine';
+import { useState, useCallback, useRef, useEffect } from "react";
+import { useSensoryPreferences } from "./useSensoryPreferences";
+import { useEmotionEngine } from "./useEmotionEngine";
 
-export type SpeechMode = 'browser' | 'hf' | 'unavailable';
+export type SpeechMode = "browser" | "hf" | "unavailable";
 
 export interface SpeechState {
   isSpeaking: boolean;
@@ -41,16 +41,16 @@ export interface SpeechState {
 // Strip markdown for cleaner TTS output
 function stripMarkdown(text: string): string {
   return text
-    .replace(/#{1,6}\s/g, '')           // headers
-    .replace(/\*\*(.*?)\*\*/g, '$1')     // bold
-    .replace(/\*(.*?)\*/g, '$1')         // italic
-    .replace(/`{1,3}[^`]*`{1,3}/g, '')  // code
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // links → text only
-    .replace(/^[-*+]\s/gm, '')          // list bullets
-    .replace(/^\d+\.\s/gm, '')          // numbered lists
-    .replace(/\[(\d+)\]/g, '')          // citation markers
-    .replace(/\n{3,}/g, '\n\n')         // excessive newlines
-    .replace(/>/g, '')                   // blockquotes
+    .replace(/#{1,6}\s/g, "") // headers
+    .replace(/\*\*(.*?)\*\*/g, "$1") // bold
+    .replace(/\*(.*?)\*/g, "$1") // italic
+    .replace(/`{1,3}[^`]*`{1,3}/g, "") // code
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // links → text only
+    .replace(/^[-*+]\s/gm, "") // list bullets
+    .replace(/^\d+\.\s/gm, "") // numbered lists
+    .replace(/\[(\d+)\]/g, "") // citation markers
+    .replace(/\n{3,}/g, "\n\n") // excessive newlines
+    .replace(/>/g, "") // blockquotes
     .trim();
 }
 
@@ -58,7 +58,7 @@ function stripMarkdown(text: string): string {
 function chunkText(text: string): string[] {
   const sentences = text.match(/[^.!?]+[.!?]+/g) ?? [text];
   const chunks: string[] = [];
-  let current = '';
+  let current = "";
   for (const s of sentences) {
     if ((current + s).length > 200) {
       if (current) chunks.push(current.trim());
@@ -84,23 +84,23 @@ export function useSpeech(): SpeechState {
   const stopSignalRef = useRef(false);
 
   // Detect Web Speech API availability
-  const [browserMode, setBrowserMode] = useState<SpeechMode>('unavailable');
+  const [browserMode, setBrowserMode] = useState<SpeechMode>("unavailable");
   useEffect(() => {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      setBrowserMode('browser');
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      setBrowserMode("browser");
     }
   }, []);
 
-  const isAvailable = audio && browserMode !== 'unavailable';
+  const isAvailable = audio && browserMode !== "unavailable";
 
   const stop = useCallback(() => {
     stopSignalRef.current = true;
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
     if (audioRef.current) {
       audioRef.current.pause();
-      audioRef.current.src = '';
+      audioRef.current.src = "";
       audioRef.current = null;
     }
     setIsSpeaking(false);
@@ -110,79 +110,76 @@ export function useSpeech(): SpeechState {
   // Cleanup on unmount
   useEffect(() => () => stop(), [stop]);
 
-  const speakWithBrowser = useCallback(
-    async (text: string): Promise<void> => {
-      return new Promise((resolve, reject) => {
-        if (!('speechSynthesis' in window)) {
-          reject(new Error('Web Speech not available'));
+  const speakWithBrowser = useCallback(async (text: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (!("speechSynthesis" in window)) {
+        reject(new Error("Web Speech not available"));
+        return;
+      }
+
+      window.speechSynthesis.cancel();
+      const chunks = chunkText(text);
+      let chunkIndex = 0;
+
+      const speakChunk = () => {
+        if (stopSignalRef.current || chunkIndex >= chunks.length) {
+          setIsSpeaking(false);
+          resolve();
           return;
         }
 
-        window.speechSynthesis.cancel();
-        const chunks = chunkText(text);
-        let chunkIndex = 0;
+        const utterance = new SpeechSynthesisUtterance(chunks[chunkIndex]);
+        speechRef.current = utterance;
 
-        const speakChunk = () => {
-          if (stopSignalRef.current || chunkIndex >= chunks.length) {
-            setIsSpeaking(false);
-            resolve();
-            return;
-          }
+        // Prefer a South African/British English voice if available
+        const voices = window.speechSynthesis.getVoices();
+        const preferred = voices.find(
+          (v) =>
+            v.lang === "en-ZA" ||
+            v.name.includes("South Africa") ||
+            v.lang === "en-GB",
+        );
+        if (preferred) utterance.voice = preferred;
 
-          const utterance = new SpeechSynthesisUtterance(chunks[chunkIndex]);
-          speechRef.current = utterance;
+        utterance.rate = 0.95;
+        utterance.pitch = 1.0;
+        utterance.volume = 0.9;
 
-          // Prefer a South African/British English voice if available
-          const voices = window.speechSynthesis.getVoices();
-          const preferred = voices.find(
-            (v) =>
-              v.lang === 'en-ZA' ||
-              v.name.includes('South Africa') ||
-              v.lang === 'en-GB'
-          );
-          if (preferred) utterance.voice = preferred;
-
-          utterance.rate = 0.95;
-          utterance.pitch = 1.0;
-          utterance.volume = 0.9;
-
-          utterance.onend = () => {
-            chunkIndex++;
-            speakChunk();
-          };
-
-          utterance.onerror = (e) => {
-            // 'interrupted' is normal when stop() is called
-            if (e.error === 'interrupted' || e.error === 'canceled') {
-              resolve();
-            } else {
-              reject(new Error(`Speech error: ${e.error}`));
-            }
-          };
-
-          window.speechSynthesis.speak(utterance);
+        utterance.onend = () => {
+          chunkIndex++;
+          speakChunk();
         };
 
-        // Chrome needs a short delay for voices to load
-        if (window.speechSynthesis.getVoices().length === 0) {
-          window.speechSynthesis.onvoiceschanged = () => {
-            window.speechSynthesis.onvoiceschanged = null;
-            speakChunk();
-          };
-        } else {
+        utterance.onerror = (e) => {
+          // 'interrupted' is normal when stop() is called
+          if (e.error === "interrupted" || e.error === "canceled") {
+            resolve();
+          } else {
+            reject(new Error(`Speech error: ${e.error}`));
+          }
+        };
+
+        window.speechSynthesis.speak(utterance);
+      };
+
+      // Chrome needs a short delay for voices to load
+      if (window.speechSynthesis.getVoices().length === 0) {
+        window.speechSynthesis.onvoiceschanged = () => {
+          window.speechSynthesis.onvoiceschanged = null;
           speakChunk();
-        }
-      });
-    },
-    []
-  );
+        };
+      } else {
+        speakChunk();
+      }
+    });
+  }, []);
 
   const speakWithHF = useCallback(async (text: string): Promise<void> => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: text.slice(0, 500) }),
       });
 
@@ -205,7 +202,7 @@ export function useSpeech(): SpeechState {
         };
         audio.onerror = () => {
           URL.revokeObjectURL(url);
-          reject(new Error('Audio playback failed'));
+          reject(new Error("Audio playback failed"));
         };
         audio.play().catch(reject);
       });
@@ -226,23 +223,23 @@ export function useSpeech(): SpeechState {
       if (!cleaned) return;
 
       setIsSpeaking(true);
-      emotion.transition('processing');
+      emotion.transition("processing");
 
       try {
         if (useHQ) {
           await speakWithHF(cleaned);
-        } else if (browserMode === 'browser') {
+        } else if (browserMode === "browser") {
           await speakWithBrowser(cleaned);
         } else {
           await speakWithHF(cleaned);
         }
-        emotion.transition('resolved');
-        setTimeout(() => emotion.transition('dormant'), 1500);
+        emotion.transition("resolved");
+        setTimeout(() => emotion.transition("dormant"), 1500);
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'Speech failed';
+        const msg = err instanceof Error ? err.message : "Speech failed";
         setError(msg);
         // Try browser fallback if HF failed
-        if (useHQ && browserMode === 'browser') {
+        if (useHQ && browserMode === "browser") {
           try {
             await speakWithBrowser(cleaned);
           } catch {
@@ -255,7 +252,15 @@ export function useSpeech(): SpeechState {
         }
       }
     },
-    [audio, isSpeaking, stop, emotion, browserMode, speakWithBrowser, speakWithHF]
+    [
+      audio,
+      isSpeaking,
+      stop,
+      emotion,
+      browserMode,
+      speakWithBrowser,
+      speakWithHF,
+    ],
   );
 
   return {
