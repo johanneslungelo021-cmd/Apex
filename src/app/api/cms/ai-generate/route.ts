@@ -6,7 +6,7 @@ export const runtime = "nodejs";
  *   - hasOwnProperty guard on SYSTEM_PROMPTS (not truthiness — prevents prototype bypass)
  *   - fetchErr narrowed to `unknown` with instanceof Error guard
  *   - errText sanitized before logging (no raw user content in logs)
- *   - Missing GROQ_API_KEY fails loudly in production; mock only in development
+ *   - Missing GROQ_API_KEY fails loudly in all environments (no simulated responses)
  *   - 15s AbortController timeout on Groq fetch
  */
 import { NextResponse } from "next/server";
@@ -64,13 +64,6 @@ export async function POST(req: Request): Promise<Response> {
 
     const groqKey = process.env.GROQ_API_KEY;
     if (!groqKey) {
-      // FIX: mock only in development — fail loudly in production
-      if (process.env.NODE_ENV === "development") {
-        return NextResponse.json({
-          result: `[DEV mock ${type}: ${String(prompt).substring(0, 50)}...]`,
-          alternatives: [`DEV alt 1 for ${type}`, `DEV alt 2 for ${type}`],
-        });
-      }
       log({
         level: "error",
         service: SERVICE,
